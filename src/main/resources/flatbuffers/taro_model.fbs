@@ -1,0 +1,151 @@
+// FlatBuffers Schema for Taro Model Package (Optimization V3)
+// Namespace: taro.model
+// Optimized for Zero-Copy, Double Precision Coordinates, and Implicit Indexing
+
+namespace taro.model;
+
+// ============================================================================
+// STRUCTS (Fixed-size, aligned, zero-copy)
+// ============================================================================
+
+// Coordinate using standard GPS double precision
+// Size: 16 bytes. Naturally aligned to 16 bytes (2 x 8 bytes).
+// FIX: (force_align: 16) must be placed BEFORE the opening brace
+struct Coordinate (force_align: 16) {
+    lat: double;
+    lon: double;
+}
+
+// Compact K-D Tree Node
+// Struct removes vtable overhead for high-frequency tree traversal
+struct KDNode {
+    split_value: float;
+    left_child: int;        // -1 if leaf
+    right_child: int;       // -1 if leaf
+    item_start_index: int;  // Index into leaf_items
+    item_count: ushort;     // Number of items in leaf
+    split_axis: ubyte;      // 0=lat, 1=lon
+    is_leaf: ubyte;         // Boolean flag (1=true, 0=false)
+}
+
+// ============================================================================
+// METADATA
+// ============================================================================
+
+table Metadata {
+    version: int;
+    created_at: long;
+    trait_config: string;
+    description: string;
+
+    // Bounding box (explicit fields avoid object overhead)
+    min_lat: double;
+    max_lat: double;
+    min_lon: double;
+    max_lon: double;
+}
+
+// ============================================================================
+// GRAPH TOPOLOGY (CSR Format)
+// ============================================================================
+
+table GraphTopology {
+    node_count: int;
+    edge_count: int;
+
+    // CSR Structure (O(1) neighbor lookup)
+    // Lookup neighbors of Node I: Scan edges from first_edge[I] to first_edge[I+1]
+    first_edge: [int];      // Length = node_count + 1
+    edge_target: [int];     // Length = edge_count
+
+    // Node Data (parallel arrays)
+    coordinates: [Coordinate];  // Length = node_count
+
+    // Edge Data (parallel arrays)
+    // Plain floats allow JIT/CPU auto-vectorization (AVX/SIMD) without structure overhead
+    base_weights: [float];      // Length = edge_count
+    edge_profile_id: [ushort];  // Length = edge_count
+    edge_flags: [ubyte];        // Length = edge_count (optional)
+}
+
+// ============================================================================
+// TEMPORAL PROFILES
+// ============================================================================
+
+table TemporalProfile {
+    profile_id: ushort;
+    day_mask: ubyte;
+
+    // 96 buckets for 15-min intervals
+    // Using plain floats is 5x faster than packed structs for access
+    buckets: [float];
+
+    multiplier: float = 1.0;
+}
+
+// ============================================================================
+// TURN COSTS
+// ============================================================================
+
+table TurnCost {
+    from_edge_idx: int;
+    to_edge_idx: int;
+    penalty_seconds: float;
+}
+
+// ============================================================================
+// SPATIAL INDEX (K-D Tree)
+// ============================================================================
+
+table SpatialIndex {
+    // All tree nodes in a single flat array for cache locality
+    tree_nodes: [KDNode];
+    // The actual payload (node indices) referenced by leaf nodes
+    leaf_items: [int];
+    root_index: int;
+}
+
+// ============================================================================
+// ID MAPPING (Implicit Internal IDs)
+// ============================================================================
+
+table IdMapping {
+    // Sorted array for binary search.
+    // The index of the found element IS the internal_id.
+    // Saves 4MB+ RAM per million items by removing explicit internal_ids.
+    external_ids: [long];
+
+    // Optional: String-based IDs if numeric mapping isn't feasible
+    external_string_ids: [string];
+}
+
+// ============================================================================
+// LANDMARKS (Bidirectional ALT)
+// ============================================================================
+
+table Landmark {
+    node_idx: int;
+
+    // Precomputed distances for A* heuristics
+    // Plain arrays allow simple access: distances[node_idx]
+    forward_distances: [float];   // Length = node_count
+    backward_distances: [float];  // Length = node_count
+}
+
+// ============================================================================
+// ROOT MODEL
+// ============================================================================
+
+table Model {
+    metadata: Metadata;
+    topology: GraphTopology;
+    profiles: [TemporalProfile];
+    turn_costs: [TurnCost];
+    spatial_index: SpatialIndex;
+    id_mapping: IdMapping;
+    landmarks: [Landmark];
+}
+
+root_type Model;
+file_identifier "TARO";
+file_extension "taro";
