@@ -66,6 +66,8 @@ table GraphTopology {
     base_weights: [float];      // Length = edge_count
     edge_profile_id: [ushort];  // Length = edge_count
     edge_flags: [ubyte];        // Length = edge_count (optional)
+    // Optional: O(1) edge-to-origin lookup (precomputed in builder)
+    edge_origin: [int];         // Length = edge_count
 }
 
 // ============================================================================

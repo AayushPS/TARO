@@ -47,6 +47,15 @@ mvn test
 python -m pytest
 ```
 
+## FlatBuffers Regeneration
+Generated FlatBuffers code should not be edited manually. Use the helper script to regenerate
+Java and Python bindings from `src/main/resources/flatbuffers/taro_model.fbs`:
+```bash
+./scripts/gen_flatbuffers.sh
+```
+This keeps the schema namespace as `taro.model` but rewrites Java packages to
+`org.Aayush.flatbuffers.taro.model` so imports remain stable.
+
 ## Roadmap (High-Level Stages)
 1. Core utilities: ID mapping, time utilities, FlatBuffers schema
 2. Data structures: edge-based graph, turn costs, priority queue, overlays

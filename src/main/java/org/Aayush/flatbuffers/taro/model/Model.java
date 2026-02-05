@@ -16,29 +16,29 @@ public final class Model extends Table {
   public void __init(int _i, ByteBuffer _bb) { __reset(_i, _bb); }
   public Model __assign(int _i, ByteBuffer _bb) { __init(_i, _bb); return this; }
 
-  public Metadata metadata() { return metadata(new Metadata()); }
-  public Metadata metadata(Metadata obj) { int o = __offset(4); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
-  public GraphTopology topology() { return topology(new GraphTopology()); }
-  public GraphTopology topology(GraphTopology obj) { int o = __offset(6); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
-  public TemporalProfile profiles(int j) { return profiles(new TemporalProfile(), j); }
-  public TemporalProfile profiles(TemporalProfile obj, int j) { int o = __offset(8); return o != 0 ? obj.__assign(__indirect(__vector(o) + j * 4), bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.Metadata metadata() { return metadata(new org.Aayush.flatbuffers.taro.model.Metadata()); }
+  public org.Aayush.flatbuffers.taro.model.Metadata metadata(org.Aayush.flatbuffers.taro.model.Metadata obj) { int o = __offset(4); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.GraphTopology topology() { return topology(new org.Aayush.flatbuffers.taro.model.GraphTopology()); }
+  public org.Aayush.flatbuffers.taro.model.GraphTopology topology(org.Aayush.flatbuffers.taro.model.GraphTopology obj) { int o = __offset(6); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.TemporalProfile profiles(int j) { return profiles(new org.Aayush.flatbuffers.taro.model.TemporalProfile(), j); }
+  public org.Aayush.flatbuffers.taro.model.TemporalProfile profiles(org.Aayush.flatbuffers.taro.model.TemporalProfile obj, int j) { int o = __offset(8); return o != 0 ? obj.__assign(__indirect(__vector(o) + j * 4), bb) : null; }
   public int profilesLength() { int o = __offset(8); return o != 0 ? __vector_len(o) : 0; }
-  public TemporalProfile.Vector profilesVector() { return profilesVector(new TemporalProfile.Vector()); }
-  public TemporalProfile.Vector profilesVector(TemporalProfile.Vector obj) { int o = __offset(8); return o != 0 ? obj.__assign(__vector(o), 4, bb) : null; }
-  public TurnCost turnCosts(int j) { return turnCosts(new TurnCost(), j); }
-  public TurnCost turnCosts(TurnCost obj, int j) { int o = __offset(10); return o != 0 ? obj.__assign(__indirect(__vector(o) + j * 4), bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.TemporalProfile.Vector profilesVector() { return profilesVector(new org.Aayush.flatbuffers.taro.model.TemporalProfile.Vector()); }
+  public org.Aayush.flatbuffers.taro.model.TemporalProfile.Vector profilesVector(org.Aayush.flatbuffers.taro.model.TemporalProfile.Vector obj) { int o = __offset(8); return o != 0 ? obj.__assign(__vector(o), 4, bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.TurnCost turnCosts(int j) { return turnCosts(new org.Aayush.flatbuffers.taro.model.TurnCost(), j); }
+  public org.Aayush.flatbuffers.taro.model.TurnCost turnCosts(org.Aayush.flatbuffers.taro.model.TurnCost obj, int j) { int o = __offset(10); return o != 0 ? obj.__assign(__indirect(__vector(o) + j * 4), bb) : null; }
   public int turnCostsLength() { int o = __offset(10); return o != 0 ? __vector_len(o) : 0; }
-  public TurnCost.Vector turnCostsVector() { return turnCostsVector(new TurnCost.Vector()); }
-  public TurnCost.Vector turnCostsVector(TurnCost.Vector obj) { int o = __offset(10); return o != 0 ? obj.__assign(__vector(o), 4, bb) : null; }
-  public SpatialIndex spatialIndex() { return spatialIndex(new SpatialIndex()); }
-  public SpatialIndex spatialIndex(SpatialIndex obj) { int o = __offset(12); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
-  public IdMapping idMapping() { return idMapping(new IdMapping()); }
-  public IdMapping idMapping(IdMapping obj) { int o = __offset(14); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
-  public Landmark landmarks(int j) { return landmarks(new Landmark(), j); }
-  public Landmark landmarks(Landmark obj, int j) { int o = __offset(16); return o != 0 ? obj.__assign(__indirect(__vector(o) + j * 4), bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.TurnCost.Vector turnCostsVector() { return turnCostsVector(new org.Aayush.flatbuffers.taro.model.TurnCost.Vector()); }
+  public org.Aayush.flatbuffers.taro.model.TurnCost.Vector turnCostsVector(org.Aayush.flatbuffers.taro.model.TurnCost.Vector obj) { int o = __offset(10); return o != 0 ? obj.__assign(__vector(o), 4, bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.SpatialIndex spatialIndex() { return spatialIndex(new org.Aayush.flatbuffers.taro.model.SpatialIndex()); }
+  public org.Aayush.flatbuffers.taro.model.SpatialIndex spatialIndex(org.Aayush.flatbuffers.taro.model.SpatialIndex obj) { int o = __offset(12); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.IdMapping idMapping() { return idMapping(new org.Aayush.flatbuffers.taro.model.IdMapping()); }
+  public org.Aayush.flatbuffers.taro.model.IdMapping idMapping(org.Aayush.flatbuffers.taro.model.IdMapping obj) { int o = __offset(14); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.Landmark landmarks(int j) { return landmarks(new org.Aayush.flatbuffers.taro.model.Landmark(), j); }
+  public org.Aayush.flatbuffers.taro.model.Landmark landmarks(org.Aayush.flatbuffers.taro.model.Landmark obj, int j) { int o = __offset(16); return o != 0 ? obj.__assign(__indirect(__vector(o) + j * 4), bb) : null; }
   public int landmarksLength() { int o = __offset(16); return o != 0 ? __vector_len(o) : 0; }
-  public Landmark.Vector landmarksVector() { return landmarksVector(new Landmark.Vector()); }
-  public Landmark.Vector landmarksVector(Landmark.Vector obj) { int o = __offset(16); return o != 0 ? obj.__assign(__vector(o), 4, bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.Landmark.Vector landmarksVector() { return landmarksVector(new org.Aayush.flatbuffers.taro.model.Landmark.Vector()); }
+  public org.Aayush.flatbuffers.taro.model.Landmark.Vector landmarksVector(org.Aayush.flatbuffers.taro.model.Landmark.Vector obj) { int o = __offset(16); return o != 0 ? obj.__assign(__vector(o), 4, bb) : null; }
 
   public static int createModel(FlatBufferBuilder builder,
       int metadataOffset,

@@ -29,11 +29,11 @@ public final class GraphTopology extends Table {
   public IntVector edgeTargetVector(IntVector obj) { int o = __offset(10); return o != 0 ? obj.__assign(__vector(o), bb) : null; }
   public ByteBuffer edgeTargetAsByteBuffer() { return __vector_as_bytebuffer(10, 4); }
   public ByteBuffer edgeTargetInByteBuffer(ByteBuffer _bb) { return __vector_in_bytebuffer(_bb, 10, 4); }
-  public Coordinate coordinates(int j) { return coordinates(new Coordinate(), j); }
-  public Coordinate coordinates(Coordinate obj, int j) { int o = __offset(12); return o != 0 ? obj.__assign(__vector(o) + j * 16, bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.Coordinate coordinates(int j) { return coordinates(new org.Aayush.flatbuffers.taro.model.Coordinate(), j); }
+  public org.Aayush.flatbuffers.taro.model.Coordinate coordinates(org.Aayush.flatbuffers.taro.model.Coordinate obj, int j) { int o = __offset(12); return o != 0 ? obj.__assign(__vector(o) + j * 16, bb) : null; }
   public int coordinatesLength() { int o = __offset(12); return o != 0 ? __vector_len(o) : 0; }
-  public Coordinate.Vector coordinatesVector() { return coordinatesVector(new Coordinate.Vector()); }
-  public Coordinate.Vector coordinatesVector(Coordinate.Vector obj) { int o = __offset(12); return o != 0 ? obj.__assign(__vector(o), 16, bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.Coordinate.Vector coordinatesVector() { return coordinatesVector(new org.Aayush.flatbuffers.taro.model.Coordinate.Vector()); }
+  public org.Aayush.flatbuffers.taro.model.Coordinate.Vector coordinatesVector(org.Aayush.flatbuffers.taro.model.Coordinate.Vector obj) { int o = __offset(12); return o != 0 ? obj.__assign(__vector(o), 16, bb) : null; }
   public float baseWeights(int j) { int o = __offset(14); return o != 0 ? bb.getFloat(__vector(o) + j * 4) : 0; }
   public int baseWeightsLength() { int o = __offset(14); return o != 0 ? __vector_len(o) : 0; }
   public FloatVector baseWeightsVector() { return baseWeightsVector(new FloatVector()); }
@@ -52,6 +52,12 @@ public final class GraphTopology extends Table {
   public ByteVector edgeFlagsVector(ByteVector obj) { int o = __offset(18); return o != 0 ? obj.__assign(__vector(o), bb) : null; }
   public ByteBuffer edgeFlagsAsByteBuffer() { return __vector_as_bytebuffer(18, 1); }
   public ByteBuffer edgeFlagsInByteBuffer(ByteBuffer _bb) { return __vector_in_bytebuffer(_bb, 18, 1); }
+  public int edgeOrigin(int j) { int o = __offset(20); return o != 0 ? bb.getInt(__vector(o) + j * 4) : 0; }
+  public int edgeOriginLength() { int o = __offset(20); return o != 0 ? __vector_len(o) : 0; }
+  public IntVector edgeOriginVector() { return edgeOriginVector(new IntVector()); }
+  public IntVector edgeOriginVector(IntVector obj) { int o = __offset(20); return o != 0 ? obj.__assign(__vector(o), bb) : null; }
+  public ByteBuffer edgeOriginAsByteBuffer() { return __vector_as_bytebuffer(20, 4); }
+  public ByteBuffer edgeOriginInByteBuffer(ByteBuffer _bb) { return __vector_in_bytebuffer(_bb, 20, 4); }
 
   public static int createGraphTopology(FlatBufferBuilder builder,
       int nodeCount,
@@ -61,8 +67,10 @@ public final class GraphTopology extends Table {
       int coordinatesOffset,
       int baseWeightsOffset,
       int edgeProfileIdOffset,
-      int edgeFlagsOffset) {
-    builder.startTable(8);
+      int edgeFlagsOffset,
+      int edgeOriginOffset) {
+    builder.startTable(9);
+    GraphTopology.addEdgeOrigin(builder, edgeOriginOffset);
     GraphTopology.addEdgeFlags(builder, edgeFlagsOffset);
     GraphTopology.addEdgeProfileId(builder, edgeProfileIdOffset);
     GraphTopology.addBaseWeights(builder, baseWeightsOffset);
@@ -74,7 +82,7 @@ public final class GraphTopology extends Table {
     return GraphTopology.endGraphTopology(builder);
   }
 
-  public static void startGraphTopology(FlatBufferBuilder builder) { builder.startTable(8); }
+  public static void startGraphTopology(FlatBufferBuilder builder) { builder.startTable(9); }
   public static void addNodeCount(FlatBufferBuilder builder, int nodeCount) { builder.addInt(0, nodeCount, 0); }
   public static void addEdgeCount(FlatBufferBuilder builder, int edgeCount) { builder.addInt(1, edgeCount, 0); }
   public static void addFirstEdge(FlatBufferBuilder builder, int firstEdgeOffset) { builder.addOffset(2, firstEdgeOffset, 0); }
@@ -95,6 +103,9 @@ public final class GraphTopology extends Table {
   public static int createEdgeFlagsVector(FlatBufferBuilder builder, byte[] data) { return builder.createByteVector(data); }
   public static int createEdgeFlagsVector(FlatBufferBuilder builder, ByteBuffer data) { return builder.createByteVector(data); }
   public static void startEdgeFlagsVector(FlatBufferBuilder builder, int numElems) { builder.startVector(1, numElems, 1); }
+  public static void addEdgeOrigin(FlatBufferBuilder builder, int edgeOriginOffset) { builder.addOffset(8, edgeOriginOffset, 0); }
+  public static int createEdgeOriginVector(FlatBufferBuilder builder, int[] data) { builder.startVector(4, data.length, 4); for (int i = data.length - 1; i >= 0; i--) builder.addInt(data[i]); return builder.endVector(); }
+  public static void startEdgeOriginVector(FlatBufferBuilder builder, int numElems) { builder.startVector(4, numElems, 4); }
   public static int endGraphTopology(FlatBufferBuilder builder) {
     int o = builder.endTable();
     return o;

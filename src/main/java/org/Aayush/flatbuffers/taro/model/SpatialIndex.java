@@ -15,11 +15,11 @@ public final class SpatialIndex extends Table {
   public void __init(int _i, ByteBuffer _bb) { __reset(_i, _bb); }
   public SpatialIndex __assign(int _i, ByteBuffer _bb) { __init(_i, _bb); return this; }
 
-  public KDNode treeNodes(int j) { return treeNodes(new KDNode(), j); }
-  public KDNode treeNodes(KDNode obj, int j) { int o = __offset(4); return o != 0 ? obj.__assign(__vector(o) + j * 20, bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.KDNode treeNodes(int j) { return treeNodes(new org.Aayush.flatbuffers.taro.model.KDNode(), j); }
+  public org.Aayush.flatbuffers.taro.model.KDNode treeNodes(org.Aayush.flatbuffers.taro.model.KDNode obj, int j) { int o = __offset(4); return o != 0 ? obj.__assign(__vector(o) + j * 20, bb) : null; }
   public int treeNodesLength() { int o = __offset(4); return o != 0 ? __vector_len(o) : 0; }
-  public KDNode.Vector treeNodesVector() { return treeNodesVector(new KDNode.Vector()); }
-  public KDNode.Vector treeNodesVector(KDNode.Vector obj) { int o = __offset(4); return o != 0 ? obj.__assign(__vector(o), 20, bb) : null; }
+  public org.Aayush.flatbuffers.taro.model.KDNode.Vector treeNodesVector() { return treeNodesVector(new org.Aayush.flatbuffers.taro.model.KDNode.Vector()); }
+  public org.Aayush.flatbuffers.taro.model.KDNode.Vector treeNodesVector(org.Aayush.flatbuffers.taro.model.KDNode.Vector obj) { int o = __offset(4); return o != 0 ? obj.__assign(__vector(o), 20, bb) : null; }
   public int leafItems(int j) { int o = __offset(6); return o != 0 ? bb.getInt(__vector(o) + j * 4) : 0; }
   public int leafItemsLength() { int o = __offset(6); return o != 0 ? __vector_len(o) : 0; }
   public IntVector leafItemsVector() { return leafItemsVector(new IntVector()); }
