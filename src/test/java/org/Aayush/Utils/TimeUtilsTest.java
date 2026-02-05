@@ -60,7 +60,8 @@ class TimeUtilsTest {
             "259200, 6",      // Jan 4, 1970 = Sunday = 6
             "345600, 0",      // Jan 5, 1970 = Monday = 0
             "1706140800, 3",  // Jan 25, 2024 = Thursday = 3
-            "-172800, 1"      // Dec 30, 1969 = Tuesday = 1
+            "-172800, 1",     // Dec 30, 1969 = Tuesday = 1
+            "-432000, 5"      // Dec 27, 1969 = Saturday = 5 (negative modulo branch)
     })
     void testDayOfWeek_General(long epochSec, int expectedDay) {
         assertEquals(expectedDay, TimeUtils.getDayOfWeek(epochSec));
@@ -172,6 +173,20 @@ class TimeUtilsTest {
     })
     void testBucketToTimeRange(int bucketIndex, int bucketSize, String expectedRange) {
         assertEquals(expectedRange, TimeUtils.bucketToTimeRange(bucketIndex, bucketSize));
+    }
+
+    @Test
+    void testBucketToTimeRange_ClampEnd() {
+        // Forces endSeconds > 86400 to hit clamp branch
+        assertEquals("24:00-24:00", TimeUtils.bucketToTimeRange(96, 900));
+    }
+
+    @Test
+    void testPrivateConstructorThrows() throws Exception {
+        var ctor = TimeUtils.class.getDeclaredConstructor();
+        ctor.setAccessible(true);
+        var ex = assertThrows(java.lang.reflect.InvocationTargetException.class, ctor::newInstance);
+        assertTrue(ex.getCause() instanceof AssertionError);
     }
 
     // ========== Performance Smoke Test ==========
