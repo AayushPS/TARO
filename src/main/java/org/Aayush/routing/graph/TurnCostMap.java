@@ -1,5 +1,8 @@
 package org.Aayush.routing.graph;
 
+import org.Aayush.serialization.flatbuffers.taro.model.Model;
+import org.Aayush.serialization.flatbuffers.taro.model.TurnCost;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
@@ -26,17 +29,6 @@ public class TurnCostMap {
     public static final float FORBIDDEN_TURN = Float.POSITIVE_INFINITY;
 
     private static final long EMPTY_KEY = -1L;
-    private static final int FILE_IDENTIFIER = 0x4F524154; // "TARO"
-
-    // Field indices in Model table (Root)
-    // Schema Version: Optimization V3 (Taro Model)
-    // NOTE: If the FlatBuffer schema changes, verify this index matches the 'turn_costs' field.
-    private static final int FIELD_TURN_COSTS = 6;
-
-    // Field indices in TurnCost table
-    private static final int TC_FIELD_FROM = 0;
-    private static final int TC_FIELD_TO = 1;
-    private static final int TC_FIELD_PENALTY = 2;
 
     // Singleton for empty maps to avoid allocation
     private static final TurnCostMap EMPTY_MAP = new TurnCostMap(0, 1, new long[]{EMPTY_KEY}, new float[]{DEFAULT_COST});
@@ -165,35 +157,26 @@ public class TurnCostMap {
      * @return A ready-to-use TurnCostMap.
      */
     public static TurnCostMap fromFlatBuffer(ByteBuffer buffer) {
-        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        if (buffer == null) {
+            throw new IllegalArgumentException("Buffer cannot be null");
+        }
+
+        ByteBuffer bb = buffer.slice().order(ByteOrder.LITTLE_ENDIAN);
 
         // 1. Validate Buffer Size and Identifier
-        if (buffer.remaining() < 8) {
+        if (bb.remaining() < 8) {
             throw new IllegalArgumentException("Buffer too small for .taro file header");
         }
 
-        // Check identifier at offset 4 (FlatBuffers standard)
-        // We use absolute get(pos + 4) to respect current buffer position
-        int ident = buffer.getInt(buffer.position() + 4);
-        if (ident != FILE_IDENTIFIER) {
-            throw new IllegalArgumentException(
-                    String.format("Invalid file identifier. Expected 'TARO' (0x%08X), got 0x%08X",
-                            FILE_IDENTIFIER, ident));
+        if (!Model.ModelBufferHasIdentifier(bb)) {
+            int ident = bb.getInt(4);
+            throw new IllegalArgumentException(String.format(
+                    "Invalid file identifier. Expected 'TARO' (0x%08X), got 0x%08X",
+                    0x4F524154, ident));
         }
 
-        // 2. Navigate to Turn Costs Vector
-        int rootOffset = buffer.getInt(buffer.position()) + buffer.position();
-        Table model = new Table(buffer, rootOffset);
-
-        int turnCostsVectorOffset = model.getOffset(FIELD_TURN_COSTS);
-
-        if (turnCostsVectorOffset == 0) {
-            return EMPTY_MAP;
-        }
-
-        int vectorStart = model.getVectorStart(FIELD_TURN_COSTS);
-        int vectorLen = model.getVectorLength(FIELD_TURN_COSTS);
-
+        Model model = Model.getRootAsModel(bb);
+        int vectorLen = model.turnCostsLength();
         if (vectorLen == 0) {
             return EMPTY_MAP;
         }
@@ -214,24 +197,18 @@ public class TurnCostMap {
         int mask = capacity - 1;
         int size = 0;
 
-        // 5. Populate Map (Parsing Table entries manually)
-        // TurnCost is a table, so the vector contains offsets (ints) to the tables.
-
-        // Create a reusable Table cursor
-        Table cursor = new Table(buffer, 0);
-
+        // 5. Populate Map
         for (int i = 0; i < vectorLen; i++) {
-            // Get offset to the i-th TurnCost table
-            int tableOffset = buffer.getInt(vectorStart + i * 4) + (vectorStart + i * 4);
-            cursor.setPos(tableOffset);
+            TurnCost turnCost = model.turnCosts(i);
+            if (turnCost == null) {
+                continue;
+            }
+            int from = turnCost.fromEdgeIdx();
+            int to = turnCost.toEdgeIdx();
+            float penalty = turnCost.penaltySeconds();
 
-            int from = cursor.getIntField(TC_FIELD_FROM, -1);
-            int to = cursor.getIntField(TC_FIELD_TO, -1);
-            float penalty = cursor.getFloatField(TC_FIELD_PENALTY, 0.0f);
-
-            if (from != -1 && to != -1) {
+            if (from >= 0 && to >= 0) {
                 long key = ((long) from << 32) | (to & 0xFFFFFFFFL);
-                // Fix: Only increment size if a NEW key was inserted
                 if (insert(keys, values, mask, key, penalty)) {
                     size++;
                 }
@@ -264,58 +241,6 @@ public class TurnCostMap {
         keys[index] = key;
         values[index] = value;
         return true; // Inserted new
-    }
-
-    // ========================================================================
-    // HELPER: Minimal FlatBuffer Table Reader
-    // ========================================================================
-
-    private static class Table {
-        private final ByteBuffer bb;
-        private int pos;
-        private int vtablePos;
-        private int vtableLen;
-
-        Table(ByteBuffer bb, int pos) {
-            this.bb = bb;
-            setPos(pos);
-        }
-
-        void setPos(int pos) {
-            this.pos = pos;
-            if (pos == 0) {
-                this.vtablePos = 0;
-                this.vtableLen = 0;
-            } else {
-                this.vtablePos = pos - bb.getInt(pos);
-                this.vtableLen = bb.getShort(vtablePos);
-            }
-        }
-
-        int getOffset(int fieldIndex) {
-            int vtableOffset = 4 + (fieldIndex * 2);
-            return (vtableOffset < vtableLen) ? bb.getShort(vtablePos + vtableOffset) : 0;
-        }
-
-        int getIntField(int fieldIndex, int defaultValue) {
-            int offset = getOffset(fieldIndex);
-            return (offset != 0) ? bb.getInt(pos + offset) : defaultValue;
-        }
-
-        float getFloatField(int fieldIndex, float defaultValue) {
-            int offset = getOffset(fieldIndex);
-            return (offset != 0) ? bb.getFloat(pos + offset) : defaultValue;
-        }
-
-        int getVectorStart(int fieldIndex) {
-            int offset = getOffset(fieldIndex);
-            return (offset != 0) ? pos + offset + bb.getInt(pos + offset) + 4 : 0;
-        }
-
-        int getVectorLength(int fieldIndex) {
-            int offset = getOffset(fieldIndex);
-            return (offset != 0) ? bb.getInt(pos + offset + bb.getInt(pos + offset)) : 0;
-        }
     }
 
     @Override

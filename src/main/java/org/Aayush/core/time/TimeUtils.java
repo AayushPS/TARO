@@ -1,6 +1,27 @@
 package org.Aayush.core.time;
 
 public final class TimeUtils {
+
+    public enum EngineTimeUnit {
+        SECONDS(1_000_000_000L, 1L),
+        MILLISECONDS(1_000_000L, 1_000L);
+
+        private final long tickDurationNs;
+        private final long ticksPerSecond;
+
+        EngineTimeUnit(long tickDurationNs, long ticksPerSecond) {
+            this.tickDurationNs = tickDurationNs;
+            this.ticksPerSecond = ticksPerSecond;
+        }
+
+        public long tickDurationNs() {
+            return tickDurationNs;
+        }
+
+        public long ticksPerSecond() {
+            return ticksPerSecond;
+        }
+    }
     
     // Constants
     private static final long SECONDS_PER_DAY = 86400L;      // 24 * 60 * 60
@@ -39,6 +60,13 @@ public final class TimeUtils {
         
         return (int) (secondsSinceMidnight / bucketSizeSeconds);
     }
+
+    /**
+     * Converts timestamps from model ticks to UTC bucket index.
+     */
+    public static int toBucket(long timestamp, int bucketSizeSeconds, EngineTimeUnit unit) {
+        return toBucket(toEpochSeconds(timestamp, unit), bucketSizeSeconds);
+    }
     
     /**
      * Extracts day of week from Unix epoch.
@@ -65,6 +93,13 @@ public final class TimeUtils {
         
         return (int) dayOfWeek;
     }
+
+    /**
+     * Extracts day-of-week from model ticks.
+     */
+    public static int getDayOfWeek(long timestamp, EngineTimeUnit unit) {
+        return getDayOfWeek(toEpochSeconds(timestamp, unit));
+    }
     
     /**
      * Returns seconds elapsed since midnight (UTC).
@@ -80,6 +115,14 @@ public final class TimeUtils {
         }
         
         return timeOfDay;
+    }
+
+    /**
+     * Returns elapsed ticks since midnight in the model's time unit.
+     */
+    public static long getTimeOfDayTicks(long timestamp, EngineTimeUnit unit) {
+        long seconds = getTimeOfDay(toEpochSeconds(timestamp, unit));
+        return Math.multiplyExact(seconds, unit.ticksPerSecond());
     }
     
     /**
@@ -112,6 +155,54 @@ public final class TimeUtils {
     public static long addSeconds(long epochSec, long deltaSec) {
         return epochSec + deltaSec;
     }
+
+    /**
+     * Unit-aware timestamp normalization. Use this to align incoming request time
+     * with model time during ingestion/runtime boundaries.
+     */
+    public static long normalizeToEngineTicks(long timestamp, EngineTimeUnit inputUnit, EngineTimeUnit engineUnit) {
+        if (inputUnit == null || engineUnit == null) {
+            throw new IllegalArgumentException("Time units cannot be null");
+        }
+        if (inputUnit == engineUnit) {
+            return timestamp;
+        }
+        if (inputUnit == EngineTimeUnit.SECONDS && engineUnit == EngineTimeUnit.MILLISECONDS) {
+            return Math.multiplyExact(timestamp, 1_000L);
+        }
+        // Millis -> Seconds: use floor division for negative timestamp correctness.
+        return Math.floorDiv(timestamp, 1_000L);
+    }
+
+    /**
+     * Maps metadata tick duration to a known engine unit.
+     */
+    public static EngineTimeUnit fromTickDurationNs(long tickDurationNs) {
+        if (tickDurationNs == EngineTimeUnit.SECONDS.tickDurationNs()) {
+            return EngineTimeUnit.SECONDS;
+        }
+        if (tickDurationNs == EngineTimeUnit.MILLISECONDS.tickDurationNs()) {
+            return EngineTimeUnit.MILLISECONDS;
+        }
+        throw new IllegalArgumentException("Unsupported tick_duration_ns: " + tickDurationNs);
+    }
+
+    /**
+     * Validates metadata unit/tick pairing and returns the canonical tick duration.
+     */
+    public static long validateTickDurationNs(EngineTimeUnit unit, long tickDurationNs) {
+        if (unit == null) {
+            throw new IllegalArgumentException("Engine unit cannot be null");
+        }
+        if (tickDurationNs <= 0) {
+            throw new IllegalArgumentException("tick_duration_ns must be positive");
+        }
+        if (unit.tickDurationNs() != tickDurationNs) {
+            throw new IllegalArgumentException(
+                    "tick_duration_ns mismatch for " + unit + ": expected " + unit.tickDurationNs() + ", got " + tickDurationNs);
+        }
+        return tickDurationNs;
+    }
     
     /**
      * Utility to format bucket index back to human-readable time.
@@ -136,5 +227,15 @@ public final class TimeUtils {
         // Handle "24:00" case for end range
         if (hours == 24 && minutes == 0) return "24:00";
         return String.format("%02d:%02d", hours, minutes);
+    }
+
+    private static long toEpochSeconds(long timestamp, EngineTimeUnit unit) {
+        if (unit == null) {
+            throw new IllegalArgumentException("Engine unit cannot be null");
+        }
+        if (unit == EngineTimeUnit.SECONDS) {
+            return timestamp;
+        }
+        return Math.floorDiv(timestamp, 1_000L);
     }
 }

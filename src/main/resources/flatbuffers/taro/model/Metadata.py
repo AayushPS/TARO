@@ -84,7 +84,56 @@ class Metadata(object):
             return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
         return 0.0
 
-def MetadataStart(builder): builder.StartObject(8)
+    # Metadata
+    def SchemaVersion(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(20))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Uint32Flags, o + self._tab.Pos)
+        return 1
+
+    # Metadata
+    def ModelVersion(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(22))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+    # Metadata
+    def TimeUnit(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(24))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Uint8Flags, o + self._tab.Pos)
+        return 0
+
+    # Metadata
+    def TickDurationNs(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(26))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Uint64Flags, o + self._tab.Pos)
+        return 1000000000
+
+    # Metadata
+    def ProfileTimezone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(28))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+    # Metadata
+    def TraitsHash(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(30))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+    # Metadata
+    def ModelHash(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(32))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+def MetadataStart(builder): builder.StartObject(15)
 def Start(builder):
     return MetadataStart(builder)
 def MetadataAddVersion(builder, version): builder.PrependInt32Slot(0, version, 0)
@@ -111,6 +160,27 @@ def AddMinLon(builder, minLon):
 def MetadataAddMaxLon(builder, maxLon): builder.PrependFloat64Slot(7, maxLon, 0.0)
 def AddMaxLon(builder, maxLon):
     return MetadataAddMaxLon(builder, maxLon)
+def MetadataAddSchemaVersion(builder, schemaVersion): builder.PrependUint32Slot(8, schemaVersion, 1)
+def AddSchemaVersion(builder, schemaVersion):
+    return MetadataAddSchemaVersion(builder, schemaVersion)
+def MetadataAddModelVersion(builder, modelVersion): builder.PrependUOffsetTRelativeSlot(9, flatbuffers.number_types.UOffsetTFlags.py_type(modelVersion), 0)
+def AddModelVersion(builder, modelVersion):
+    return MetadataAddModelVersion(builder, modelVersion)
+def MetadataAddTimeUnit(builder, timeUnit): builder.PrependUint8Slot(10, timeUnit, 0)
+def AddTimeUnit(builder, timeUnit):
+    return MetadataAddTimeUnit(builder, timeUnit)
+def MetadataAddTickDurationNs(builder, tickDurationNs): builder.PrependUint64Slot(11, tickDurationNs, 1000000000)
+def AddTickDurationNs(builder, tickDurationNs):
+    return MetadataAddTickDurationNs(builder, tickDurationNs)
+def MetadataAddProfileTimezone(builder, profileTimezone): builder.PrependUOffsetTRelativeSlot(12, flatbuffers.number_types.UOffsetTFlags.py_type(profileTimezone), 0)
+def AddProfileTimezone(builder, profileTimezone):
+    return MetadataAddProfileTimezone(builder, profileTimezone)
+def MetadataAddTraitsHash(builder, traitsHash): builder.PrependUOffsetTRelativeSlot(13, flatbuffers.number_types.UOffsetTFlags.py_type(traitsHash), 0)
+def AddTraitsHash(builder, traitsHash):
+    return MetadataAddTraitsHash(builder, traitsHash)
+def MetadataAddModelHash(builder, modelHash): builder.PrependUOffsetTRelativeSlot(14, flatbuffers.number_types.UOffsetTFlags.py_type(modelHash), 0)
+def AddModelHash(builder, modelHash):
+    return MetadataAddModelHash(builder, modelHash)
 def MetadataEnd(builder): return builder.EndObject()
 def End(builder):
     return MetadataEnd(builder)

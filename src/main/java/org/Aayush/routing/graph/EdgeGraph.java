@@ -1,5 +1,8 @@
 package org.Aayush.routing.graph;
 
+import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
+import org.Aayush.serialization.flatbuffers.taro.model.Model;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
@@ -23,7 +26,7 @@ import java.util.function.IntConsumer;
  * <p>
  * Features:
  * - SoA (Structure of Arrays) layout for cache locality.
- * - Zero-Copy FlatBuffers loading.
+ * - Zero-copy loading for primitive vectors; coordinates are copied from structs.
  * - CSR (Compressed Sparse Row) for O(1) neighbor access.
  * - O(1) Edge-to-Origin lookup (via edgeOrigin buffer).
  * - Optional Coordinate support (Generic: GPS, Euclidean, or Abstract).
@@ -35,16 +38,6 @@ public class EdgeGraph {
     // ========================================================================
     private static final int FILE_IDENTIFIER = 0x4F524154; // "TARO"
     private static final int COORDINATE_STRUCT_SIZE = 16; // double x + double y
-
-    // Field Indices in GraphTopology table
-    private static final int FIELD_NODE_COUNT = 0;
-    private static final int FIELD_EDGE_COUNT = 1;
-    private static final int FIELD_FIRST_EDGE = 2;
-    private static final int FIELD_EDGE_TARGET = 3;
-    private static final int FIELD_COORDINATES = 4;
-    private static final int FIELD_BASE_WEIGHTS = 5;
-    private static final int FIELD_EDGE_PROFILE_ID = 6;
-    private static final int FIELD_EDGE_ORIGIN = 8;
 
     // ========================================================================
     // DATA BUFFERS (SoA Layout)
@@ -401,49 +394,63 @@ public class EdgeGraph {
     // ========================================================================
 
     public static EdgeGraph fromFlatBuffer(ByteBuffer buffer) {
-        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        if (buffer == null) {
+            throw new IllegalArgumentException("Buffer cannot be null");
+        }
+        ByteBuffer bb = buffer.slice().order(ByteOrder.LITTLE_ENDIAN);
 
         // 1. Enforce Identifier
-        if (buffer.remaining() >= 8) {
-            int ident = buffer.getInt(4);
-            if (ident != FILE_IDENTIFIER) {
-                 throw new IllegalArgumentException(
-                    String.format("Invalid file identifier. Expected 'TARO' (0x%08X), got 0x%08X", 
+        if (bb.remaining() < 8) {
+            throw new IllegalArgumentException("Buffer too small for .taro file header");
+        }
+        if (!Model.ModelBufferHasIdentifier(bb)) {
+            int ident = bb.getInt(4);
+            throw new IllegalArgumentException(String.format(
+                    "Invalid file identifier. Expected 'TARO' (0x%08X), got 0x%08X",
                     FILE_IDENTIFIER, ident));
-            }
         }
 
-        int rootOffset = buffer.getInt(buffer.position()) + buffer.position();
-        Table model = new Table(buffer, rootOffset);
-        
-        int topologyOffset = model.getUnionOrTableOffset(1); 
-        if (topologyOffset == 0) throw new IllegalArgumentException("GraphTopology missing");
-        
-        Table topology = new Table(buffer, topologyOffset);
+        Model model = Model.getRootAsModel(bb);
+        GraphTopology topology = model.topology();
+        if (topology == null) {
+            throw new IllegalArgumentException("GraphTopology missing");
+        }
 
-        int nodeCount = topology.getIntField(FIELD_NODE_COUNT, 0);
-        int edgeCount = topology.getIntField(FIELD_EDGE_COUNT, 0);
+        int nodeCount = topology.nodeCount();
+        int edgeCount = topology.edgeCount();
 
-        IntBuffer firstEdge = topology.getVectorAsIntBuffer(FIELD_FIRST_EDGE);
-        IntBuffer edgeTarget = topology.getVectorAsIntBuffer(FIELD_EDGE_TARGET);
-        FloatBuffer baseWeights = topology.getVectorAsFloatBuffer(FIELD_BASE_WEIGHTS);
-        ShortBuffer edgeProfileIds = topology.getVectorAsShortBuffer(FIELD_EDGE_PROFILE_ID);
-        
-        // Try to get Edge Origin (Field 7)
-        IntBuffer edgeOrigin = topology.getVectorAsIntBuffer(FIELD_EDGE_ORIGIN);
-        
-        // Coordinates are optional (nullable)
-        ByteBuffer coordinates = topology.getVectorAsByteBuffer(FIELD_COORDINATES, COORDINATE_STRUCT_SIZE);
-
+        IntBuffer firstEdge = asIntBuffer(topology.firstEdgeAsByteBuffer());
+        IntBuffer edgeTarget = asIntBuffer(topology.edgeTargetAsByteBuffer());
         if (firstEdge == null || edgeTarget == null) {
             throw new IllegalArgumentException("Missing required graph vectors (firstEdge or edgeTarget)");
         }
-        
+        validateVectorLength("first_edge", firstEdge.remaining(), nodeCount + 1);
+        validateVectorLength("edge_target", edgeTarget.remaining(), edgeCount);
+
+        FloatBuffer baseWeights = asFloatBuffer(topology.baseWeightsAsByteBuffer());
+        if (baseWeights == null) {
+            baseWeights = FloatBuffer.wrap(new float[edgeCount]);
+        } else {
+            validateVectorLength("base_weights", baseWeights.remaining(), edgeCount);
+        }
+
+        ShortBuffer edgeProfileIds = asShortBuffer(topology.edgeProfileIdAsByteBuffer());
+        if (edgeProfileIds == null) {
+            edgeProfileIds = ShortBuffer.wrap(new short[edgeCount]);
+        } else {
+            validateVectorLength("edge_profile_id", edgeProfileIds.remaining(), edgeCount);
+        }
+
+        IntBuffer edgeOrigin = asIntBuffer(topology.edgeOriginAsByteBuffer());
         // Fallback: Compute Edge Origin if missing from file (Backward Compatibility)
         if (edgeOrigin == null) {
             edgeOrigin = computeEdgeOrigins(nodeCount, edgeCount, firstEdge);
+        } else {
+            validateVectorLength("edge_origin", edgeOrigin.remaining(), edgeCount);
         }
-        
+
+        ByteBuffer coordinates = copyCoordinates(topology, nodeCount);
+
         return new EdgeGraph(nodeCount, edgeCount, firstEdge, edgeTarget, edgeOrigin, 
                              baseWeights, edgeProfileIds, coordinates);
     }
@@ -471,79 +478,54 @@ public class EdgeGraph {
         return IntBuffer.wrap(origins);
     }
 
-    private static class Table {
-        private final ByteBuffer bb;
-        private final int pos;
-        private final int vtablePos;
-        private final int vtableLen;
+    private static IntBuffer asIntBuffer(ByteBuffer buffer) {
+        if (buffer == null) {
+            return null;
+        }
+        return buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
+    }
 
-        Table(ByteBuffer bb, int pos) {
-            this.bb = bb;
-            this.pos = pos;
-            this.vtablePos = pos - bb.getInt(pos);
-            this.vtableLen = bb.getShort(vtablePos);
+    private static FloatBuffer asFloatBuffer(ByteBuffer buffer) {
+        if (buffer == null) {
+            return null;
+        }
+        return buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
+    }
+
+    private static ShortBuffer asShortBuffer(ByteBuffer buffer) {
+        if (buffer == null) {
+            return null;
+        }
+        return buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+    }
+
+    private static ByteBuffer copyCoordinates(GraphTopology topology, int nodeCount) {
+        int coordinateCount = topology.coordinatesLength();
+        if (coordinateCount == 0) {
+            return null;
+        }
+        if (coordinateCount != nodeCount) {
+            throw new IllegalArgumentException(
+                    "coordinates length mismatch: expected " + nodeCount + ", got " + coordinateCount);
         }
 
-        int getOffset(int fieldIndex) {
-            int vtableOffset = 4 + (fieldIndex * 2);
-            return (vtableOffset < vtableLen) ? bb.getShort(vtablePos + vtableOffset) : 0;
+        ByteBuffer coordinates = ByteBuffer.allocateDirect(coordinateCount * COORDINATE_STRUCT_SIZE)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        org.Aayush.serialization.flatbuffers.taro.model.Coordinate cursor =
+                new org.Aayush.serialization.flatbuffers.taro.model.Coordinate();
+        for (int i = 0; i < coordinateCount; i++) {
+            topology.coordinates(cursor, i);
+            coordinates.putDouble(cursor.lat());
+            coordinates.putDouble(cursor.lon());
         }
+        coordinates.flip();
+        return coordinates;
+    }
 
-        int getIntField(int fieldIndex, int defaultValue) {
-            int offset = getOffset(fieldIndex);
-            return (offset != 0) ? bb.getInt(pos + offset) : defaultValue;
-        }
-
-        int getUnionOrTableOffset(int fieldIndex) {
-            int offset = getOffset(fieldIndex);
-            return (offset != 0) ? pos + offset + bb.getInt(pos + offset) : 0;
-        }
-
-        IntBuffer getVectorAsIntBuffer(int fieldIndex) {
-            int offset = getOffset(fieldIndex);
-            if (offset == 0) return null;
-            int vectorStart = pos + offset + bb.getInt(pos + offset);
-            int vectorLen = bb.getInt(vectorStart);
-            ByteBuffer dup = bb.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-            dup.position(vectorStart + 4);
-            dup.limit(vectorStart + 4 + vectorLen * 4);
-            return dup.asIntBuffer();
-        }
-        
-        FloatBuffer getVectorAsFloatBuffer(int fieldIndex) {
-            int offset = getOffset(fieldIndex);
-            if (offset == 0) return null;
-            int vectorStart = pos + offset + bb.getInt(pos + offset);
-            int vectorLen = bb.getInt(vectorStart);
-            ByteBuffer dup = bb.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-            dup.position(vectorStart + 4);
-            dup.limit(vectorStart + 4 + vectorLen * 4);
-            return dup.asFloatBuffer();
-        }
-
-        ShortBuffer getVectorAsShortBuffer(int fieldIndex) {
-            int offset = getOffset(fieldIndex);
-            if (offset == 0) return null;
-            int vectorStart = pos + offset + bb.getInt(pos + offset);
-            int vectorLen = bb.getInt(vectorStart);
-            ByteBuffer dup = bb.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-            dup.position(vectorStart + 4);
-            dup.limit(vectorStart + 4 + vectorLen * 2);
-            return dup.asShortBuffer();
-        }
-
-        ByteBuffer getVectorAsByteBuffer(int fieldIndex, int structSizeBytes) {
-            int offset = getOffset(fieldIndex);
-            if (offset == 0) return null;
-            int vectorStart = pos + offset + bb.getInt(pos + offset);
-            int vectorLen = bb.getInt(vectorStart);
-            
-            ByteBuffer dup = bb.duplicate().order(ByteOrder.LITTLE_ENDIAN);
-            dup.position(vectorStart + 4);
-            // Limit calculated based on struct size
-            dup.limit(vectorStart + 4 + vectorLen * structSizeBytes);
-            // Slice so absolute reads start at 0 for the vector payload
-            return dup.slice().order(ByteOrder.LITTLE_ENDIAN);
+    private static void validateVectorLength(String fieldName, int actual, int expected) {
+        if (actual != expected) {
+            throw new IllegalArgumentException(
+                    fieldName + " length mismatch: expected " + expected + ", got " + actual);
         }
     }
 }

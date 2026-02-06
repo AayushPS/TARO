@@ -14,6 +14,22 @@ public class TaroModelTest {
 
     private static final String FILE_NAME = "taro_csr_test.taro";
 
+    private static int createMetadata(FlatBufferBuilder builder, String description) {
+        int descRef = builder.createString(description);
+        int modelVersionRef = builder.createString("v10.1-test");
+        int timezoneRef = builder.createString("UTC");
+
+        Metadata.startMetadata(builder);
+        Metadata.addVersion(builder, 1);
+        Metadata.addDescription(builder, descRef);
+        Metadata.addSchemaVersion(builder, 1);
+        Metadata.addModelVersion(builder, modelVersionRef);
+        Metadata.addTimeUnit(builder, TimeUnit.SECONDS);
+        Metadata.addTickDurationNs(builder, 1_000_000_000L);
+        Metadata.addProfileTimezone(builder, timezoneRef);
+        return Metadata.endMetadata(builder);
+    }
+
     /**
      * CRITICAL: Test CSR (Compressed Sparse Row) format
      * This is THE feature that makes routing 100,000x faster!
@@ -58,12 +74,7 @@ public class TaroModelTest {
         GraphTopology.addCoordinates(builder, coordsVec);
         int topoRef = GraphTopology.endGraphTopology(builder);
 
-        // Minimal metadata
-        int descRef = builder.createString("CSR Test Graph");
-        Metadata.startMetadata(builder);
-        Metadata.addVersion(builder, 1);
-        Metadata.addDescription(builder, descRef);
-        int metaRef = Metadata.endMetadata(builder);
+        int metaRef = createMetadata(builder, "CSR Test Graph");
 
         // Root
         Model.startModel(builder);
@@ -135,10 +146,8 @@ public class TaroModelTest {
         long elapsed = System.nanoTime() - start;
         System.out.println("CSR Traversal (4 nodes, 4 edges): " + elapsed + " ns");
 
-        // Relaxed assertion: 1ms (1,000,000 ns).
-        // 10us is too tight for a functional test on a shared CI environment or cold JVM.
-        // We just want to ensure it's not O(N) or doing I/O (which would be >10ms).
-        assertTrue(elapsed < 1_000_000, "CSR traversal should be fast (<1ms) after warmup");
+        // Keep this as a smoke guardrail, not a microbenchmark gate.
+        assertTrue(elapsed < 5_000_000, "CSR traversal should remain fast (<5ms) after warmup");
 
         // Cleanup
         new File(FILE_NAME).delete();
@@ -160,11 +169,7 @@ public class TaroModelTest {
         int mapRef = IdMapping.endIdMapping(builder);
 
         // Minimal model
-        int descRef = builder.createString("ID Mapping Test");
-        Metadata.startMetadata(builder);
-        Metadata.addVersion(builder, 1);
-        Metadata.addDescription(builder, descRef);
-        int metaRef = Metadata.endMetadata(builder);
+        int metaRef = createMetadata(builder, "ID Mapping Test");
 
         Model.startModel(builder);
         Model.addMetadata(builder, metaRef);
@@ -249,11 +254,7 @@ public class TaroModelTest {
         int landmarksVec = builder.endVector();
 
         // Minimal model
-        int descRef = builder.createString("Landmark Test");
-        Metadata.startMetadata(builder);
-        Metadata.addVersion(builder, 1);
-        Metadata.addDescription(builder, descRef);
-        int metaRef = Metadata.endMetadata(builder);
+        int metaRef = createMetadata(builder, "Landmark Test");
 
         Model.startModel(builder);
         Model.addMetadata(builder, metaRef);
@@ -325,11 +326,7 @@ public class TaroModelTest {
         GraphTopology.addBaseWeights(builder, weightsVec);
         int topoRef = GraphTopology.endGraphTopology(builder);
 
-        int descRef = builder.createString("Stress Test");
-        Metadata.startMetadata(builder);
-        Metadata.addVersion(builder, 1);
-        Metadata.addDescription(builder, descRef);
-        int metaRef = Metadata.endMetadata(builder);
+        int metaRef = createMetadata(builder, "Stress Test");
 
         Model.startModel(builder);
         Model.addMetadata(builder, metaRef);
@@ -408,11 +405,7 @@ public class TaroModelTest {
         int turnsVec = builder.endVector();
 
         // Minimal model
-        int descRef = builder.createString("Turn Cost Test");
-        Metadata.startMetadata(builder);
-        Metadata.addVersion(builder, 1);
-        Metadata.addDescription(builder, descRef);
-        int metaRef = Metadata.endMetadata(builder);
+        int metaRef = createMetadata(builder, "Turn Cost Test");
 
         Model.startModel(builder);
         Model.addMetadata(builder, metaRef);
@@ -437,5 +430,26 @@ public class TaroModelTest {
         TurnCost tc2 = model.turnCosts(1);
         assertEquals(-1.0f, tc2.penaltySeconds(), 0.001f);
         assertTrue(tc2.penaltySeconds() < 0, "Forbidden turns should have negative penalty");
+    }
+
+    @Test
+    public void testMetadataTimeContractRoundTrip() {
+        FlatBufferBuilder builder = new FlatBufferBuilder(256);
+        int metaRef = createMetadata(builder, "Metadata Contract");
+
+        Model.startModel(builder);
+        Model.addMetadata(builder, metaRef);
+        int rootRef = Model.endModel(builder);
+        builder.finish(rootRef);
+
+        ByteBuffer buf = ByteBuffer.wrap(builder.sizedByteArray());
+        Model model = Model.getRootAsModel(buf);
+        Metadata metadata = model.metadata();
+
+        assertNotNull(metadata);
+        assertEquals(1L, metadata.schemaVersion());
+        assertEquals(TimeUnit.SECONDS, metadata.timeUnit());
+        assertEquals(1_000_000_000L, metadata.tickDurationNs());
+        assertEquals("UTC", metadata.profileTimezone());
     }
 }

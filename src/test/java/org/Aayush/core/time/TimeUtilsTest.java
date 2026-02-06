@@ -50,6 +50,12 @@ class TimeUtilsTest {
                 () -> TimeUtils.toBucket(1706169600L, invalidSize));
     }
 
+    @Test
+    void testBucketCalculation_ModelMillis() {
+        long epochMillisAt8AM = 1706169600L * 1000L;
+        assertEquals(32, TimeUtils.toBucket(epochMillisAt8AM, 900, TimeUtils.EngineTimeUnit.MILLISECONDS));
+    }
+
     // ========== Day of Week Tests ==========
 
     @ParameterizedTest
@@ -88,6 +94,12 @@ class TimeUtilsTest {
         assertEquals(4, TimeUtils.getDayOfWeek(jan1_2100));
     }
 
+    @Test
+    void testDayOfWeek_ModelMillis() {
+        long jan1_1970Ms = 0L;
+        assertEquals(3, TimeUtils.getDayOfWeek(jan1_1970Ms, TimeUtils.EngineTimeUnit.MILLISECONDS));
+    }
+
     // ========== Time of Day Tests ==========
 
     @ParameterizedTest
@@ -110,6 +122,13 @@ class TimeUtilsTest {
         // Exactly midnight next day
         long nextMidnight = beforeMidnight + 1;
         assertEquals(0, TimeUtils.getTimeOfDay(nextMidnight));
+    }
+
+    @Test
+    void testTimeOfDayTicks_ModelMillis() {
+        long noonSec = 1706184000L;
+        long noonMs = noonSec * 1000L;
+        assertEquals(43_200_000L, TimeUtils.getTimeOfDayTicks(noonMs, TimeUtils.EngineTimeUnit.MILLISECONDS));
     }
 
     // ========== FIFO Validation Tests ==========
@@ -161,6 +180,39 @@ class TimeUtilsTest {
     })
     void testAddSeconds(long base, long delta, long expected) {
         assertEquals(expected, TimeUtils.addSeconds(base, delta));
+    }
+
+    // ========== Engine Unit Normalization ==========
+
+    @Test
+    void testNormalizeToEngineTicks_SecondsToMillis() {
+        assertEquals(1_700_000L,
+                TimeUtils.normalizeToEngineTicks(1700L,
+                        TimeUtils.EngineTimeUnit.SECONDS,
+                        TimeUtils.EngineTimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void testNormalizeToEngineTicks_MillisToSecondsFloor() {
+        assertEquals(-2L,
+                TimeUtils.normalizeToEngineTicks(-1001L,
+                        TimeUtils.EngineTimeUnit.MILLISECONDS,
+                        TimeUtils.EngineTimeUnit.SECONDS));
+    }
+
+    @Test
+    void testValidateTickDurationNs() {
+        assertEquals(1_000_000_000L,
+                TimeUtils.validateTickDurationNs(TimeUtils.EngineTimeUnit.SECONDS, 1_000_000_000L));
+        assertThrows(IllegalArgumentException.class,
+                () -> TimeUtils.validateTickDurationNs(TimeUtils.EngineTimeUnit.MILLISECONDS, 1_000_000_000L));
+    }
+
+    @Test
+    void testFromTickDurationNs() {
+        assertEquals(TimeUtils.EngineTimeUnit.SECONDS, TimeUtils.fromTickDurationNs(1_000_000_000L));
+        assertEquals(TimeUtils.EngineTimeUnit.MILLISECONDS, TimeUtils.fromTickDurationNs(1_000_000L));
+        assertThrows(IllegalArgumentException.class, () -> TimeUtils.fromTickDurationNs(42));
     }
 
     // ========== Formatting Tests (Debug Only) ==========

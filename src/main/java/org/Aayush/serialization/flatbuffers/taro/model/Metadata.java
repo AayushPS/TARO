@@ -27,6 +27,21 @@ public final class Metadata extends Table {
   public double maxLat() { int o = __offset(14); return o != 0 ? bb.getDouble(o + bb_pos) : 0.0; }
   public double minLon() { int o = __offset(16); return o != 0 ? bb.getDouble(o + bb_pos) : 0.0; }
   public double maxLon() { int o = __offset(18); return o != 0 ? bb.getDouble(o + bb_pos) : 0.0; }
+  public long schemaVersion() { int o = __offset(20); return o != 0 ? (long)bb.getInt(o + bb_pos) & 0xFFFFFFFFL : 1L; }
+  public String modelVersion() { int o = __offset(22); return o != 0 ? __string(o + bb_pos) : null; }
+  public ByteBuffer modelVersionAsByteBuffer() { return __vector_as_bytebuffer(22, 1); }
+  public ByteBuffer modelVersionInByteBuffer(ByteBuffer _bb) { return __vector_in_bytebuffer(_bb, 22, 1); }
+  public int timeUnit() { int o = __offset(24); return o != 0 ? bb.get(o + bb_pos) & 0xFF : 0; }
+  public long tickDurationNs() { int o = __offset(26); return o != 0 ? bb.getLong(o + bb_pos) : 1000000000L; }
+  public String profileTimezone() { int o = __offset(28); return o != 0 ? __string(o + bb_pos) : null; }
+  public ByteBuffer profileTimezoneAsByteBuffer() { return __vector_as_bytebuffer(28, 1); }
+  public ByteBuffer profileTimezoneInByteBuffer(ByteBuffer _bb) { return __vector_in_bytebuffer(_bb, 28, 1); }
+  public String traitsHash() { int o = __offset(30); return o != 0 ? __string(o + bb_pos) : null; }
+  public ByteBuffer traitsHashAsByteBuffer() { return __vector_as_bytebuffer(30, 1); }
+  public ByteBuffer traitsHashInByteBuffer(ByteBuffer _bb) { return __vector_in_bytebuffer(_bb, 30, 1); }
+  public String modelHash() { int o = __offset(32); return o != 0 ? __string(o + bb_pos) : null; }
+  public ByteBuffer modelHashAsByteBuffer() { return __vector_as_bytebuffer(32, 1); }
+  public ByteBuffer modelHashInByteBuffer(ByteBuffer _bb) { return __vector_in_bytebuffer(_bb, 32, 1); }
 
   public static int createMetadata(FlatBufferBuilder builder,
       int version,
@@ -36,20 +51,34 @@ public final class Metadata extends Table {
       double minLat,
       double maxLat,
       double minLon,
-      double maxLon) {
-    builder.startTable(8);
+      double maxLon,
+      long schemaVersion,
+      int modelVersionOffset,
+      int timeUnit,
+      long tickDurationNs,
+      int profileTimezoneOffset,
+      int traitsHashOffset,
+      int modelHashOffset) {
+    builder.startTable(15);
+    Metadata.addTickDurationNs(builder, tickDurationNs);
     Metadata.addMaxLon(builder, maxLon);
     Metadata.addMinLon(builder, minLon);
     Metadata.addMaxLat(builder, maxLat);
     Metadata.addMinLat(builder, minLat);
     Metadata.addCreatedAt(builder, createdAt);
+    Metadata.addModelHash(builder, modelHashOffset);
+    Metadata.addTraitsHash(builder, traitsHashOffset);
+    Metadata.addProfileTimezone(builder, profileTimezoneOffset);
+    Metadata.addModelVersion(builder, modelVersionOffset);
+    Metadata.addSchemaVersion(builder, schemaVersion);
     Metadata.addDescription(builder, descriptionOffset);
     Metadata.addTraitConfig(builder, traitConfigOffset);
     Metadata.addVersion(builder, version);
+    Metadata.addTimeUnit(builder, timeUnit);
     return Metadata.endMetadata(builder);
   }
 
-  public static void startMetadata(FlatBufferBuilder builder) { builder.startTable(8); }
+  public static void startMetadata(FlatBufferBuilder builder) { builder.startTable(15); }
   public static void addVersion(FlatBufferBuilder builder, int version) { builder.addInt(0, version, 0); }
   public static void addCreatedAt(FlatBufferBuilder builder, long createdAt) { builder.addLong(1, createdAt, 0L); }
   public static void addTraitConfig(FlatBufferBuilder builder, int traitConfigOffset) { builder.addOffset(2, traitConfigOffset, 0); }
@@ -58,6 +87,13 @@ public final class Metadata extends Table {
   public static void addMaxLat(FlatBufferBuilder builder, double maxLat) { builder.addDouble(5, maxLat, 0.0); }
   public static void addMinLon(FlatBufferBuilder builder, double minLon) { builder.addDouble(6, minLon, 0.0); }
   public static void addMaxLon(FlatBufferBuilder builder, double maxLon) { builder.addDouble(7, maxLon, 0.0); }
+  public static void addSchemaVersion(FlatBufferBuilder builder, long schemaVersion) { builder.addInt(8, (int) schemaVersion, (int) 1L); }
+  public static void addModelVersion(FlatBufferBuilder builder, int modelVersionOffset) { builder.addOffset(9, modelVersionOffset, 0); }
+  public static void addTimeUnit(FlatBufferBuilder builder, int timeUnit) { builder.addByte(10, (byte) timeUnit, (byte) 0); }
+  public static void addTickDurationNs(FlatBufferBuilder builder, long tickDurationNs) { builder.addLong(11, tickDurationNs, 1000000000L); }
+  public static void addProfileTimezone(FlatBufferBuilder builder, int profileTimezoneOffset) { builder.addOffset(12, profileTimezoneOffset, 0); }
+  public static void addTraitsHash(FlatBufferBuilder builder, int traitsHashOffset) { builder.addOffset(13, traitsHashOffset, 0); }
+  public static void addModelHash(FlatBufferBuilder builder, int modelHashOffset) { builder.addOffset(14, modelHashOffset, 0); }
   public static int endMetadata(FlatBufferBuilder builder) {
     int o = builder.endTable();
     return o;

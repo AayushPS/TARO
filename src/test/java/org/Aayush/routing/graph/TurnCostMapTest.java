@@ -24,8 +24,6 @@ import java.util.concurrent.Future;
  */
 public class TurnCostMapTest {
 
-    private static final int FILE_IDENTIFIER = 0x4F524154; // "TARO"
-
     // ========================================================================
     // TEST 1: Basic Functional Requirements & Equivalence Classes
     // ========================================================================
@@ -329,15 +327,12 @@ public class TurnCostMapTest {
 
             // 5. Root Table VTable
             int rootVTablePos = bb.position();
-            bb.putShort((short) 18);
+            bb.putShort((short) 12);
             bb.putShort((short) 8);
-            for(int k=0; k<6; k++) bb.putShort((short)0);
-
-            if (!skipTurnCostVector) {
-                bb.putShort((short) 4);
-            } else {
-                bb.putShort((short) 0);
-            }
+            bb.putShort((short) 0); // metadata
+            bb.putShort((short) 0); // topology
+            bb.putShort((short) 0); // profiles
+            bb.putShort((short) (skipTurnCostVector ? 0 : 4)); // turn_costs
 
             align(bb, 4);
 
