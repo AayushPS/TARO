@@ -28,7 +28,7 @@ mvn clean package
 
 ### Run (Example)
 ```bash
-mvn exec:java -Dexec.mainClass=org.Aayush.Main
+mvn exec:java -Dexec.mainClass=org.Aayush.app.Main
 ```
 
 ## API Endpoints (Planned)
@@ -54,7 +54,7 @@ Java and Python bindings from `src/main/resources/flatbuffers/taro_model.fbs`:
 ./scripts/gen_flatbuffers.sh
 ```
 This keeps the schema namespace as `taro.model` but rewrites Java packages to
-`org.Aayush.flatbuffers.taro.model` so imports remain stable.
+`org.Aayush.serialization.flatbuffers.taro.model` so imports remain stable.
 
 ## Roadmap (High-Level Stages)
 1. Core utilities: ID mapping, time utilities, FlatBuffers schema
@@ -67,10 +67,23 @@ This keeps the schema namespace as `taro.model` but rewrites Java packages to
 8. Production: telemetry + observability
 
 ## Repo Layout
-- `src/main/java/`: Java runtime implementation
+- `src/main/java/org/Aayush/app/`: runtime entrypoints
+- `src/main/java/org/Aayush/core/id/`: ID mapping contracts and implementations
+- `src/main/java/org/Aayush/core/time/`: temporal utility functions
+- `src/main/java/org/Aayush/routing/graph/`: graph topology and turn-cost structures
+- `src/main/java/org/Aayush/routing/search/`: queue/state/visited search primitives
+- `src/main/java/org/Aayush/serialization/flatbuffers/`: generated FlatBuffers Java bindings
+- `src/test/java/org/Aayush/...`: tests mirrored to the same package boundaries
 - `src/main/python/`: Python utilities and builder components
-- `src/main/resources/flatbuffers/`: FlatBuffers schemas/tests
-- `ResearchData/`: Reference specs and architecture docs (ignored in Git)
+- `src/main/resources/flatbuffers/`: FlatBuffers schema + Python generated bindings
+- `scripts/`: developer automation scripts
+- `ResearchData/`: reference specs and architecture docs
+
+## Package Rules For New Code
+- Put business/domain logic in `routing` packages, not `core`.
+- Keep `core` framework-agnostic and reusable (no graph/search assumptions).
+- Treat `serialization.flatbuffers` as generated-only code.
+- Mirror tests to the package they validate so package-private contracts can be tested safely.
 
 ## License
 MIT. See `LICENSE`.
