@@ -24,9 +24,14 @@ public final class TimeUtils {
     private static final long SECONDS_PER_DAY = 86400L;      // 24 * 60 * 60
     private static final long SECONDS_PER_HOUR = 3600L;
     private static final int DAYS_PER_WEEK = 7;
-    
-    // Unix epoch started on Thursday, Jan 1, 1970
-    // To make Monday=0, we offset by 3 days
+    /*
+    ==============================================
+    IMPORTANT
+    ==============================================
+     Unix epoch started on Thursday, Jan 1, 1970
+     To make Monday=0, we offset by 3 days
+    ==============================================
+    */
     private static final int EPOCH_DAY_OFFSET = 3;
     
     private TimeUtils() {
