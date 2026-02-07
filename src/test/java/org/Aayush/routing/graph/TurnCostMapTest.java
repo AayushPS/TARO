@@ -129,6 +129,11 @@ public class TurnCostMapTest {
     }
 
     @Test
+    public void testNullBufferRejected() {
+        assertThrows(IllegalArgumentException.class, () -> TurnCostMap.fromFlatBuffer(null));
+    }
+
+    @Test
     public void testEmptyOrMissingVector() {
         // Case A: Vector offset is missing
         MockTurnCostBuilder builderMissing = new MockTurnCostBuilder();
@@ -142,6 +147,20 @@ public class TurnCostMapTest {
         TurnCostMap mapEmpty = TurnCostMap.fromFlatBuffer(builderEmpty.build());
         assertEquals(0, mapEmpty.size());
         assertFalse(mapEmpty.hasCost(1, 2));
+    }
+
+    @Test
+    public void testNegativeEdgesAreIgnored() {
+        MockTurnCostBuilder builder = new MockTurnCostBuilder();
+        builder.addTurn(-1, 2, 5.0f);
+        builder.addTurn(1, -2, 6.0f);
+        builder.addTurn(1, 2, 7.0f);
+
+        TurnCostMap map = TurnCostMap.fromFlatBuffer(builder.build());
+        assertEquals(1, map.size());
+        assertEquals(7.0f, map.getCost(1, 2), 0.001f);
+        assertEquals(TurnCostMap.DEFAULT_COST, map.getCost(-1, 2), 0.001f);
+        assertTrue(map.toString().contains("TurnCostMap[size=1"));
     }
 
     // ========================================================================

@@ -5,11 +5,11 @@ Workspace: `TARO-TIME_AWARE_ROUTING_Orchestrator`
 
 ## 0. Direct Answer
 
-Your implementation up to Stage 6 still works.
+Your implementation up to Stage 7 is now in place and aligned.
 
-You do not need a drastic rewrite from `taro_architecture_refined.pdf` for Stage 1-6. You needed contract hardening and loader/schema cleanup, which is now applied.
+You do not need a drastic rewrite from `taro_architecture_refined.pdf` for Stage 1-7. The major work was contract hardening, schema-safe loader updates, and Stage 7 live-overlay semantics.
 
-## 1. What Was Rebuilt (Stage 1-6)
+## 1. What Was Rebuilt (Stage 1-7)
 
 ### Stage 1: ID Translation Layer
 - Status: `DONE`
@@ -54,6 +54,21 @@ You do not need a drastic rewrite from `taro_architecture_refined.pdf` for Stage
 - Existing `SearchQueue`, `SearchState`, `VisitedSet` remain valid for v10.1 Stage 6 goals.
 - Tests remain green after Stage 2/3/4/5 upgrades.
 
+### Stage 7: Live Overlay
+- Status: `DONE`
+- Implemented `LiveUpdate` + `LiveOverlay` with explicit contracts:
+  - `speed_factor` domain `[0,1]` with `0.0` meaning blocked edge.
+  - TTL normalization to absolute `valid_until_ticks` in engine time.
+  - Lookup state model: `MISSING`, `EXPIRED`, `BLOCKED`, `ACTIVE`.
+  - Canonical penalty mapping: missing/expired `1.0`, blocked `INF`, active `1/speed_factor`.
+- Added bounded memory + cleanup strategy:
+  - write-budgeted expired cleanup
+  - scheduled sweep API
+  - optional read-opportunistic cleanup
+  - configurable cap overflow policy
+- Added Stage 7 tests in `LiveOverlayTest`.
+- Detailed design notes: `docs/stage7_live_overlay_impl.md`.
+
 ## 2. Current Test Evidence
 
 Verified with clean run:
@@ -70,6 +85,7 @@ Main validated suites:
 - `org.Aayush.routing.graph.EdgeGraphTest`
 - `org.Aayush.routing.graph.TurnCostMapTest`
 - `org.Aayush.routing.search.SearchInfrastructureTest`
+- `org.Aayush.routing.overlay.LiveOverlayTest`
 - `org.Aayush.serialization.flatbuffers.TaroModelTest`
 
 ## 3. Stage-Wise Status Snapshot (v10.1)
@@ -80,20 +96,13 @@ Main validated suites:
 - Stage 4: `DONE`
 - Stage 5: `DONE`
 - Stage 6: `DONE`
-- Stage 7: `NOT STARTED`
+- Stage 7: `DONE`
 - Stage 8: `NOT STARTED`
 - Stage 9: `NOT STARTED`
 - Stage 10: `NOT STARTED`
 - Stage 11-28: `NOT STARTED` in this repo
 
-## 4. Requirements Going Forward (All Stages, Condensed)
-
-### Stage 7: Live Overlay
-- Enforce `speed_factor` range `[0,1]`.
-- `0.0` must mean blocked edge.
-- Normalize TTL to engine ticks (`valid_until_ticks`).
-- Use bounded memory strategy (hybrid cleanup + cap policy).
-- Keep read path cheap under concurrency.
+## 4. Requirements Going Forward (Stage 8+, Condensed)
 
 ### Stage 8: Spatial Runtime
 - Implement KD query runtime over serialized spatial index.
@@ -130,11 +139,11 @@ Main validated suites:
 ## 5. Practical Impact for You
 
 How drastically to work differently now:
-- Stage 1-6: low change, mostly keep building forward.
-- Stage 7-10: high semantic importance, lock these contracts before deep routing features.
+- Stage 1-7: low change, mostly keep building forward.
+- Stage 8-10: high semantic importance, lock these contracts before deep routing features.
 
 Recommended next order:
-1. Stage 7 (overlay)
-2. Stage 9 (profile store)
-3. Stage 10 (cost engine)
+1. Stage 9 (profile store)
+2. Stage 10 (cost engine)
+3. Stage 8 (spatial runtime)
 4. Stage 14 then Stage 13 (routing)

@@ -1,5 +1,8 @@
 package org.Aayush.routing.search;
 
+import lombok.NoArgsConstructor;
+import lombok.ToString;
+
 /**
  * Represents a mutable state in the time-dependent search graph.
  * <p>
@@ -8,6 +11,8 @@ package org.Aayush.routing.search;
  * via the {@link SearchQueue} to ensure zero garbage collection overhead during search operations.
  * </p>
  */
+@NoArgsConstructor
+@ToString
 public class SearchState implements Comparable<SearchState> {
 
     /** The unique identifier of the edge in the graph. */
@@ -21,14 +26,6 @@ public class SearchState implements Comparable<SearchState> {
 
     /** The edge ID of the predecessor in the path (for path reconstruction). */
     public int predecessor;
-
-    /**
-     * Default constructor.
-     * Intended for pre-allocation within an object pool.
-     */
-    public SearchState() {
-        // Default constructor for pooling
-    }
 
     /**
      * Mutator to re-initialize the state with new values.
@@ -69,15 +66,5 @@ public class SearchState implements Comparable<SearchState> {
         }
         // Secondary: Arrival Time (earlier is better/preferred for tie-breaking)
         return Long.compare(this.arrivalTime, other.arrivalTime);
-    }
-
-    @Override
-    public String toString() {
-        return "SearchState{" +
-                "edge=" + edgeId +
-                ", time=" + arrivalTime +
-                ", cost=" + cost +
-                ", pred=" + predecessor +
-                '}';
     }
 }

@@ -36,6 +36,13 @@ mvn exec:java -Dexec.mainClass=org.Aayush.app.Main
 - `POST /matrix`: One-to-many matrix routing (Dijkstra).
 - `POST /engine/live`: Live traffic injection / overrides.
 
+## Stage 7 Live Overlay (Implemented)
+- Runtime classes: `org.Aayush.routing.overlay.LiveOverlay`, `org.Aayush.routing.overlay.LiveUpdate`
+- State model: `MISSING`, `EXPIRED`, `BLOCKED`, `ACTIVE`
+- Canonical penalty mapping: missing/expired `1.0`, blocked `INF`, active `1 / speed_factor`
+- Hard capacity with configurable overflow policy and hybrid cleanup
+- Detailed implementation notes: `docs/stage7_live_overlay_impl.md`
+
 ## Testing
 ### Java
 ```bash
@@ -72,11 +79,13 @@ This keeps the schema namespace as `taro.model` but rewrites Java packages to
 - `src/main/java/org/Aayush/core/time/`: temporal utility functions
 - `src/main/java/org/Aayush/routing/graph/`: graph topology and turn-cost structures
 - `src/main/java/org/Aayush/routing/search/`: queue/state/visited search primitives
+- `src/main/java/org/Aayush/routing/overlay/`: live runtime overlay for edge speed overrides
 - `src/main/java/org/Aayush/serialization/flatbuffers/`: generated FlatBuffers Java bindings
 - `src/test/java/org/Aayush/...`: tests mirrored to the same package boundaries
 - `src/main/python/`: Python utilities and builder components
 - `src/main/resources/flatbuffers/`: FlatBuffers schema + Python generated bindings
 - `scripts/`: developer automation scripts
+- `docs/`: stage guide and implementation notes
 - `ResearchData/`: reference specs and architecture docs
 
 ## Package Rules For New Code

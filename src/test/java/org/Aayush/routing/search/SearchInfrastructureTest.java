@@ -162,6 +162,26 @@ class SearchInfrastructureTest {
         }
 
         @Test
+        @DisplayName("Clear recovers capacity even after leaked extracted states")
+        void testClearRecoversAfterLeak() {
+            SearchQueue queue = new SearchQueue(10, 2);
+            queue.insert(1, 0, 1.0f, -1);
+
+            // Leak one extracted state.
+            queue.extractMin();
+
+            queue.insert(2, 0, 2.0f, -1);
+            queue.clear();
+
+            // Queue should be fully reusable up to capacity after clear().
+            assertDoesNotThrow(() -> {
+                queue.insert(3, 0, 3.0f, -1);
+                queue.insert(4, 0, 4.0f, -1);
+            });
+            assertEquals(2, queue.size());
+        }
+
+        @Test
         @DisplayName("Decrease-Key: Update Existing Path")
         void testDecreaseKey() {
             SearchQueue queue = new SearchQueue(10, 10);

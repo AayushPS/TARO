@@ -1,5 +1,7 @@
 package org.Aayush.core.id;
 
+import lombok.experimental.StandardException;
+
 import java.util.Map;
 
 /**
@@ -33,10 +35,8 @@ public interface IDMapper {
     /**
      * Exception thrown when an external ID cannot be found in the mapping.
      */
+    @StandardException
     class UnknownIDException extends RuntimeException {
-        public UnknownIDException(String message) {
-            super(message);
-        }
     }
 
     /**

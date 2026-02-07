@@ -1,7 +1,12 @@
 package org.Aayush.core.time;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 public final class TimeUtils {
 
+    @Getter
+    @Accessors(fluent = true)
     public enum EngineTimeUnit {
         SECONDS(1_000_000_000L, 1L),
         MILLISECONDS(1_000_000L, 1_000L);
@@ -12,14 +17,6 @@ public final class TimeUtils {
         EngineTimeUnit(long tickDurationNs, long ticksPerSecond) {
             this.tickDurationNs = tickDurationNs;
             this.ticksPerSecond = ticksPerSecond;
-        }
-
-        public long tickDurationNs() {
-            return tickDurationNs;
-        }
-
-        public long ticksPerSecond() {
-            return ticksPerSecond;
         }
     }
     

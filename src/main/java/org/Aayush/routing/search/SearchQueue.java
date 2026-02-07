@@ -1,5 +1,8 @@
 package org.Aayush.routing.search;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 /**
  * A specialized Min-Priority Queue optimized for Graph Search algorithms (Dijkstra/A*).
  * <p>
@@ -16,6 +19,8 @@ public class SearchQueue {
 
     // The Binary Heap (1-based indexing for easier parent/child math)
     private final SearchState[] heap;
+    @Getter
+    @Accessors(fluent = true)
     private int size = 0;
 
     // Position tracking for Decrease-Key: positions[edgeId] = heapIndex
@@ -28,6 +33,7 @@ public class SearchQueue {
 
     // Diagnostics
     private int activeStates = 0; // Number of states currently checked out from the pool
+    @Getter
     private int peakActiveStates = 0; // High-water mark for active states
 
     /**
@@ -208,14 +214,6 @@ public class SearchQueue {
     }
 
     /**
-     * Returns the current number of elements in the priority queue.
-     * @return The size.
-     */
-    public int size() {
-        return size;
-    }
-
-    /**
      * Clears the queue and returns all active heap states to the pool.
      * <p>
      * This prepares the queue for a new search query. It also checks for leaked states
@@ -237,20 +235,18 @@ public class SearchQueue {
 
         // Diagnostic: Detect leaked states
         if (activeStates != 0) {
+            int leaked = activeStates;
             System.err.println("WARNING: " + activeStates +
-                    " states leaked (extracted but not recycled). Resetting pool stats.");
-            // Force reset to recover steady state behavior
+                    " states leaked (extracted but not recycled). Replenishing pool.");
+
+            // Replenish missing pool slots so subsequent searches keep full capacity.
+            for (int i = 0; i < leaked && poolTop < pool.length - 1; i++) {
+                pool[++poolTop] = new SearchState();
+            }
+
+            // Reset accounting after replenishment.
             activeStates = 0;
         }
-    }
-
-    /**
-     * Diagnostic: Returns the maximum number of states simultaneously active (high water mark).
-     * Useful for tuning the 'capacity' constructor argument.
-     * @return The peak number of active states.
-     */
-    public int getPeakActiveStates() {
-        return peakActiveStates;
     }
 
     /**

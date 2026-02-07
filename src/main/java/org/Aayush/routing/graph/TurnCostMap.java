@@ -1,5 +1,7 @@
 package org.Aayush.routing.graph;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 import org.Aayush.serialization.flatbuffers.taro.model.TurnCost;
 
@@ -50,6 +52,8 @@ public class TurnCostMap {
     private final int mask;
 
     // Number of active entries
+    @Getter
+    @Accessors(fluent = true)
     private final int size;
 
     /**
@@ -123,10 +127,6 @@ public class TurnCostMap {
      */
     public boolean isForbidden(int fromEdge, int toEdge) {
         return getCost(fromEdge, toEdge) == FORBIDDEN_TURN;
-    }
-
-    public int size() {
-        return size;
     }
 
     // ========================================================================

@@ -1,5 +1,8 @@
 package org.Aayush.routing.graph;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.experimental.Accessors;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 
@@ -55,7 +58,11 @@ public class EdgeGraph {
     // Node Properties (Raw bytes for 16-byte structs). Can be null.
     private final ByteBuffer coordinates;
 
+    @Getter
+    @Accessors(fluent = true)
     private final int nodeCount;
+    @Getter
+    @Accessors(fluent = true)
     private final int edgeCount;
 
     EdgeGraph(int nodeCount, int edgeCount,
@@ -75,9 +82,6 @@ public class EdgeGraph {
     // ========================================================================
     // CORE ACCESSORS (O(1))
     // ========================================================================
-
-    public int nodeCount() { return nodeCount; }
-    public int edgeCount() { return edgeCount; }
 
     /**
      * UNCHECKED - caller must ensure edgeId is valid for performance.
@@ -170,14 +174,10 @@ public class EdgeGraph {
      * Logic (distance, bearing, etc.) is intentionally omitted to allow
      * Trait Adapters (Spatial vs Abstract) to define behavior.
      */
+    @AllArgsConstructor
     public static class Coordinate {
         public final double x;  // lat for GPS, x for Euclidean, etc.
         public final double y;  // lon for GPS, y for Euclidean, etc.
-
-        public Coordinate(double x, double y) {
-            this.x = x;
-            this.y = y;
-        }
 
         @Override
         public String toString() {
@@ -316,16 +316,11 @@ public class EdgeGraph {
         return sb.toString();
     }
 
+    @AllArgsConstructor
     public static class ValidationResult {
         public final boolean isValid;
         public final List<String> errors;
         public final List<String> warnings;
-
-        public ValidationResult(boolean isValid, List<String> errors, List<String> warnings) {
-            this.isValid = isValid;
-            this.errors = errors;
-            this.warnings = warnings;
-        }
     }
 
     public ValidationResult validate() {
