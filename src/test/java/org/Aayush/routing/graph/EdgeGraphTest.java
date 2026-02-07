@@ -2,6 +2,7 @@ package org.Aayush.routing.graph;
 
 import com.google.flatbuffers.FlatBufferBuilder;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
+import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -92,6 +93,36 @@ class EdgeGraphTest {
             int[] edgeOrigins,
             double[] coordinates
     ) {
+        return buildModelBufferForFromFlatBuffer(
+                nodeCount,
+                edgeCount,
+                firstEdge,
+                edgeTarget,
+                baseWeights,
+                edgeProfileIds,
+                edgeOrigins,
+                coordinates,
+                true,
+                1L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS,
+                1_000_000_000L
+        );
+    }
+
+    private ByteBuffer buildModelBufferForFromFlatBuffer(
+            int nodeCount,
+            int edgeCount,
+            int[] firstEdge,
+            int[] edgeTarget,
+            float[] baseWeights,
+            int[] edgeProfileIds,
+            int[] edgeOrigins,
+            double[] coordinates,
+            boolean includeMetadata,
+            long schemaVersion,
+            int timeUnit,
+            long tickDurationNs
+    ) {
         FlatBufferBuilder builder = new FlatBufferBuilder(1024);
 
         int firstEdgeVec = firstEdge != null ? GraphTopology.createFirstEdgeVector(builder, firstEdge) : 0;
@@ -137,7 +168,15 @@ class EdgeGraphTest {
         }
         int topologyRef = GraphTopology.endGraphTopology(builder);
 
+        int metadataRef = 0;
+        if (includeMetadata) {
+            metadataRef = createMetadata(builder, schemaVersion, timeUnit, tickDurationNs);
+        }
+
         Model.startModel(builder);
+        if (metadataRef != 0) {
+            Model.addMetadata(builder, metadataRef);
+        }
         Model.addTopology(builder, topologyRef);
         int root = Model.endModel(builder);
         Model.finishModelBuffer(builder, root);
@@ -146,10 +185,27 @@ class EdgeGraphTest {
 
     private ByteBuffer buildModelBufferWithoutTopology() {
         FlatBufferBuilder builder = new FlatBufferBuilder(64);
+        int metadataRef = createMetadata(
+                builder,
+                1L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS,
+                1_000_000_000L
+        );
         Model.startModel(builder);
+        Model.addMetadata(builder, metadataRef);
         int root = Model.endModel(builder);
         Model.finishModelBuffer(builder, root);
         return ByteBuffer.wrap(builder.sizedByteArray()).order(ByteOrder.LITTLE_ENDIAN);
+    }
+
+    private int createMetadata(FlatBufferBuilder builder, long schemaVersion, int timeUnit, long tickDurationNs) {
+        int modelVersion = builder.createString("edgegraph-test");
+        Metadata.startMetadata(builder);
+        Metadata.addSchemaVersion(builder, schemaVersion);
+        Metadata.addModelVersion(builder, modelVersion);
+        Metadata.addTimeUnit(builder, timeUnit);
+        Metadata.addTickDurationNs(builder, tickDurationNs);
+        return Metadata.endMetadata(builder);
     }
 
     // ========================================================================
@@ -556,6 +612,57 @@ class EdgeGraphTest {
     }
 
     @Test
+    @DisplayName("Loading: Missing metadata is rejected")
+    void testFromFlatBufferMissingMetadata() {
+        ByteBuffer buffer = buildModelBufferForFromFlatBuffer(
+                1, 0,
+                new int[]{0, 0},
+                new int[]{},
+                null, null, null, null,
+                false,
+                1L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS,
+                1_000_000_000L
+        );
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> EdgeGraph.fromFlatBuffer(buffer));
+        assertTrue(ex.getMessage().contains("metadata"));
+    }
+
+    @Test
+    @DisplayName("Loading: Metadata contract mismatch is rejected")
+    void testFromFlatBufferMetadataContractValidation() {
+        ByteBuffer badSchemaVersion = buildModelBufferForFromFlatBuffer(
+                1, 0,
+                new int[]{0, 0},
+                new int[]{},
+                null, null, null, null,
+                true,
+                2L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS,
+                1_000_000_000L
+        );
+        IllegalArgumentException badSchemaEx = assertThrows(
+                IllegalArgumentException.class,
+                () -> EdgeGraph.fromFlatBuffer(badSchemaVersion));
+        assertTrue(badSchemaEx.getMessage().contains("schema_version"));
+
+        ByteBuffer badTickPair = buildModelBufferForFromFlatBuffer(
+                1, 0,
+                new int[]{0, 0},
+                new int[]{},
+                null, null, null, null,
+                true,
+                1L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.MILLISECONDS,
+                1_000_000_000L
+        );
+        IllegalArgumentException badTickEx = assertThrows(
+                IllegalArgumentException.class,
+                () -> EdgeGraph.fromFlatBuffer(badTickPair));
+        assertTrue(badTickEx.getMessage().contains("tick_duration_ns"));
+    }
+
+    @Test
     @DisplayName("Loading: Vector length mismatches are validated")
     void testFromFlatBufferVectorLengthValidation() {
         ByteBuffer firstEdgeMismatch = buildModelBufferForFromFlatBuffer(
@@ -623,6 +730,38 @@ class EdgeGraphTest {
                 new double[]{10.0, 20.0}       // expected nodeCount == 2 coordinates
         );
         assertThrows(IllegalArgumentException.class, () -> EdgeGraph.fromFlatBuffer(coordinateMismatch));
+    }
+
+    @Test
+    @DisplayName("Loading: Malformed CSR contract is rejected even when vector lengths match")
+    void testFromFlatBufferMalformedCsrRejected() {
+        ByteBuffer nonMonotonic = buildModelBufferForFromFlatBuffer(
+                2, 2,
+                new int[]{0, 2, 1}, // Non-monotonic first_edge
+                new int[]{0, 1},
+                new float[]{1.0f, 1.0f},
+                new int[]{0, 0},
+                null,
+                null
+        );
+        IllegalArgumentException nonMonotonicEx = assertThrows(
+                IllegalArgumentException.class,
+                () -> EdgeGraph.fromFlatBuffer(nonMonotonic));
+        assertTrue(nonMonotonicEx.getMessage().contains("non-monotonic"));
+
+        ByteBuffer wrongCsrEnd = buildModelBufferForFromFlatBuffer(
+                2, 2,
+                new int[]{0, 1, 1}, // first_edge[node_count] should be edge_count (2)
+                new int[]{0, 1},
+                new float[]{1.0f, 1.0f},
+                new int[]{0, 0},
+                null,
+                null
+        );
+        IllegalArgumentException wrongEndEx = assertThrows(
+                IllegalArgumentException.class,
+                () -> EdgeGraph.fromFlatBuffer(wrongCsrEnd));
+        assertTrue(wrongEndEx.getMessage().contains("first_edge[node_count]"));
     }
 
     @Test

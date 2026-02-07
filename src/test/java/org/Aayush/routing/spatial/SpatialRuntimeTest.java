@@ -4,6 +4,7 @@ import com.google.flatbuffers.FlatBufferBuilder;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.KDNode;
+import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 import org.Aayush.serialization.flatbuffers.taro.model.SpatialIndex;
 import org.junit.jupiter.api.DisplayName;
@@ -149,6 +150,29 @@ class SpatialRuntimeTest {
 
         SpatialRuntime disabled = SpatialRuntime.fromFlatBuffer(model.duplicate().order(ByteOrder.LITTLE_ENDIAN), graph, false);
         assertFalse(disabled.enabled());
+    }
+
+    @Test
+    @DisplayName("Correctness: missing metadata contract is rejected")
+    void testMissingMetadataRejected() {
+        double[] coordinates = {
+                0.0, 0.0,
+                1.0, 1.0
+        };
+        KDNodeSpec[] nodes = {
+                new KDNodeSpec(0.0f, -1, -1, 0, 2, 0, 1)
+        };
+        int[] leafItems = {0, 1};
+
+        ByteBuffer validModel = buildModelBuffer(coordinates, nodes, leafItems, 0, true);
+        EdgeGraph graph = loadGraph(validModel);
+        ByteBuffer modelWithoutMetadata = buildModelBufferWithoutMetadata(coordinates, nodes, leafItems, 0, true);
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> SpatialRuntime.fromFlatBuffer(modelWithoutMetadata.duplicate().order(ByteOrder.LITTLE_ENDIAN), graph, true)
+        );
+        assertTrue(ex.getMessage().contains("metadata"));
     }
 
     @Test
@@ -466,6 +490,85 @@ class SpatialRuntimeTest {
             spatialIndexRef = SpatialIndex.endSpatialIndex(builder);
         }
 
+        int metadataRef = createMetadata(builder);
+
+        Model.startModel(builder);
+        Model.addMetadata(builder, metadataRef);
+        Model.addTopology(builder, topologyRef);
+        if (spatialIndexRef != 0) {
+            Model.addSpatialIndex(builder, spatialIndexRef);
+        }
+        int root = Model.endModel(builder);
+        Model.finishModelBuffer(builder, root);
+
+        return ByteBuffer.wrap(builder.sizedByteArray()).order(ByteOrder.LITTLE_ENDIAN);
+    }
+
+    private ByteBuffer buildModelBufferWithoutMetadata(
+            double[] coordinates,
+            KDNodeSpec[] treeNodes,
+            int[] leafItems,
+            int rootIndex,
+            boolean includeSpatialIndex
+    ) {
+        FlatBufferBuilder builder = new FlatBufferBuilder(4096);
+
+        int nodeCount = coordinates.length / 2;
+        int edgeCount = 0;
+
+        int[] firstEdge = new int[nodeCount + 1];
+        int[] edgeTargets = new int[0];
+
+        int firstEdgeVec = GraphTopology.createFirstEdgeVector(builder, firstEdge);
+        int edgeTargetVec = GraphTopology.createEdgeTargetVector(builder, edgeTargets);
+        int coordinatesVec = createCoordinatesVector(builder, coordinates);
+
+        GraphTopology.startGraphTopology(builder);
+        GraphTopology.addNodeCount(builder, nodeCount);
+        GraphTopology.addEdgeCount(builder, edgeCount);
+        GraphTopology.addFirstEdge(builder, firstEdgeVec);
+        GraphTopology.addEdgeTarget(builder, edgeTargetVec);
+        GraphTopology.addCoordinates(builder, coordinatesVec);
+        int topologyRef = GraphTopology.endGraphTopology(builder);
+
+        int spatialIndexRef = 0;
+        if (includeSpatialIndex) {
+            int treeNodesVec = 0;
+            int leafItemsVec = 0;
+
+            if (treeNodes != null) {
+                SpatialIndex.startTreeNodesVector(builder, treeNodes.length);
+                for (int i = treeNodes.length - 1; i >= 0; i--) {
+                    KDNodeSpec node = treeNodes[i];
+                    KDNode.createKDNode(
+                            builder,
+                            node.splitValue(),
+                            node.leftChild(),
+                            node.rightChild(),
+                            node.itemStartIndex(),
+                            node.itemCount(),
+                            node.splitAxis(),
+                            node.isLeaf()
+                    );
+                }
+                treeNodesVec = builder.endVector();
+            }
+
+            if (leafItems != null) {
+                leafItemsVec = SpatialIndex.createLeafItemsVector(builder, leafItems);
+            }
+
+            SpatialIndex.startSpatialIndex(builder);
+            if (treeNodesVec != 0) {
+                SpatialIndex.addTreeNodes(builder, treeNodesVec);
+            }
+            if (leafItemsVec != 0) {
+                SpatialIndex.addLeafItems(builder, leafItemsVec);
+            }
+            SpatialIndex.addRootIndex(builder, rootIndex);
+            spatialIndexRef = SpatialIndex.endSpatialIndex(builder);
+        }
+
         Model.startModel(builder);
         Model.addTopology(builder, topologyRef);
         if (spatialIndexRef != 0) {
@@ -475,6 +578,16 @@ class SpatialRuntimeTest {
         Model.finishModelBuffer(builder, root);
 
         return ByteBuffer.wrap(builder.sizedByteArray()).order(ByteOrder.LITTLE_ENDIAN);
+    }
+
+    private int createMetadata(FlatBufferBuilder builder) {
+        int modelVersion = builder.createString("spatial-test");
+        Metadata.startMetadata(builder);
+        Metadata.addSchemaVersion(builder, 1L);
+        Metadata.addModelVersion(builder, modelVersion);
+        Metadata.addTimeUnit(builder, org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS);
+        Metadata.addTickDurationNs(builder, 1_000_000_000L);
+        return Metadata.endMetadata(builder);
     }
 
     private int createCoordinatesVector(FlatBufferBuilder builder, double[] coordinates) {

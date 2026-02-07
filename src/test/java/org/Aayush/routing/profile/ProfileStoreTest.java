@@ -163,6 +163,34 @@ class ProfileStoreTest {
         );
         assertThrows(IllegalArgumentException.class,
                 () -> ProfileStore.fromFlatBuffer(missingIdentifier.duplicate().order(ByteOrder.LITTLE_ENDIAN)));
+
+        ByteBuffer missingMetadata = buildModelBufferWithoutMetadata(
+                new ProfileSpec(4, ALL_DAYS, new float[]{1.0f}, 1.0f)
+        );
+        assertThrows(IllegalArgumentException.class,
+                () -> ProfileStore.fromFlatBuffer(missingMetadata.duplicate().order(ByteOrder.LITTLE_ENDIAN)));
+
+        ByteBuffer badSchemaVersion = buildModelBufferWithMetadataContract(
+                true,
+                true,
+                2L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS,
+                1_000_000_000L,
+                new ProfileSpec(4, ALL_DAYS, new float[]{1.0f}, 1.0f)
+        );
+        assertThrows(IllegalArgumentException.class,
+                () -> ProfileStore.fromFlatBuffer(badSchemaVersion.duplicate().order(ByteOrder.LITTLE_ENDIAN)));
+
+        ByteBuffer badTickPair = buildModelBufferWithMetadataContract(
+                true,
+                true,
+                1L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.MILLISECONDS,
+                1_000_000_000L,
+                new ProfileSpec(4, ALL_DAYS, new float[]{1.0f}, 1.0f)
+        );
+        assertThrows(IllegalArgumentException.class,
+                () -> ProfileStore.fromFlatBuffer(badTickPair.duplicate().order(ByteOrder.LITTLE_ENDIAN)));
     }
 
     @Test
@@ -240,14 +268,46 @@ class ProfileStoreTest {
     }
 
     private ByteBuffer buildModelBuffer(ProfileSpec... specs) {
-        return buildModelBuffer(true, specs);
+        return buildModelBufferWithMetadataContract(
+                true,
+                true,
+                1L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS,
+                1_000_000_000L,
+                specs
+        );
     }
 
     private ByteBuffer buildModelBufferWithoutIdentifier(ProfileSpec... specs) {
-        return buildModelBuffer(false, specs);
+        return buildModelBufferWithMetadataContract(
+                false,
+                true,
+                1L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS,
+                1_000_000_000L,
+                specs
+        );
     }
 
-    private ByteBuffer buildModelBuffer(boolean includeIdentifier, ProfileSpec... specs) {
+    private ByteBuffer buildModelBufferWithoutMetadata(ProfileSpec... specs) {
+        return buildModelBufferWithMetadataContract(
+                true,
+                false,
+                1L,
+                org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS,
+                1_000_000_000L,
+                specs
+        );
+    }
+
+    private ByteBuffer buildModelBufferWithMetadataContract(
+            boolean includeIdentifier,
+            boolean includeMetadata,
+            long schemaVersion,
+            int timeUnit,
+            long tickDurationNs,
+            ProfileSpec... specs
+    ) {
         FlatBufferBuilder builder = new FlatBufferBuilder(4096);
 
         int profilesVec = 0;
@@ -267,10 +327,14 @@ class ProfileStoreTest {
             profilesVec = Model.createProfilesVector(builder, profileOffsets);
         }
 
-        int metadataRef = createMetadata(builder);
+        int metadataRef = includeMetadata
+                ? createMetadata(builder, schemaVersion, timeUnit, tickDurationNs)
+                : 0;
 
         Model.startModel(builder);
-        Model.addMetadata(builder, metadataRef);
+        if (metadataRef != 0) {
+            Model.addMetadata(builder, metadataRef);
+        }
         if (profilesVec != 0) {
             Model.addProfiles(builder, profilesVec);
         }
@@ -283,14 +347,14 @@ class ProfileStoreTest {
         return ByteBuffer.wrap(builder.sizedByteArray()).order(ByteOrder.LITTLE_ENDIAN);
     }
 
-    private int createMetadata(FlatBufferBuilder builder) {
+    private int createMetadata(FlatBufferBuilder builder, long schemaVersion, int timeUnit, long tickDurationNs) {
         int modelVersion = builder.createString("stage9-test");
 
         Metadata.startMetadata(builder);
-        Metadata.addSchemaVersion(builder, 1);
+        Metadata.addSchemaVersion(builder, schemaVersion);
         Metadata.addModelVersion(builder, modelVersion);
-        Metadata.addTimeUnit(builder, org.Aayush.serialization.flatbuffers.taro.model.TimeUnit.SECONDS);
-        Metadata.addTickDurationNs(builder, 1_000_000_000L);
+        Metadata.addTimeUnit(builder, timeUnit);
+        Metadata.addTickDurationNs(builder, tickDurationNs);
         return Metadata.endMetadata(builder);
     }
 }

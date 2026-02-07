@@ -2,6 +2,7 @@ package org.Aayush.routing.graph;
 
 import lombok.Getter;
 import lombok.experimental.Accessors;
+import org.Aayush.serialization.flatbuffers.ModelContractValidator;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 import org.Aayush.serialization.flatbuffers.taro.model.TurnCost;
 
@@ -176,6 +177,7 @@ public class TurnCostMap {
         }
 
         Model model = Model.getRootAsModel(bb);
+        ModelContractValidator.validateMetadataContract(model, "TurnCostMap");
         int vectorLen = model.turnCostsLength();
         if (vectorLen == 0) {
             return EMPTY_MAP;
@@ -201,17 +203,21 @@ public class TurnCostMap {
         for (int i = 0; i < vectorLen; i++) {
             TurnCost turnCost = model.turnCosts(i);
             if (turnCost == null) {
-                continue;
+                throw new IllegalArgumentException("turn_costs[" + i + "] is null");
             }
             int from = turnCost.fromEdgeIdx();
             int to = turnCost.toEdgeIdx();
             float penalty = turnCost.penaltySeconds();
 
-            if (from >= 0 && to >= 0) {
-                long key = ((long) from << 32) | (to & 0xFFFFFFFFL);
-                if (insert(keys, values, mask, key, penalty)) {
-                    size++;
-                }
+            if (from < 0 || to < 0) {
+                throw new IllegalArgumentException(
+                        "turn_costs[" + i + "] contains negative edge id: from=" + from + ", to=" + to);
+            }
+            validatePenalty(penalty, i);
+
+            long key = ((long) from << 32) | (to & 0xFFFFFFFFL);
+            if (insert(keys, values, mask, key, penalty)) {
+                size++;
             }
         }
 
@@ -241,6 +247,13 @@ public class TurnCostMap {
         keys[index] = key;
         values[index] = value;
         return true; // Inserted new
+    }
+
+    private static void validatePenalty(float penalty, int index) {
+        if (Float.isNaN(penalty) || penalty < 0.0f || penalty == Float.NEGATIVE_INFINITY) {
+            throw new IllegalArgumentException(
+                    "turn_costs[" + index + "].penalty_seconds must be >= 0 and not NaN/-INF");
+        }
     }
 
     @Override

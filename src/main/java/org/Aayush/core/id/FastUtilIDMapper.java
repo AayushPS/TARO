@@ -37,18 +37,29 @@ public class FastUtilIDMapper implements IDMapper{
 
         for (Map.Entry<String, Integer> entry : mappings.entrySet()) {
             String key = entry.getKey();
-            int value = getValueAndCheckState(entry, size, this.reverse);
+            Integer value = entry.getValue();
+            int internalId = getValueAndCheckState(key, value, size, this.reverse);
 
-            this.forward.put(key, value);
-            this.reverse[value] = key;
+            this.forward.put(key, internalId);
+            this.reverse[internalId] = key;
         }
         
         // Trim to ensure minimal memory usage
         this.forward.trim();
     }
 
-    private static int getValueAndCheckState(Map.Entry<String, Integer> entry, int size, String[] reverse) {
-        int value = entry.getValue();
+    private static int getValueAndCheckState(
+            String key,
+            Integer value,
+            int size,
+            String[] reverse
+    ) {
+        if (key == null) {
+            throw new IllegalArgumentException("Mappings cannot contain null external IDs");
+        }
+        if (value == null) {
+            throw new IllegalArgumentException("Mappings cannot contain null internal IDs");
+        }
 
         if (value < 0 || value >= size) {
             throw new IllegalArgumentException(
@@ -66,7 +77,13 @@ public class FastUtilIDMapper implements IDMapper{
     }
 
     @Override
-    public int toInternal(String externalId) throws UnknownIDException {
+    public int toInternal(
+            String externalId
+    ) throws UnknownIDException {
+        if (externalId == null) {
+            throw new IllegalArgumentException("External ID cannot be null");
+        }
+
         // fast util's getInt avoids auto-boxing/unboxing
         int id = forward.getInt(externalId);
         if (id == -1) {
@@ -76,16 +93,24 @@ public class FastUtilIDMapper implements IDMapper{
     }
 
     @Override
-    public String toExternal(int internalId) {
-        try {
-            return reverse[internalId];
-        } catch (ArrayIndexOutOfBoundsException e) {
+    public String toExternal(
+            int internalId
+    ) {
+        if (internalId < 0 || internalId >= reverse.length) {
             throw new IndexOutOfBoundsException("Internal ID out of bounds: " + internalId);
         }
+        String external = reverse[internalId];
+        if (external == null) {
+            throw new IllegalStateException("No external ID mapped for internal ID: " + internalId);
+        }
+        return external;
     }
 
     @Override
     public boolean containsExternal(String externalId) {
+        if (externalId == null) {
+            return false;
+        }
         return forward.containsKey(externalId);
     }
 

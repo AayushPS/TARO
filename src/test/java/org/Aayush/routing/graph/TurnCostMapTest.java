@@ -1,5 +1,10 @@
 package org.Aayush.routing.graph;
 
+import com.google.flatbuffers.FlatBufferBuilder;
+import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
+import org.Aayush.serialization.flatbuffers.taro.model.Model;
+import org.Aayush.serialization.flatbuffers.taro.model.TimeUnit;
+import org.Aayush.serialization.flatbuffers.taro.model.TurnCost;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -150,17 +155,61 @@ public class TurnCostMapTest {
     }
 
     @Test
-    public void testNegativeEdgesAreIgnored() {
+    public void testMissingMetadataRejected() {
+        MockTurnCostBuilder builder = new MockTurnCostBuilder();
+        builder.includeMetadata = false;
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> TurnCostMap.fromFlatBuffer(builder.build()));
+        assertTrue(ex.getMessage().contains("metadata"));
+    }
+
+    @Test
+    public void testMetadataContractMismatchRejected() {
+        MockTurnCostBuilder badSchema = new MockTurnCostBuilder();
+        badSchema.schemaVersion = 2L;
+        IllegalArgumentException badSchemaEx = assertThrows(IllegalArgumentException.class,
+                () -> TurnCostMap.fromFlatBuffer(badSchema.build()));
+        assertTrue(badSchemaEx.getMessage().contains("schema_version"));
+
+        MockTurnCostBuilder badTickPair = new MockTurnCostBuilder();
+        badTickPair.timeUnit = TimeUnit.MILLISECONDS;
+        badTickPair.tickDurationNs = 1_000_000_000L;
+        IllegalArgumentException badTickEx = assertThrows(IllegalArgumentException.class,
+                () -> TurnCostMap.fromFlatBuffer(badTickPair.build()));
+        assertTrue(badTickEx.getMessage().contains("tick_duration_ns"));
+    }
+
+    @Test
+    public void testUnsupportedTimeUnitRejected() {
+        MockTurnCostBuilder builder = new MockTurnCostBuilder();
+        builder.timeUnit = 99;
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> TurnCostMap.fromFlatBuffer(builder.build()));
+        assertTrue(ex.getMessage().contains("time_unit"));
+    }
+
+    @Test
+    public void testNegativeEdgesAreRejected() {
         MockTurnCostBuilder builder = new MockTurnCostBuilder();
         builder.addTurn(-1, 2, 5.0f);
-        builder.addTurn(1, -2, 6.0f);
-        builder.addTurn(1, 2, 7.0f);
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> TurnCostMap.fromFlatBuffer(builder.build()));
+        assertTrue(ex.getMessage().contains("negative edge id"));
+    }
 
-        TurnCostMap map = TurnCostMap.fromFlatBuffer(builder.build());
-        assertEquals(1, map.size());
-        assertEquals(7.0f, map.getCost(1, 2), 0.001f);
-        assertEquals(TurnCostMap.DEFAULT_COST, map.getCost(-1, 2), 0.001f);
-        assertTrue(map.toString().contains("TurnCostMap[size=1"));
+    @Test
+    public void testInvalidPenaltyRejected() {
+        MockTurnCostBuilder negativePenalty = new MockTurnCostBuilder();
+        negativePenalty.addTurn(1, 2, -1.0f);
+        assertThrows(IllegalArgumentException.class, () -> TurnCostMap.fromFlatBuffer(negativePenalty.build()));
+
+        MockTurnCostBuilder nanPenalty = new MockTurnCostBuilder();
+        nanPenalty.addTurn(1, 2, Float.NaN);
+        assertThrows(IllegalArgumentException.class, () -> TurnCostMap.fromFlatBuffer(nanPenalty.build()));
+
+        MockTurnCostBuilder negativeInfinityPenalty = new MockTurnCostBuilder();
+        negativeInfinityPenalty.addTurn(1, 2, Float.NEGATIVE_INFINITY);
+        assertThrows(IllegalArgumentException.class, () -> TurnCostMap.fromFlatBuffer(negativeInfinityPenalty.build()));
     }
 
     // ========================================================================
@@ -282,13 +331,16 @@ public class TurnCostMapTest {
     }
 
     // ========================================================================
-    // HELPER: Manual FlatBuffer Builder
+    // HELPER: FlatBuffer Builder
     // ========================================================================
 
     private static class MockTurnCostBuilder {
-        private static final int FILE_IDENTIFIER = 0x4F524154;
-        private List<TurnEntry> entries = new ArrayList<>();
+        private final List<TurnEntry> entries = new ArrayList<>();
         public boolean skipTurnCostVector = false;
+        public boolean includeMetadata = true;
+        public long schemaVersion = 1L;
+        public int timeUnit = TimeUnit.SECONDS;
+        public long tickDurationNs = 1_000_000_000L;
 
         static class TurnEntry {
             int from, to;
@@ -301,80 +353,44 @@ public class TurnCostMapTest {
         }
 
         ByteBuffer build() {
-            byte[] bytes = new byte[2048 * 1024]; // 2MB scratch
-            ByteBuffer bb = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+            FlatBufferBuilder builder = new FlatBufferBuilder(2048);
 
-            // 1. Placeholder for Header (UOffset to Root) + Identifier
-            bb.putInt(0);
-            bb.putInt(FILE_IDENTIFIER);
-
-            // 2. TurnCost VTable
-            int turnCostVTablePos = bb.position();
-            bb.putShort((short) 10); // vtable len
-            bb.putShort((short) 16); // object len
-            bb.putShort((short) 4);  // offset for field 0 (from)
-            bb.putShort((short) 8);  // offset for field 1 (to)
-            bb.putShort((short) 12); // offset for field 2 (cost)
-
-            align(bb, 4);
-
-            // 3. TurnCost Tables
             int[] entryOffsets = new int[entries.size()];
             for (int i = 0; i < entries.size(); i++) {
                 TurnEntry e = entries.get(i);
-                int tableStart = bb.position();
-                entryOffsets[i] = tableStart;
-
-                bb.putInt(tableStart - turnCostVTablePos);
-                bb.putInt(e.from);
-                bb.putInt(e.to);
-                bb.putFloat(e.cost);
+                entryOffsets[i] = TurnCost.createTurnCost(builder, e.from, e.to, e.cost);
             }
 
-            // 4. Vector of TurnCosts
-            int vectorPos = bb.position();
+            int turnCostsVec = 0;
             if (!skipTurnCostVector) {
-                bb.putInt(entries.size());
-                for (int i = 0; i < entries.size(); i++) {
-                    int offset = entryOffsets[i];
-                    int elementPos = bb.position();
-                    bb.putInt(offset - elementPos);
-                }
+                turnCostsVec = Model.createTurnCostsVector(builder, entryOffsets);
             }
 
-            align(bb, 2);
+            int metadataRef = 0;
+            if (includeMetadata) {
+                metadataRef = createMetadata(builder, schemaVersion, timeUnit, tickDurationNs);
+            }
 
-            // 5. Root Table VTable
-            int rootVTablePos = bb.position();
-            bb.putShort((short) 12);
-            bb.putShort((short) 8);
-            bb.putShort((short) 0); // metadata
-            bb.putShort((short) 0); // topology
-            bb.putShort((short) 0); // profiles
-            bb.putShort((short) (skipTurnCostVector ? 0 : 4)); // turn_costs
-
-            align(bb, 4);
-
-            // 6. Root Table Body
-            int rootTablePos = bb.position();
-            bb.putInt(rootTablePos - rootVTablePos);
-
+            Model.startModel(builder);
+            if (metadataRef != 0) {
+                Model.addMetadata(builder, metadataRef);
+            }
             if (!skipTurnCostVector) {
-                bb.putInt(vectorPos - (rootTablePos + 4));
-            } else {
-                bb.putInt(0);
+                Model.addTurnCosts(builder, turnCostsVec);
             }
-
-            // 7. Finalize File Header
-            bb.putInt(0, rootTablePos);
-            bb.position(0);
-            return bb;
+            int root = Model.endModel(builder);
+            Model.finishModelBuffer(builder, root);
+            return ByteBuffer.wrap(builder.sizedByteArray()).order(ByteOrder.LITTLE_ENDIAN);
         }
 
-        private void align(ByteBuffer bb, int alignment) {
-            while (bb.position() % alignment != 0) {
-                bb.put((byte) 0);
-            }
+        private int createMetadata(FlatBufferBuilder builder, long schemaVersion, int timeUnit, long tickDurationNs) {
+            int modelVersion = builder.createString("turn-cost-test");
+            Metadata.startMetadata(builder);
+            Metadata.addSchemaVersion(builder, schemaVersion);
+            Metadata.addModelVersion(builder, modelVersion);
+            Metadata.addTimeUnit(builder, timeUnit);
+            Metadata.addTickDurationNs(builder, tickDurationNs);
+            return Metadata.endMetadata(builder);
         }
     }
 }

@@ -3,7 +3,14 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 .kotlin
-ResearchData/
+ResearchData/*
+!ResearchData/taro_v11.md
+!ResearchData/taro_v11.pdf
+!ResearchData/taro_v11_impl_guide.md
+!ResearchData/taro_v11_impl_guide.pdf
+!ResearchData/taro_v11_learning_pathway.md
+!ResearchData/taro_v11_learning_pathway.pdf
+.venv/
 *.taro
 __pycache__/
 *.pyc

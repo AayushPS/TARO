@@ -89,6 +89,14 @@ class FastUtilIDMapperTest {
     }
 
     @Test
+    @DisplayName("Exception Path: Null external ID")
+    void testNullExternalIdRejected() {
+        IDMapper mapper = new FastUtilIDMapper(standardMappings);
+        assertThrows(IllegalArgumentException.class, () -> mapper.toInternal(null));
+        assertFalse(mapper.containsExternal(null));
+    }
+
+    @Test
     @DisplayName("Constructor Validation: Enforce Dense Indices")
     void testDenseIndexRequirement() {
         Map<String, Integer> sparseMap = new HashMap<>();
@@ -102,6 +110,18 @@ class FastUtilIDMapperTest {
         assertTrue(exception.getMessage().contains("out of bounds") ||
                         exception.getMessage().contains("must be dense"),
                 "Constructor should reject sparse indices");
+    }
+
+    @Test
+    @DisplayName("Constructor Validation: Reject null key/value entries")
+    void testRejectNullEntries() {
+        Map<String, Integer> nullKeyMap = new HashMap<>();
+        nullKeyMap.put(null, 0);
+        assertThrows(IllegalArgumentException.class, () -> new FastUtilIDMapper(nullKeyMap));
+
+        Map<String, Integer> nullValueMap = new HashMap<>();
+        nullValueMap.put("A", null);
+        assertThrows(IllegalArgumentException.class, () -> new FastUtilIDMapper(nullValueMap));
     }
 
     @Test

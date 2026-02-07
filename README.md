@@ -43,6 +43,22 @@ mvn exec:java -Dexec.mainClass=org.Aayush.app.Main
 - Hard capacity with configurable overflow policy and hybrid cleanup
 - Detailed implementation notes: `docs/stage7_live_overlay_impl.md`
 
+## v11 Offline Learning Planning (Proposed)
+- Architecture plan: `docs/taro_v11_architecture_plan.md`
+- Architecture PDF: `docs/taro_v11_architecture_plan.pdf`
+- Implementation guide: `docs/taro_v11_implementation_guide.md`
+- Implementation PDF: `docs/taro_v11_implementation_guide.pdf`
+- Single source of truth (stage contracts/requirements/tests): `docs/taro_v11_single_source_of_truth.md`
+- Single source of truth PDF: `docs/taro_v11_single_source_of_truth.pdf`
+- Stage-wise SSOT breakup (28 stages): `docs/taro_v11_ssot_stagewise_breakdown.md`
+- Stage-wise SSOT breakup PDF: `docs/taro_v11_ssot_stagewise_breakdown.pdf`
+- Deep research architecture: `ResearchData/taro_v11.md`
+- Deep research architecture PDF: `ResearchData/taro_v11.pdf`
+- Research implementation pathway: `ResearchData/taro_v11_impl_guide.md`
+- Research implementation pathway PDF: `ResearchData/taro_v11_impl_guide.pdf`
+- Pathway stones map: `ResearchData/taro_v11_learning_pathway.md`
+- Pathway stones PDF: `ResearchData/taro_v11_learning_pathway.pdf`
+
 ## Testing
 ### Java
 ```bash

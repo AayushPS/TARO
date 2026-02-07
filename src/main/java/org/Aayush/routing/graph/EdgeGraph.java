@@ -3,6 +3,7 @@ package org.Aayush.routing.graph;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.experimental.Accessors;
+import org.Aayush.serialization.flatbuffers.ModelContractValidator;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 
@@ -406,6 +407,7 @@ public class EdgeGraph {
         }
 
         Model model = Model.getRootAsModel(bb);
+        ModelContractValidator.validateMetadataContract(model, "EdgeGraph");
         GraphTopology topology = model.topology();
         if (topology == null) {
             throw new IllegalArgumentException("GraphTopology missing");
@@ -413,6 +415,11 @@ public class EdgeGraph {
 
         int nodeCount = topology.nodeCount();
         int edgeCount = topology.edgeCount();
+        if (nodeCount < 0 || edgeCount < 0) {
+            throw new IllegalArgumentException(
+                    "node_count and edge_count must be non-negative, got node_count="
+                            + nodeCount + ", edge_count=" + edgeCount);
+        }
 
         IntBuffer firstEdge = asIntBuffer(topology.firstEdgeAsByteBuffer());
         IntBuffer edgeTarget = asIntBuffer(topology.edgeTargetAsByteBuffer());
@@ -421,6 +428,8 @@ public class EdgeGraph {
         }
         validateVectorLength("first_edge", firstEdge.remaining(), nodeCount + 1);
         validateVectorLength("edge_target", edgeTarget.remaining(), edgeCount);
+        validateCsrStructure(firstEdge, nodeCount, edgeCount);
+        validateNodeIndexVector("edge_target", edgeTarget, edgeCount, nodeCount);
 
         FloatBuffer baseWeights = asFloatBuffer(topology.baseWeightsAsByteBuffer());
         if (baseWeights == null) {
@@ -442,6 +451,7 @@ public class EdgeGraph {
             edgeOrigin = computeEdgeOrigins(nodeCount, edgeCount, firstEdge);
         } else {
             validateVectorLength("edge_origin", edgeOrigin.remaining(), edgeCount);
+            validateNodeIndexVector("edge_origin", edgeOrigin, edgeCount, nodeCount);
         }
 
         ByteBuffer coordinates = copyCoordinates(topology, nodeCount);
@@ -456,16 +466,18 @@ public class EdgeGraph {
      */
     private static IntBuffer computeEdgeOrigins(int nodeCount, int edgeCount, IntBuffer firstEdge) {
         int[] origins = new int[edgeCount];
-        // Note: Using int[] for simple heap allocation. 
+        // Note: Using int[] for simple heap allocation.
         // For 25M edges, this is ~100MB RAM, acceptable per spec.
-        
+
         for (int n = 0; n < nodeCount; n++) {
             int start = firstEdge.get(n);
             int end = firstEdge.get(n + 1);
-            
-            // Safety check against malformed CSR (though validate() catches this separately)
-            if (start < 0 || end > edgeCount || start > end) continue;
-            
+
+            if (start < 0 || end < start || end > edgeCount) {
+                throw new IllegalArgumentException(
+                        "Malformed CSR span at node " + n + ": [" + start + ", " + end + ") for edge_count " + edgeCount);
+            }
+
             for (int i = start; i < end; i++) {
                 origins[i] = n;
             }
@@ -521,6 +533,43 @@ public class EdgeGraph {
         if (actual != expected) {
             throw new IllegalArgumentException(
                     fieldName + " length mismatch: expected " + expected + ", got " + actual);
+        }
+    }
+
+    private static void validateCsrStructure(IntBuffer firstEdge, int nodeCount, int edgeCount) {
+        int start = firstEdge.get(0);
+        if (start != 0) {
+            throw new IllegalArgumentException("Malformed first_edge: first_edge[0] must be 0, got " + start);
+        }
+
+        int previous = start;
+        for (int i = 1; i <= nodeCount; i++) {
+            int value = firstEdge.get(i);
+            if (value < 0 || value > edgeCount) {
+                throw new IllegalArgumentException(
+                        "Malformed first_edge: first_edge[" + i + "] out of range [0, " + edgeCount + "], got " + value);
+            }
+            if (value < previous) {
+                throw new IllegalArgumentException(
+                        "Malformed first_edge: non-monotonic at index " + i + " (" + previous + " -> " + value + ")");
+            }
+            previous = value;
+        }
+
+        if (firstEdge.get(nodeCount) != edgeCount) {
+            throw new IllegalArgumentException(
+                    "Malformed first_edge: first_edge[node_count] must equal edge_count (" + edgeCount + "), got "
+                            + firstEdge.get(nodeCount));
+        }
+    }
+
+    private static void validateNodeIndexVector(String fieldName, IntBuffer values, int length, int nodeCount) {
+        for (int i = 0; i < length; i++) {
+            int nodeId = values.get(i);
+            if (nodeId < 0 || nodeId >= nodeCount) {
+                throw new IllegalArgumentException(
+                        fieldName + "[" + i + "] out of bounds: " + nodeId + " [0, " + nodeCount + ")");
+            }
         }
     }
 }

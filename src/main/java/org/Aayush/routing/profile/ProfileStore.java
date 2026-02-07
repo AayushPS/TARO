@@ -1,5 +1,6 @@
 package org.Aayush.routing.profile;
 
+import org.Aayush.serialization.flatbuffers.ModelContractValidator;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 import org.Aayush.serialization.flatbuffers.taro.model.TemporalProfile;
 
@@ -269,6 +270,7 @@ public final class ProfileStore {
         }
 
         Model model = Model.getRootAsModel(bb);
+        ModelContractValidator.validateMetadataContract(model, "ProfileStore");
         int vectorLen = model.profilesLength();
         if (vectorLen == 0) {
             return empty();

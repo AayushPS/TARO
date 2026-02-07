@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.Accessors;
 import org.Aayush.routing.graph.EdgeGraph;
+import org.Aayush.serialization.flatbuffers.ModelContractValidator;
 import org.Aayush.serialization.flatbuffers.taro.model.KDNode;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 import org.Aayush.serialization.flatbuffers.taro.model.SpatialIndex;
@@ -72,6 +73,9 @@ public final class SpatialRuntime {
                     FILE_IDENTIFIER, ident));
         }
 
+        Model model = Model.getRootAsModel(bb);
+        ModelContractValidator.validateMetadataContract(model, "SpatialRuntime");
+
         if (!spatialEnabled) {
             return disabled(graph);
         }
@@ -80,8 +84,6 @@ public final class SpatialRuntime {
             throw new IllegalArgumentException(
                     "Spatial runtime requires coordinates, but graph has none");
         }
-
-        Model model = Model.getRootAsModel(bb);
         SpatialIndex spatialIndex = model.spatialIndex();
         if (spatialIndex == null) {
             throw new IllegalArgumentException("spatial_index missing while spatial runtime is enabled");

@@ -50,6 +50,7 @@ public class SearchState implements Comparable<SearchState> {
      * <ol>
      * <li><strong>Primary:</strong> Cost (Lower is better).</li>
      * <li><strong>Secondary:</strong> Arrival Time (Earlier is better).</li>
+     * <li><strong>Tertiary:</strong> Edge ID (Lower is better).</li>
      * </ol>
      * </p>
      *
@@ -65,6 +66,11 @@ public class SearchState implements Comparable<SearchState> {
             return costCompare;
         }
         // Secondary: Arrival Time (earlier is better/preferred for tie-breaking)
-        return Long.compare(this.arrivalTime, other.arrivalTime);
+        int arrivalCompare = Long.compare(this.arrivalTime, other.arrivalTime);
+        if (arrivalCompare != 0) {
+            return arrivalCompare;
+        }
+        // Tertiary: stable deterministic tie-break for exact cost/time ties.
+        return Integer.compare(this.edgeId, other.edgeId);
     }
 }

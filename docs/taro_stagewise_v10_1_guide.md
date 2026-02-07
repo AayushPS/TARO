@@ -97,8 +97,8 @@ Main validated suites:
 - Stage 5: `DONE`
 - Stage 6: `DONE`
 - Stage 7: `DONE`
-- Stage 8: `NOT STARTED`
-- Stage 9: `NOT STARTED`
+- Stage 8: `DONE`
+- Stage 9: `DONE`
 - Stage 10: `NOT STARTED`
 - Stage 11-28: `NOT STARTED` in this repo
 

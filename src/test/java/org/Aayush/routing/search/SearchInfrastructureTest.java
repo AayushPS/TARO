@@ -42,6 +42,19 @@ class SearchInfrastructureTest {
         }
 
         @Test
+        @DisplayName("Comparison: Stable Tie-Breaking by Edge ID")
+        void testEdgeIdTieBreak() {
+            SearchState s1 = new SearchState();
+            s1.set(1, 100L, 10.0f, 0);
+
+            SearchState s2 = new SearchState();
+            s2.set(2, 100L, 10.0f, 0);
+
+            assertTrue(s1.compareTo(s2) < 0, "Lower edge ID should be preferred for exact cost/time ties");
+            assertTrue(s2.compareTo(s1) > 0, "Higher edge ID should be deprioritized for exact cost/time ties");
+        }
+
+        @Test
         @DisplayName("Concurrent Decrease-Key on Same Edge")
         void testMultipleDecreaseKey() {
             SearchQueue queue = new SearchQueue(10, 10);
