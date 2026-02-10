@@ -99,23 +99,17 @@ Main validated suites:
 - Stage 7: `DONE`
 - Stage 8: `DONE`
 - Stage 9: `DONE`
-- Stage 10: `NOT STARTED`
+- Stage 10: `DONE`
 - Stage 11-28: `NOT STARTED` in this repo
 
-## 4. Requirements Going Forward (Stage 8+, Condensed)
+## 4. Requirements Going Forward (Stage 11+, Condensed)
 
-### Stage 8: Spatial Runtime
-- Implement KD query runtime over serialized spatial index.
-- Keep trait-driven optional enablement.
-
-### Stage 9: Profile Store
-- Profile/day-mask lookup with deterministic fallback.
-- Bucket interpolation policy must be explicit.
-
-### Stage 10: Cost Engine
-- Canonical rule: if live factor is 0 -> INF.
-- Else: `effective = base * temporal / speed_factor`.
-- Expose explainable cost breakdown for debugging/telemetry.
+### Stage 8-10: Core Runtime Layers
+- Stage 8 (spatial runtime): complete.
+- Stage 9 (profile store): complete.
+- Stage 10 (cost engine): complete.
+- Canonical cost rule implemented: blocked (`speed_factor = 0`) -> `INF`; otherwise `effective = base * temporal / speed_factor`, plus optional turn penalty.
+- Explainable breakdown path implemented for debugging/telemetry.
 
 ### Stage 11-14: Heuristics + Routing
 - Heuristic providers (null/euclidean/spherical/landmark) with admissibility tests.
@@ -143,7 +137,7 @@ How drastically to work differently now:
 - Stage 8-10: high semantic importance, lock these contracts before deep routing features.
 
 Recommended next order:
-1. Stage 9 (profile store)
-2. Stage 10 (cost engine)
-3. Stage 8 (spatial runtime)
-4. Stage 14 then Stage 13 (routing)
+1. Stage 11 (heuristic providers)
+2. Stage 12 (route core orchestration)
+3. Stage 13 (TD-A*)
+4. Stage 14 (Dijkstra matrix)

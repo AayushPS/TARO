@@ -40,6 +40,21 @@ public class EdgeGraph {
     // ========================================================================
     // CONSTANTS
     // ========================================================================
+    /*
+    Why "TARO" becomes 0x4F524154
+        This is about ASCII + hexadecimal + endianness.
+        ASCII codes:
+            T = 0x54
+            A = 0x41
+            R = 0x52
+            O = 0x4F
+    Now comes the tricky part.
+    FlatBuffers stores identifiers as little-endian 32-bit integers.
+    So memory order becomes:
+            T  A  R  O
+            54 41 52 4F
+    But when interpreted as a 32-bit integer, it appears reversed: 0x4F524154
+     */
     private static final int FILE_IDENTIFIER = 0x4F524154; // "TARO"
     private static final int COORDINATE_STRUCT_SIZE = 16; // double x + double y
 
@@ -317,12 +332,7 @@ public class EdgeGraph {
         return sb.toString();
     }
 
-    @AllArgsConstructor
-    public static class ValidationResult {
-        public final boolean isValid;
-        public final List<String> errors;
-        public final List<String> warnings;
-    }
+    public record ValidationResult(boolean isValid, List<String> errors, List<String> warnings) {}
 
     public ValidationResult validate() {
         List<String> errors = new ArrayList<>();

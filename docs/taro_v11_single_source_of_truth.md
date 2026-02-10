@@ -127,7 +127,7 @@ The table below defines each stage’s primary interface contracts and expected 
 | 7 | Live Overlay | `LiveOverlay`, `LiveUpdate` | bounded live penalty layer | 2,4,6 |
 | 8 | Spatial Runtime | `SpatialRuntime` | KD nearest-node service | 3,4 |
 | 9 | Profile Store | `ProfileStore` | day-aware temporal multipliers | 2,3,4 |
-| 10 | Cost Engine | planned `CostEngine` | explainable effective edge cost | 5,7,9 |
+| 10 | Cost Engine | `CostEngine` | explainable effective edge cost | 5,7,9 |
 | 11 | Heuristics | planned heuristic providers | admissible lower bounds | 4,8,10 |
 | 12 | Route Core | planned routing facade | route query orchestration | 6,10,11 |
 | 13 | TD-A* | planned A* implementation | optimal point route under admissible h | 12 |
@@ -299,4 +299,3 @@ Change policy for this SSOT:
 - new stage/interface must add corresponding equivalence classes
 
 This document is intended to stay as the single source of truth for implementation planning, interview walkthroughs, onboarding, and release reviews.
-

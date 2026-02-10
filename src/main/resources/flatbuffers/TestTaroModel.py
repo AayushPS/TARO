@@ -8,7 +8,6 @@ import taro.model.GraphTopology as TaroTopology
 import taro.model.Coordinate as TaroCoordinate
 import taro.model.IdMapping as TaroIdMapping
 import taro.model.Landmark as TaroLandmark
-import taro.model.TurnCost as TaroTurnCost
 
 class TestTaroCSR(unittest.TestCase):
     """Critical tests for CSR format"""

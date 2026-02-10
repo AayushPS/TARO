@@ -30,7 +30,6 @@ public class TurnCostMap {
 
     public static final float DEFAULT_COST = 0.0f;
     public static final float FORBIDDEN_TURN = Float.POSITIVE_INFINITY;
-
     private static final long EMPTY_KEY = -1L;
 
     // Singleton for empty maps to avoid allocation

@@ -219,7 +219,7 @@ class EdgeGraphTest {
 
         assertEquals(0, graph.nodeCount());
         assertEquals(0, graph.edgeCount());
-        assertTrue(graph.validate().isValid);
+        assertTrue(graph.validate().isValid());
         assertFalse(graph.iterator().hasNext());
     }
 
@@ -311,12 +311,12 @@ class EdgeGraphTest {
         assertEquals(1, graph.getNodeDegree(2));
         assertEquals(0, graph.getNodeDegree(4)); // Isolated
 
-        assertTrue(graph.validate().isValid);
+        assertTrue(graph.validate().isValid());
         // Warning check
-        assertFalse(graph.validate().warnings.isEmpty());
+        assertFalse(graph.validate().warnings().isEmpty());
         // Updated Assertion: Check if ANY warning refers to isolated nodes.
         // Note: graph.validate() adds a warning for missing coordinates first, so .get(0) might fail.
-        assertTrue(graph.validate().warnings.stream().anyMatch(w -> w.contains("isolated")),
+        assertTrue(graph.validate().warnings().stream().anyMatch(w -> w.contains("isolated")),
                 "Expected warning about isolated nodes");
     }
 
@@ -550,8 +550,8 @@ class EdgeGraphTest {
         );
 
         EdgeGraph.ValidationResult result = graph.validate();
-        assertFalse(result.isValid);
-        assertTrue(result.errors.stream().anyMatch(s -> s.contains("CSR violation") || s.contains("CSR overflow")));
+        assertFalse(result.isValid());
+        assertTrue(result.errors().stream().anyMatch(s -> s.contains("CSR violation") || s.contains("CSR overflow")));
     }
 
     @Test
@@ -566,8 +566,8 @@ class EdgeGraphTest {
         );
 
         EdgeGraph.ValidationResult result = graph.validate();
-        assertFalse(result.isValid);
-        assertTrue(result.errors.stream().anyMatch(s -> s.contains("invalid target")));
+        assertFalse(result.isValid());
+        assertTrue(result.errors().stream().anyMatch(s -> s.contains("invalid target")));
     }
 
     // ========================================================================
@@ -1060,11 +1060,11 @@ class EdgeGraphTest {
         // Validation: Should work on large graphs
         EdgeGraph.ValidationResult validation = graph.validate();
 
-        if (!validation.isValid) {
-            System.err.println("Validation Errors: " + validation.errors);
+        if (!validation.isValid()) {
+            System.err.println("Validation Errors: " + validation.errors());
         }
 
-        assertTrue(validation.isValid, "Large graph failed validation: " + validation.errors);
+        assertTrue(validation.isValid(), "Large graph failed validation: " + validation.errors());
 
         // Spot check: Random access should work
         Random rand = new Random(42);
@@ -1275,15 +1275,15 @@ class EdgeGraphTest {
         long elapsed = System.currentTimeMillis() - start;
 
         System.out.printf("Validation time: %,d ms (%.2f sec)\n", elapsed, elapsed / 1000.0);
-        System.out.printf("Valid:           %s\n", result.isValid);
-        System.out.printf("Errors:          %d\n", result.errors.size());
-        System.out.printf("Warnings:        %d\n", result.warnings.size());
+        System.out.printf("Valid:           %s\n", result.isValid());
+        System.out.printf("Errors:          %d\n", result.errors().size());
+        System.out.printf("Warnings:        %d\n", result.warnings().size());
 
-        if (!result.isValid) {
-            System.err.println("Validation Errors: " + result.errors);
+        if (!result.isValid()) {
+            System.err.println("Validation Errors: " + result.errors());
         }
 
-        assertTrue(result.isValid, "Generated graph should be valid");
+        assertTrue(result.isValid(), "Generated graph should be valid");
 
         // Should complete in < 5 seconds per spec
         assertTrue(elapsed < 5000, "Validation too slow: " + elapsed + " ms");
