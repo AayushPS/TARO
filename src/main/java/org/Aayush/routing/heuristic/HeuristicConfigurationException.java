@@ -1,5 +1,8 @@
 package org.Aayush.routing.heuristic;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.util.Objects;
 
 /**
@@ -7,21 +10,32 @@ import java.util.Objects;
  *
  * <p>Messages are prefixed with deterministic reason-code text for observability.</p>
  */
+@Getter
+@Accessors(fluent = true)
 public final class HeuristicConfigurationException extends RuntimeException {
     private final String reasonCode;
 
+    /**
+     * Creates a reason-coded configuration failure.
+     *
+     * @param reasonCode deterministic reason code.
+     * @param message descriptive message.
+     */
     public HeuristicConfigurationException(String reasonCode, String message) {
         super(formatMessage(reasonCode, message));
         this.reasonCode = requireReasonCode(reasonCode);
     }
 
+    /**
+     * Creates a reason-coded configuration failure with a cause.
+     *
+     * @param reasonCode deterministic reason code.
+     * @param message descriptive message.
+     * @param cause underlying exception.
+     */
     public HeuristicConfigurationException(String reasonCode, String message, Throwable cause) {
         super(formatMessage(reasonCode, message), cause);
         this.reasonCode = requireReasonCode(reasonCode);
-    }
-
-    public String reasonCode() {
-        return reasonCode;
     }
 
     private static String formatMessage(String reasonCode, String message) {

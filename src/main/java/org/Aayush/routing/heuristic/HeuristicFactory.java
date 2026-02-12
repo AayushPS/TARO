@@ -1,12 +1,17 @@
 package org.Aayush.routing.heuristic;
 
+import lombok.experimental.UtilityClass;
 import org.Aayush.routing.cost.CostEngine;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.profile.ProfileStore;
 
 /**
  * Strict Stage 11 heuristic factory.
+ *
+ * <p>Centralizes validation so all heuristic providers are created with the same
+ * graph/profile/cost contracts and deterministic failure reason codes.</p>
  */
+@UtilityClass
 public final class HeuristicFactory {
     public static final String REASON_TYPE_REQUIRED = "H11_TYPE_REQUIRED";
     public static final String REASON_GRAPH_REQUIRED = "H11_EDGE_GRAPH_REQUIRED";
@@ -28,9 +33,15 @@ public final class HeuristicFactory {
     private static final double MIN_LON = -180.0d;
     private static final double MAX_LON = 180.0d;
 
-    private HeuristicFactory() {
-    }
-
+    /**
+     * Creates a heuristic provider without landmark backing store.
+     *
+     * @param type requested heuristic type.
+     * @param edgeGraph graph runtime.
+     * @param profileStore profile runtime.
+     * @param costEngine cost runtime.
+     * @return initialized heuristic provider.
+     */
     public static HeuristicProvider create(
             HeuristicType type,
             EdgeGraph edgeGraph,
@@ -40,6 +51,16 @@ public final class HeuristicFactory {
         return create(type, edgeGraph, profileStore, costEngine, null);
     }
 
+    /**
+     * Creates a heuristic provider with optional landmark backing store.
+     *
+     * @param type requested heuristic type.
+     * @param edgeGraph graph runtime.
+     * @param profileStore profile runtime.
+     * @param costEngine cost runtime.
+     * @param landmarkStore landmark runtime (required for {@link HeuristicType#LANDMARK}).
+     * @return initialized heuristic provider.
+     */
     public static HeuristicProvider create(
             HeuristicType type,
             EdgeGraph edgeGraph,

@@ -6,11 +6,20 @@ import java.util.Objects;
 
 /**
  * Stage 11 spherical heuristic provider based on great-circle distance.
+ *
+ * <p>Assumes graph coordinates are geodetic latitude/longitude degrees and
+ * scales great-circle distance by an admissible lower-bound cost factor.</p>
  */
 public final class SphericalHeuristicProvider implements HeuristicProvider {
     private final EdgeGraph edgeGraph;
     private final double lowerBoundCostPerDistance;
 
+    /**
+     * Creates a spherical heuristic provider.
+     *
+     * @param edgeGraph graph runtime with geodetic coordinate support.
+     * @param lowerBoundModel calibrated admissibility model.
+     */
     public SphericalHeuristicProvider(EdgeGraph edgeGraph, GeometryLowerBoundModel lowerBoundModel) {
         this.edgeGraph = Objects.requireNonNull(edgeGraph, "edgeGraph");
         Objects.requireNonNull(lowerBoundModel, "lowerBoundModel");
@@ -22,6 +31,12 @@ public final class SphericalHeuristicProvider implements HeuristicProvider {
         return HeuristicType.SPHERICAL;
     }
 
+    /**
+     * Binds this provider to one target node and returns a reusable estimator.
+     *
+     * @param goalNodeId target node id in internal graph space.
+     * @return goal-bound heuristic estimator.
+     */
     @Override
     public GoalBoundHeuristic bindGoal(int goalNodeId) {
         validateGoalNodeId(goalNodeId);

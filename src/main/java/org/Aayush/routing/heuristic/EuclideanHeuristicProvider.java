@@ -6,11 +6,20 @@ import java.util.Objects;
 
 /**
  * Stage 11 Euclidean heuristic provider.
+ *
+ * <p>Uses straight-line (L2) distance in graph coordinate space and scales it
+ * by the calibrated admissible lower-bound cost-per-distance factor.</p>
  */
 public final class EuclideanHeuristicProvider implements HeuristicProvider {
     private final EdgeGraph edgeGraph;
     private final double lowerBoundCostPerDistance;
 
+    /**
+     * Creates an Euclidean heuristic provider.
+     *
+     * @param edgeGraph graph runtime with coordinate support.
+     * @param lowerBoundModel calibrated admissibility model.
+     */
     public EuclideanHeuristicProvider(EdgeGraph edgeGraph, GeometryLowerBoundModel lowerBoundModel) {
         this.edgeGraph = Objects.requireNonNull(edgeGraph, "edgeGraph");
         Objects.requireNonNull(lowerBoundModel, "lowerBoundModel");
@@ -22,6 +31,12 @@ public final class EuclideanHeuristicProvider implements HeuristicProvider {
         return HeuristicType.EUCLIDEAN;
     }
 
+    /**
+     * Binds this provider to one target node and returns a reusable estimator.
+     *
+     * @param goalNodeId target node id in internal graph space.
+     * @return goal-bound heuristic estimator.
+     */
     @Override
     public GoalBoundHeuristic bindGoal(int goalNodeId) {
         validateGoalNodeId(goalNodeId);

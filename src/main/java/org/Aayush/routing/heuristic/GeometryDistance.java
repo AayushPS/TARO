@@ -1,13 +1,13 @@
 package org.Aayush.routing.heuristic;
 
+import lombok.experimental.UtilityClass;
+
 /**
  * Numeric helpers for Stage 11 geometry distance computations.
  */
+@UtilityClass
 final class GeometryDistance {
     private static final double EARTH_MEAN_RADIUS_METERS = 6_371_008.8d;
-
-    private GeometryDistance() {
-    }
 
     static double euclideanDistance(double x1, double y1, double x2, double y2) {
         return Math.hypot(x2 - x1, y2 - y1);

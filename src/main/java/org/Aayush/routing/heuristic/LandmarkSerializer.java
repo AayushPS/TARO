@@ -1,6 +1,7 @@
 package org.Aayush.routing.heuristic;
 
 import com.google.flatbuffers.FlatBufferBuilder;
+import lombok.experimental.UtilityClass;
 import org.Aayush.serialization.flatbuffers.taro.model.Landmark;
 
 import java.util.Objects;
@@ -8,10 +9,8 @@ import java.util.Objects;
 /**
  * FlatBuffers serializer helper for Stage 12 landmark artifacts.
  */
+@UtilityClass
 public final class LandmarkSerializer {
-    private LandmarkSerializer() {
-    }
-
     /**
      * Serializes landmark artifact into a FlatBuffers `Model.landmarks` vector offset.
      */

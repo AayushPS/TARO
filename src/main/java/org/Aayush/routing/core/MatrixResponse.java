@@ -7,28 +7,48 @@ import org.Aayush.routing.heuristic.HeuristicType;
 import java.util.List;
 
 /**
- * Client-facing matrix response.
+ * Client-facing many-to-many routing response.
+ *
+ * <p>Array-valued fields are exposed through defensive-copy getters to keep the
+ * value object immutable.</p>
  */
 @Value
 @Builder
 public class MatrixResponse {
+    /** External source ids that map to matrix rows. */
     List<String> sourceExternalIds;
+    /** External target ids that map to matrix columns. */
     List<String> targetExternalIds;
+    /** Reachability matrix per source/target pair. */
     boolean[][] reachable;
+    /** Total cost matrix per source/target pair. */
     float[][] totalCosts;
+    /** Arrival tick matrix per source/target pair. */
     long[][] arrivalTicks;
+    /** Search algorithm used to compute the matrix. */
     RoutingAlgorithm algorithm;
+    /** Heuristic mode used during matrix computation. */
     HeuristicType heuristicType;
+    /** Planner implementation note for observability and migration tracking. */
     String implementationNote;
 
+    /**
+     * Returns a defensive copy of the reachability matrix.
+     */
     public boolean[][] getReachable() {
         return deepCopy(reachable);
     }
 
+    /**
+     * Returns a defensive copy of the total-cost matrix.
+     */
     public float[][] getTotalCosts() {
         return deepCopy(totalCosts);
     }
 
+    /**
+     * Returns a defensive copy of the arrival-ticks matrix.
+     */
     public long[][] getArrivalTicks() {
         return deepCopy(arrivalTicks);
     }

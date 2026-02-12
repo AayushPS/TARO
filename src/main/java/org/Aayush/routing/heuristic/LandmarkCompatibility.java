@@ -1,5 +1,6 @@
 package org.Aayush.routing.heuristic;
 
+import lombok.experimental.UtilityClass;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.profile.ProfileStore;
 
@@ -8,13 +9,11 @@ import java.util.Objects;
 /**
  * Deterministic compatibility signature for Stage 12 landmark artifacts.
  */
+@UtilityClass
 final class LandmarkCompatibility {
     private static final long FNV64_OFFSET_BASIS = 0xcbf29ce484222325L;
     private static final long FNV64_PRIME = 0x100000001b3L;
     private static final int DAYS_PER_WEEK = 7;
-
-    private LandmarkCompatibility() {
-    }
 
     static long computeSignature(EdgeGraph edgeGraph, ProfileStore profileStore) {
         Objects.requireNonNull(edgeGraph, "edgeGraph");

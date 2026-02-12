@@ -6,11 +6,19 @@ import java.util.Objects;
 
 /**
  * Stage 11 null heuristic provider.
+ *
+ * <p>Always returns zero estimates and therefore behaves like plain Dijkstra
+ * while still honoring bound-check contracts.</p>
  */
 public final class NullHeuristicProvider implements HeuristicProvider {
     private final int nodeCount;
     private final GoalBoundHeuristic zeroEstimator;
 
+    /**
+     * Creates a null heuristic provider for one graph contract.
+     *
+     * @param edgeGraph graph runtime used for node bound validation.
+     */
     public NullHeuristicProvider(EdgeGraph edgeGraph) {
         Objects.requireNonNull(edgeGraph, "edgeGraph");
         this.nodeCount = edgeGraph.nodeCount();
@@ -22,6 +30,12 @@ public final class NullHeuristicProvider implements HeuristicProvider {
         return HeuristicType.NONE;
     }
 
+    /**
+     * Binds this provider to one goal node.
+     *
+     * @param goalNodeId target node id in internal graph space.
+     * @return zero-cost goal-bound estimator.
+     */
     @Override
     public GoalBoundHeuristic bindGoal(int goalNodeId) {
         validateGoalNodeId(goalNodeId);

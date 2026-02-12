@@ -11,6 +11,12 @@ public final class LandmarkHeuristicProvider implements HeuristicProvider {
     private final int nodeCount;
     private final LandmarkStore landmarkStore;
 
+    /**
+     * Creates a landmark heuristic provider.
+     *
+     * @param edgeGraph graph runtime used for node-count contract checks.
+     * @param landmarkStore precomputed landmark distance store.
+     */
     public LandmarkHeuristicProvider(EdgeGraph edgeGraph, LandmarkStore landmarkStore) {
         Objects.requireNonNull(edgeGraph, "edgeGraph");
         this.landmarkStore = Objects.requireNonNull(landmarkStore, "landmarkStore");
@@ -30,6 +36,12 @@ public final class LandmarkHeuristicProvider implements HeuristicProvider {
         return HeuristicType.LANDMARK;
     }
 
+    /**
+     * Binds this provider to one target node and returns a reusable estimator.
+     *
+     * @param goalNodeId target node id in internal graph space.
+     * @return goal-bound heuristic estimator.
+     */
     @Override
     public GoalBoundHeuristic bindGoal(int goalNodeId) {
         validateNodeId(goalNodeId, "goalNodeId");
@@ -66,4 +78,3 @@ public final class LandmarkHeuristicProvider implements HeuristicProvider {
         }
     }
 }
-

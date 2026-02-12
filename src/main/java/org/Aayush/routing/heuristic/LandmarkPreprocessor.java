@@ -1,5 +1,6 @@
 package org.Aayush.routing.heuristic;
 
+import lombok.experimental.UtilityClass;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.profile.ProfileStore;
 
@@ -10,14 +11,23 @@ import java.util.SplittableRandom;
 
 /**
  * Stage 12 deterministic ALT landmark preprocessing.
+ *
+ * <p>Builds landmark node selection and forward/backward lower-bound distance
+ * tables that back {@link LandmarkHeuristicProvider}.</p>
  */
+@UtilityClass
 public final class LandmarkPreprocessor {
     private static final float INF = Float.POSITIVE_INFINITY;
     private static final int DAYS_PER_WEEK = 7;
 
-    private LandmarkPreprocessor() {
-    }
-
+    /**
+     * Builds landmark artifact arrays from graph/profile runtime contracts.
+     *
+     * @param edgeGraph graph runtime.
+     * @param profileStore profile runtime.
+     * @param config preprocessing parameters.
+     * @return immutable landmark artifact.
+     */
     public static LandmarkArtifact preprocess(
             EdgeGraph edgeGraph,
             ProfileStore profileStore,

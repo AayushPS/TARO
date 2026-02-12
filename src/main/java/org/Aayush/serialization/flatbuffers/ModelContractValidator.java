@@ -1,5 +1,6 @@
 package org.Aayush.serialization.flatbuffers;
 
+import lombok.experimental.UtilityClass;
 import org.Aayush.core.time.TimeUtils;
 import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
@@ -8,13 +9,10 @@ import org.Aayush.serialization.flatbuffers.taro.model.TimeUnit;
 /**
  * Shared runtime validator for model-level metadata contracts.
  */
+@UtilityClass
 public final class ModelContractValidator {
 
     private static final long EXPECTED_SCHEMA_VERSION = 1L;
-
-    private ModelContractValidator() {
-        throw new AssertionError("Utility class - do not instantiate");
-    }
 
     /**
      * Validates metadata contract required for deterministic runtime behavior.

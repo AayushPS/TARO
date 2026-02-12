@@ -20,6 +20,11 @@ import java.util.concurrent.ConcurrentMap;
 
 /**
  * Stage 12 route-core orchestration facade.
+ *
+ * <p>This class is the main runtime entry point that:
+ * validates incoming requests, maps external ids to internal node ids,
+ * resolves heuristic providers, delegates search execution, and maps plans
+ * back into external response models.</p>
  */
 public final class RouteCore implements RouterService {
     public static final String REASON_ROUTE_REQUEST_REQUIRED = "H12_ROUTE_REQUEST_REQUIRED";
@@ -52,6 +57,16 @@ public final class RouteCore implements RouterService {
     private final MatrixPlanner matrixPlanner;
     private final ConcurrentMap<HeuristicType, HeuristicProvider> heuristicProviders = new ConcurrentHashMap<>();
 
+    /**
+     * Creates the route-core facade with strict runtime contract validation.
+     *
+     * @param edgeGraph edge-based graph runtime.
+     * @param profileStore temporal profile runtime.
+     * @param costEngine stage-10 cost engine bound to graph/profile.
+     * @param nodeIdMapper external-to-internal node id mapper.
+     * @param landmarkStore optional landmark runtime (required for LANDMARK heuristic).
+     * @param matrixPlanner optional matrix planner override.
+     */
     @Builder
     public RouteCore(
             EdgeGraph edgeGraph,
@@ -77,6 +92,12 @@ public final class RouteCore implements RouterService {
         );
     }
 
+    /**
+     * Executes one client route request.
+     *
+     * @param request route request in external id space.
+     * @return route response mapped back to external id space.
+     */
     @Override
     public RouteResponse route(RouteRequest request) {
         InternalRouteRequest internalRequest = toInternalRouteRequest(request);
@@ -100,6 +121,12 @@ public final class RouteCore implements RouterService {
         return builder.build();
     }
 
+    /**
+     * Executes one client matrix request.
+     *
+     * @param request matrix request in external id space.
+     * @return matrix response mapped back to external id space.
+     */
     @Override
     public MatrixResponse matrix(MatrixRequest request) {
         InternalMatrixRequest internalRequest = toInternalMatrixRequest(request);

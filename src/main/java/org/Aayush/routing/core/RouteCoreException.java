@@ -11,11 +11,24 @@ import java.util.Objects;
 public final class RouteCoreException extends RuntimeException {
     private final String reasonCode;
 
+    /**
+     * Creates a reason-coded route-core contract failure.
+     *
+     * @param reasonCode deterministic reason code.
+     * @param message descriptive error message.
+     */
     public RouteCoreException(String reasonCode, String message) {
         super(formatMessage(reasonCode, message));
         this.reasonCode = requireReasonCode(reasonCode);
     }
 
+    /**
+     * Creates a reason-coded route-core contract failure with a cause.
+     *
+     * @param reasonCode deterministic reason code.
+     * @param message descriptive error message.
+     * @param cause underlying cause.
+     */
     public RouteCoreException(String reasonCode, String message, Throwable cause) {
         super(formatMessage(reasonCode, message), cause);
         this.reasonCode = requireReasonCode(reasonCode);
@@ -33,4 +46,3 @@ public final class RouteCoreException extends RuntimeException {
         return code;
     }
 }
-
