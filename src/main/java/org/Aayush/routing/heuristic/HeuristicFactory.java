@@ -131,6 +131,9 @@ public final class HeuristicFactory {
         return new SphericalHeuristicProvider(edgeGraph, lowerBoundModel);
     }
 
+    /**
+     * Ensures coordinate vectors are available for geometry-based heuristics.
+     */
     private static void ensureCoordinatesAvailable(EdgeGraph edgeGraph, HeuristicType type) {
         if (!edgeGraph.hasCoordinates()) {
             throw new HeuristicConfigurationException(
@@ -140,6 +143,9 @@ public final class HeuristicFactory {
         }
     }
 
+    /**
+     * Ensures coordinates are valid latitude/longitude values for spherical metric.
+     */
     private static void ensureGeodeticCoordinateRanges(EdgeGraph edgeGraph) {
         for (int nodeId = 0; nodeId < edgeGraph.nodeCount(); nodeId++) {
             double lat = edgeGraph.getNodeX(nodeId);
@@ -160,6 +166,9 @@ public final class HeuristicFactory {
         }
     }
 
+    /**
+     * Ensures coordinates are finite for Euclidean metric.
+     */
     private static void ensureEuclideanCoordinatesFinite(EdgeGraph edgeGraph) {
         for (int nodeId = 0; nodeId < edgeGraph.nodeCount(); nodeId++) {
             double x = edgeGraph.getNodeX(nodeId);

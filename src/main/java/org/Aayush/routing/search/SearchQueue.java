@@ -259,6 +259,9 @@ public class SearchQueue {
 
     // --- Heap Helper Methods ---
 
+    /**
+     * Heap up-heap operation for newly inserted or decreased-key states.
+     */
     private void swim(int k) {
         while (k > 1 && greater(k / 2, k)) {
             swap(k, k / 2);
@@ -266,6 +269,9 @@ public class SearchQueue {
         }
     }
 
+    /**
+     * Heap down-heap operation after min extraction.
+     */
     private void sink(int k) {
         while (2 * k <= size) {
             int j = 2 * k;
@@ -276,10 +282,16 @@ public class SearchQueue {
         }
     }
 
+    /**
+     * Returns whether heap index {@code i} has lower priority than index {@code j}.
+     */
     private boolean greater(int i, int j) {
         return heap[i].compareTo(heap[j]) > 0;
     }
 
+    /**
+     * Swaps two heap entries and updates position map accordingly.
+     */
     private void swap(int i, int j) {
         SearchState s1 = heap[i];
         SearchState s2 = heap[j];

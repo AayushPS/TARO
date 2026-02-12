@@ -44,6 +44,9 @@ public final class ModelContractValidator {
         return unit;
     }
 
+    /**
+     * Maps FlatBuffers enum value to runtime engine time unit.
+     */
     private static TimeUtils.EngineTimeUnit fromFlatBufferTimeUnit(int fbTimeUnit, String loaderName) {
         if (fbTimeUnit == TimeUnit.SECONDS) {
             return TimeUtils.EngineTimeUnit.SECONDS;

@@ -15,6 +15,9 @@ final class LandmarkCompatibility {
     private static final long FNV64_PRIME = 0x100000001b3L;
     private static final int DAYS_PER_WEEK = 7;
 
+    /**
+     * Computes deterministic FNV-1a signature over graph/profile lower-bound contracts.
+     */
     static long computeSignature(EdgeGraph edgeGraph, ProfileStore profileStore) {
         Objects.requireNonNull(edgeGraph, "edgeGraph");
         Objects.requireNonNull(profileStore, "profileStore");
@@ -50,6 +53,9 @@ final class LandmarkCompatibility {
         return hash;
     }
 
+    /**
+     * Returns minimum temporal multiplier over all weekdays for one profile id.
+     */
     private static float minimumTemporalMultiplier(ProfileStore profileStore, int profileId) {
         float minimum = Float.POSITIVE_INFINITY;
         for (int day = 0; day < DAYS_PER_WEEK; day++) {
@@ -64,6 +70,9 @@ final class LandmarkCompatibility {
         return minimum;
     }
 
+    /**
+     * Mixes one integer into FNV-1a state byte-by-byte in little-endian order.
+     */
     private static long mixInt(long hash, int value) {
         hash ^= (value & 0xFF);
         hash *= FNV64_PRIME;

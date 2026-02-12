@@ -31,6 +31,9 @@ public final class LandmarkHeuristicProvider implements HeuristicProvider {
         }
     }
 
+    /**
+     * Returns provider type discriminator.
+     */
     @Override
     public HeuristicType type() {
         return HeuristicType.LANDMARK;
@@ -48,6 +51,9 @@ public final class LandmarkHeuristicProvider implements HeuristicProvider {
         return new BoundLandmarkHeuristic(landmarkStore, nodeCount, goalNodeId);
     }
 
+    /**
+     * Validates node id against configured graph bounds.
+     */
     private void validateNodeId(int nodeId, String fieldName) {
         if (nodeId < 0 || nodeId >= nodeCount) {
             throw new IllegalArgumentException(
@@ -61,12 +67,18 @@ public final class LandmarkHeuristicProvider implements HeuristicProvider {
         private final int nodeCount;
         private final int goalNodeId;
 
+        /**
+         * Creates a bound estimator tied to one goal node.
+         */
         private BoundLandmarkHeuristic(LandmarkStore store, int nodeCount, int goalNodeId) {
             this.store = store;
             this.nodeCount = nodeCount;
             this.goalNodeId = goalNodeId;
         }
 
+        /**
+         * Returns ALT estimate from {@code nodeId} to bound goal node.
+         */
         @Override
         public double estimateFromNode(int nodeId) {
             if (nodeId < 0 || nodeId >= nodeCount) {

@@ -393,6 +393,9 @@ public final class LiveOverlay {
         }
     }
 
+    /**
+     * Writer-locked cleanup pass that removes expired entries up to a budget.
+     */
     private int removeExpiredLocked(long nowTicks, int budget) {
         int removed = 0;
         for (Map.Entry<Integer, Entry> mapEntry : entries.entrySet()) {
@@ -409,6 +412,9 @@ public final class LiveOverlay {
         return removed;
     }
 
+    /**
+     * Returns key of the entry with the smallest {@code validUntilTicks}, or null when empty.
+     */
     private Integer findOldestExpiryKeyLocked() {
         Integer oldestKey = null;
         long minValidUntil = Long.MAX_VALUE;
@@ -422,6 +428,9 @@ public final class LiveOverlay {
         return oldestKey;
     }
 
+    /**
+     * Validates edge identifier domain used by overlay APIs.
+     */
     private static void validateEdgeId(int edgeId) {
         if (edgeId < 0) {
             throw new IllegalArgumentException("edge_id must be >= 0");

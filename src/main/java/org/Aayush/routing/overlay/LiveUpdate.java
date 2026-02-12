@@ -34,6 +34,9 @@ public final class LiveUpdate {
     /** Absolute exclusive-expiry time in engine ticks. */
     private final long validUntilTicks;
 
+    /**
+     * Internal canonical constructor after input validation.
+     */
     private LiveUpdate(int edgeId, float speedFactor, long validUntilTicks) {
         validate(edgeId, speedFactor);
         this.edgeId = edgeId;
@@ -104,6 +107,9 @@ public final class LiveUpdate {
         return fromRelativeTtl(edgeId, speedFactor, nowTicks, normalizedTtlTicks);
     }
 
+    /**
+     * Validates edge and speed-factor domain constraints.
+     */
     private static void validate(int edgeId, float speedFactor) {
         if (edgeId < 0) {
             throw new IllegalArgumentException("edge_id must be >= 0");

@@ -143,6 +143,9 @@ public final class RouteCore implements RouterService {
                 .build();
     }
 
+    /**
+     * Computes one normalized internal route request.
+     */
     InternalRoutePlan computeInternal(InternalRouteRequest request) {
         GoalBoundHeuristic heuristic = resolveGoalBoundHeuristic(request);
         RoutePlanner planner = switch (request.algorithm()) {
@@ -152,6 +155,11 @@ public final class RouteCore implements RouterService {
         return planner.compute(edgeGraph, costEngine, heuristic, request);
     }
 
+    /**
+     * Resolves goal-bound heuristic for an internal request.
+     *
+     * <p>Dijkstra always uses a zero heuristic.</p>
+     */
     private GoalBoundHeuristic resolveGoalBoundHeuristic(InternalRouteRequest request) {
         if (request.algorithm() == RoutingAlgorithm.DIJKSTRA) {
             return ZERO_HEURISTIC;
@@ -168,6 +176,9 @@ public final class RouteCore implements RouterService {
         }
     }
 
+    /**
+     * Builds and validates a heuristic provider for one heuristic type.
+     */
     private HeuristicProvider buildHeuristicProvider(HeuristicType heuristicType) {
         try {
             return HeuristicFactory.create(heuristicType, edgeGraph, profileStore, costEngine, landmarkStore);
@@ -180,6 +191,9 @@ public final class RouteCore implements RouterService {
         }
     }
 
+    /**
+     * Normalizes and validates client route request into internal node-id request.
+     */
     private InternalRouteRequest toInternalRouteRequest(RouteRequest request) {
         if (request == null) {
             throw new RouteCoreException(REASON_ROUTE_REQUEST_REQUIRED, "route request must be provided");
@@ -199,6 +213,9 @@ public final class RouteCore implements RouterService {
         );
     }
 
+    /**
+     * Normalizes and validates client matrix request into internal node-id request.
+     */
     private InternalMatrixRequest toInternalMatrixRequest(MatrixRequest request) {
         if (request == null) {
             throw new RouteCoreException(REASON_MATRIX_REQUEST_REQUIRED, "matrix request must be provided");
@@ -229,6 +246,9 @@ public final class RouteCore implements RouterService {
         return new InternalMatrixRequest(sourceNodeIds, targetNodeIds, request.getDepartureTicks(), algorithm, heuristicType);
     }
 
+    /**
+     * Resolves external node id to internal node id with bounds validation.
+     */
     private int toInternalNodeId(String externalId, String requiredReasonCode, String fieldName) {
         if (externalId == null || externalId.isBlank()) {
             throw new RouteCoreException(requiredReasonCode, fieldName + " must be non-blank");
@@ -252,6 +272,9 @@ public final class RouteCore implements RouterService {
         return internalNodeId;
     }
 
+    /**
+     * Maps an internal node path to immutable external-id path.
+     */
     private List<String> toExternalNodePath(int[] nodePath) {
         List<String> externalPath = new ArrayList<>(nodePath.length);
         for (int nodeId : nodePath) {
@@ -268,6 +291,9 @@ public final class RouteCore implements RouterService {
         return List.copyOf(externalPath);
     }
 
+    /**
+     * Validates required algorithm field.
+     */
     private RoutingAlgorithm requireAlgorithm(RoutingAlgorithm algorithm) {
         if (algorithm == null) {
             throw new RouteCoreException(REASON_ALGORITHM_REQUIRED, "algorithm must be specified");
@@ -275,6 +301,9 @@ public final class RouteCore implements RouterService {
         return algorithm;
     }
 
+    /**
+     * Validates required heuristic-type field.
+     */
     private HeuristicType requireHeuristicType(HeuristicType heuristicType) {
         if (heuristicType == null) {
             throw new RouteCoreException(REASON_HEURISTIC_REQUIRED, "heuristicType must be specified");
@@ -282,6 +311,9 @@ public final class RouteCore implements RouterService {
         return heuristicType;
     }
 
+    /**
+     * Enforces algorithm/heuristic compatibility contract.
+     */
     private void validateAlgorithmHeuristicPair(RoutingAlgorithm algorithm, HeuristicType heuristicType) {
         if (algorithm == RoutingAlgorithm.DIJKSTRA && heuristicType != HeuristicType.NONE) {
             throw new RouteCoreException(
@@ -291,6 +323,9 @@ public final class RouteCore implements RouterService {
         }
     }
 
+    /**
+     * Validates that cost-engine contracts point to the same graph/profile instances.
+     */
     private void ensureCostEngineContracts() {
         if (costEngine.edgeGraph() != edgeGraph) {
             throw new RouteCoreException(
@@ -306,6 +341,9 @@ public final class RouteCore implements RouterService {
         }
     }
 
+    /**
+     * Deep-copies a boolean matrix.
+     */
     private static boolean[][] copy(boolean[][] source) {
         boolean[][] copy = new boolean[source.length][];
         for (int i = 0; i < source.length; i++) {
@@ -314,6 +352,9 @@ public final class RouteCore implements RouterService {
         return copy;
     }
 
+    /**
+     * Deep-copies a float matrix.
+     */
     private static float[][] copy(float[][] source) {
         float[][] copy = new float[source.length][];
         for (int i = 0; i < source.length; i++) {
@@ -322,6 +363,9 @@ public final class RouteCore implements RouterService {
         return copy;
     }
 
+    /**
+     * Deep-copies a long matrix.
+     */
     private static long[][] copy(long[][] source) {
         long[][] copy = new long[source.length][];
         for (int i = 0; i < source.length; i++) {

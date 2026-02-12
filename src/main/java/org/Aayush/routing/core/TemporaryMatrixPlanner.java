@@ -10,6 +10,9 @@ final class TemporaryMatrixPlanner implements MatrixPlanner {
     static final String STAGE14_REVISIT_NOTE =
             "NOTE(Stage 14 revisit): Replace Stage 12 temporary matrix execution path with the dedicated one-to-many Dijkstra matrix engine, and enforce A*/Dijkstra parity and performance gates before closing Stage 14.";
 
+    /**
+     * Expands matrix request via pairwise route calls.
+     */
     @Override
     public MatrixPlan compute(RouteCore routeCore, InternalMatrixRequest request) {
         int sourceCount = request.sourceNodeIds().length;
@@ -41,4 +44,3 @@ final class TemporaryMatrixPlanner implements MatrixPlanner {
         return new MatrixPlan(reachable, costs, arrivals, STAGE14_REVISIT_NOTE);
     }
 }
-

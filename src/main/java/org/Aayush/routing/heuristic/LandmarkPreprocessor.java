@@ -61,6 +61,9 @@ public final class LandmarkPreprocessor {
         return new LandmarkArtifact(nodeCount, landmarkNodeIds, forward, backward, compatibilitySignature);
     }
 
+    /**
+     * Validates preprocessor configuration ranges.
+     */
     private static void validateConfig(LandmarkPreprocessorConfig config) {
         if (config.getLandmarkCount() <= 0) {
             throw new IllegalArgumentException("landmarkCount must be > 0");
@@ -70,6 +73,9 @@ public final class LandmarkPreprocessor {
         }
     }
 
+    /**
+     * Selects deterministic landmark seed nodes with preference for non-terminal nodes.
+     */
     private static int[] selectLandmarkNodes(EdgeGraph edgeGraph, int count, long seed) {
         int nodeCount = edgeGraph.nodeCount();
         int[] order = new int[nodeCount];
@@ -105,6 +111,9 @@ public final class LandmarkPreprocessor {
         return selected;
     }
 
+    /**
+     * In-place deterministic Fisher-Yates shuffle.
+     */
     private static void shuffle(int[] array, long seed) {
         SplittableRandom random = new SplittableRandom(seed);
         for (int i = array.length - 1; i > 0; i--) {
@@ -115,6 +124,9 @@ public final class LandmarkPreprocessor {
         }
     }
 
+    /**
+     * Computes per-edge lower-bound traversal weights for preprocessing Dijkstra runs.
+     */
     private static float[] computeLowerBoundEdgeWeights(EdgeGraph edgeGraph, ProfileStore profileStore) {
         int edgeCount = edgeGraph.edgeCount();
         float[] lowerBounds = new float[edgeCount];
@@ -141,6 +153,9 @@ public final class LandmarkPreprocessor {
         return lowerBounds;
     }
 
+    /**
+     * Returns minimum temporal multiplier over all days for a profile id.
+     */
     private static float minimumTemporalMultiplier(ProfileStore profileStore, int profileId) {
         float minimum = Float.POSITIVE_INFINITY;
         for (int day = 0; day < DAYS_PER_WEEK; day++) {
@@ -238,6 +253,9 @@ public final class LandmarkPreprocessor {
         return distances;
     }
 
+    /**
+     * Builds reverse adjacency index for backward Dijkstra execution.
+     */
     private static IncomingIndex buildIncomingIndex(EdgeGraph edgeGraph) {
         int nodeCount = edgeGraph.nodeCount();
         int edgeCount = edgeGraph.edgeCount();
@@ -269,11 +287,17 @@ public final class LandmarkPreprocessor {
         private final int nodeId;
         private final float distance;
 
+        /**
+         * Creates a queue state for Dijkstra frontier ordering.
+         */
         private NodeDistance(int nodeId, float distance) {
             this.nodeId = nodeId;
             this.distance = distance;
         }
 
+        /**
+         * Orders states by distance first, then node id for deterministic ties.
+         */
         @Override
         public int compareTo(NodeDistance other) {
             int byDistance = Float.compare(this.distance, other.distance);

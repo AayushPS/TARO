@@ -248,6 +248,9 @@ public class TurnCostMap {
         return true; // Inserted new
     }
 
+    /**
+     * Validates one turn penalty value from serialized input.
+     */
     private static void validatePenalty(float penalty, int index) {
         if (Float.isNaN(penalty) || penalty < 0.0f || penalty == Float.NEGATIVE_INFINITY) {
             throw new IllegalArgumentException(
@@ -255,6 +258,9 @@ public class TurnCostMap {
         }
     }
 
+    /**
+     * Returns compact map statistics for diagnostics.
+     */
     @Override
     public String toString() {
         return String.format("TurnCostMap[size=%d, capacity=%d, load=%.2f%%]",

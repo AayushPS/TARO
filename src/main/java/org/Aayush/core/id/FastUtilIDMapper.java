@@ -106,6 +106,9 @@ public class FastUtilIDMapper implements IDMapper{
         return external;
     }
 
+    /**
+     * Returns whether an external id exists in the forward map.
+     */
     @Override
     public boolean containsExternal(String externalId) {
         if (externalId == null) {
@@ -114,11 +117,17 @@ public class FastUtilIDMapper implements IDMapper{
         return forward.containsKey(externalId);
     }
 
+    /**
+     * Returns whether an internal id is inside current mapper bounds.
+     */
     @Override
     public boolean containsInternal(int internalId) {
         return internalId >= 0 && internalId < reverse.length;
     }
 
+    /**
+     * Returns total number of id pairs in this mapper.
+     */
     @Override
     public int size() {
         return reverse.length;

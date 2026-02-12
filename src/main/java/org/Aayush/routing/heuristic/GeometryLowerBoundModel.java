@@ -32,12 +32,21 @@ public final class GeometryLowerBoundModel {
     private static final double TURN_COST_LOWER_BOUND = 0.0d;
     private static final int DAYS_PER_WEEK = 7;
 
+    /**
+     * Calibrated lower-bound scale from geometry distance to traversal cost.
+     */
     private final double lowerBoundCostPerDistance;
 
+    /**
+     * Creates model with calibrated lower-bound scale.
+     */
     private GeometryLowerBoundModel(double lowerBoundCostPerDistance) {
         this.lowerBoundCostPerDistance = lowerBoundCostPerDistance;
     }
 
+    /**
+     * Returns calibrated cost-per-distance lower bound.
+     */
     public double lowerBoundCostPerDistance() {
         return lowerBoundCostPerDistance;
     }
@@ -199,6 +208,9 @@ public final class GeometryLowerBoundModel {
         return new GeometryLowerBoundModel(bestRatio);
     }
 
+    /**
+     * Returns minimum profile multiplier over all weekdays.
+     */
     private static double minimumTemporalMultiplier(ProfileStore profileStore, int profileId) {
         double minimum = Double.POSITIVE_INFINITY;
         for (int day = 0; day < DAYS_PER_WEEK; day++) {

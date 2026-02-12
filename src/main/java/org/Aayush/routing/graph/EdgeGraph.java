@@ -108,11 +108,20 @@ public class EdgeGraph {
         return edgeTarget.get(edgeId);
     }
 
+    /**
+     * Returns the static base traversal weight stored for an edge.
+     */
     public float getBaseWeight(int edgeId) {
         assert edgeId >= 0 && edgeId < edgeCount;
         return baseWeights.get(edgeId);
     }
 
+    /**
+     * Returns the temporal profile id assigned to an edge.
+     *
+     * <p>The schema stores profile ids as unsigned 16-bit values. The return
+     * value is widened to {@code int} for runtime use.</p>
+     */
     public int getProfileId(int edgeId) {
         assert edgeId >= 0 && edgeId < edgeCount;
         return edgeProfileIds.get(edgeId) & 0xFFFF;
@@ -174,6 +183,9 @@ public class EdgeGraph {
         return getNodeY(nodeId);
     }
 
+    /**
+     * Returns the number of outgoing edges for a node.
+     */
     public int getNodeDegree(int nodeId) {
         if (nodeId < 0 || nodeId >= nodeCount) {
             throw new IndexOutOfBoundsException("Node " + nodeId + " out of bounds");
@@ -181,6 +193,9 @@ public class EdgeGraph {
         return firstEdge.get(nodeId + 1) - firstEdge.get(nodeId);
     }
 
+    /**
+     * Returns whether a node has no outgoing edges.
+     */
     public boolean isTerminalNode(int nodeId) {
         return getNodeDegree(nodeId) == 0;
     }
@@ -195,12 +210,18 @@ public class EdgeGraph {
         public final double x;  // lat for GPS, x for Euclidean, etc.
         public final double y;  // lon for GPS, y for Euclidean, etc.
 
+        /**
+         * Returns a stable debug string in {@code (x,y)} format.
+         */
         @Override
         public String toString() {
             return String.format("(%.6f, %.6f)", x, y);
         }
     }
 
+    /**
+     * Returns both coordinate components for a node as a compact DTO.
+     */
     public Coordinate getNodeCoordinate(int nodeId) {
         return new Coordinate(getNodeX(nodeId), getNodeY(nodeId));
     }
@@ -236,6 +257,9 @@ public class EdgeGraph {
         private int current;
         private int end;
 
+        /**
+         * Creates an iterator bound to one graph instance.
+         */
         EdgeIterator(EdgeGraph graph) {
             this.graph = graph;
         }
@@ -259,10 +283,18 @@ public class EdgeGraph {
             return this;
         }
 
+        /**
+         * Returns whether another edge id is available in the current span.
+         */
         public boolean hasNext() {
             return current < end;
         }
 
+        /**
+         * Returns the next outgoing edge id in the current span.
+         *
+         * @throws NoSuchElementException when the iterator is exhausted.
+         */
         public int next() {
             if (current >= end) throw new NoSuchElementException();
             return current++;
@@ -281,6 +313,11 @@ public class EdgeGraph {
         }
     }
 
+    /**
+     * Returns the contiguous outgoing-edge span of {@code edgeId}'s destination.
+     *
+     * <p>The high 32 bits contain {@code start}, and the low 32 bits contain {@code end}.</p>
+     */
     public long getOutgoingEdgeRange(int edgeId) {
         int targetNode = edgeTarget.get(edgeId);
         int start = firstEdge.get(targetNode);
@@ -288,6 +325,11 @@ public class EdgeGraph {
         return ((long) start << 32) | (end & 0xFFFFFFFFL);
     }
 
+    /**
+     * Materializes outgoing edges for compatibility with older callers.
+     *
+     * @deprecated Prefer iterator-based traversal or {@link #getOutgoingEdgeRange(int)}.
+     */
     @Deprecated
     public int[] getOutgoingEdges(int edgeId) {
         long range = getOutgoingEdgeRange(edgeId);
@@ -305,12 +347,20 @@ public class EdgeGraph {
     // DEBUG & VALIDATION
     // ========================================================================
 
+    /**
+     * Returns a compact one-line graph summary.
+     */
     @Override
     public String toString() {
         return String.format("EdgeGraph[nodes=%d, edges=%d, avgDegree=%.2f, hasCoordinates=%b]",
             nodeCount, edgeCount, nodeCount > 0 ? (double) edgeCount / nodeCount : 0, hasCoordinates());
     }
 
+    /**
+     * Returns a detailed node/edge expansion for small graphs.
+     *
+     * <p>For large graphs this method returns a short summary to avoid huge strings.</p>
+     */
     public String toDetailedString() {
         if (nodeCount > 50) return toString() + " (too large to detail)";
         StringBuilder sb = new StringBuilder(toString()).append("\n");
@@ -334,6 +384,9 @@ public class EdgeGraph {
 
     public record ValidationResult(boolean isValid, List<String> errors, List<String> warnings) {}
 
+    /**
+     * Validates runtime structural invariants and basic coordinate sanity.
+     */
     public ValidationResult validate() {
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
@@ -399,6 +452,12 @@ public class EdgeGraph {
     // FLATBUFFERS LOADING
     // ========================================================================
 
+    /**
+     * Loads an {@link EdgeGraph} from a TARO FlatBuffer payload.
+     *
+     * <p>This method enforces file identifier, metadata contract, vector lengths,
+     * CSR monotonicity, and node-index bounds.</p>
+     */
     public static EdgeGraph fromFlatBuffer(ByteBuffer buffer) {
         if (buffer == null) {
             throw new IllegalArgumentException("Buffer cannot be null");
@@ -495,6 +554,9 @@ public class EdgeGraph {
         return IntBuffer.wrap(origins);
     }
 
+    /**
+     * Returns a little-endian int view over a FlatBuffers vector.
+     */
     private static IntBuffer asIntBuffer(ByteBuffer buffer) {
         if (buffer == null) {
             return null;
@@ -502,6 +564,9 @@ public class EdgeGraph {
         return buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
     }
 
+    /**
+     * Returns a little-endian float view over a FlatBuffers vector.
+     */
     private static FloatBuffer asFloatBuffer(ByteBuffer buffer) {
         if (buffer == null) {
             return null;
@@ -509,6 +574,9 @@ public class EdgeGraph {
         return buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
     }
 
+    /**
+     * Returns a little-endian short view over a FlatBuffers vector.
+     */
     private static ShortBuffer asShortBuffer(ByteBuffer buffer) {
         if (buffer == null) {
             return null;
@@ -516,6 +584,9 @@ public class EdgeGraph {
         return buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
     }
 
+    /**
+     * Copies coordinate structs from FlatBuffers objects into a direct byte buffer.
+     */
     private static ByteBuffer copyCoordinates(GraphTopology topology, int nodeCount) {
         int coordinateCount = topology.coordinatesLength();
         if (coordinateCount == 0) {
@@ -539,6 +610,9 @@ public class EdgeGraph {
         return coordinates;
     }
 
+    /**
+     * Validates that a vector length exactly matches schema expectations.
+     */
     private static void validateVectorLength(String fieldName, int actual, int expected) {
         if (actual != expected) {
             throw new IllegalArgumentException(
@@ -546,6 +620,9 @@ public class EdgeGraph {
         }
     }
 
+    /**
+     * Validates CSR index monotonicity and terminal edge-count contract.
+     */
     private static void validateCsrStructure(IntBuffer firstEdge, int nodeCount, int edgeCount) {
         int start = firstEdge.get(0);
         if (start != 0) {
@@ -573,6 +650,9 @@ public class EdgeGraph {
         }
     }
 
+    /**
+     * Validates that all entries in a node-index vector are within node bounds.
+     */
     private static void validateNodeIndexVector(String fieldName, IntBuffer values, int length, int nodeCount) {
         for (int i = 0; i < length; i++) {
             int nodeId = values.get(i);

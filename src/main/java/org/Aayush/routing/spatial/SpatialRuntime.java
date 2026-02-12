@@ -286,6 +286,9 @@ public final class SpatialRuntime {
         return bestNode;
     }
 
+    /**
+     * Returns a concise runtime summary for diagnostics.
+     */
     @Override
     public String toString() {
         return "SpatialRuntime[enabled=" + enabled +
@@ -293,6 +296,9 @@ public final class SpatialRuntime {
                 ", leafItems=" + leafItems.length + "]";
     }
 
+    /**
+     * Creates a disabled runtime that rejects nearest-node queries.
+     */
     private static SpatialRuntime disabled(EdgeGraph graph) {
         return new SpatialRuntime(
                 graph,
@@ -309,6 +315,9 @@ public final class SpatialRuntime {
         );
     }
 
+    /**
+     * Validates one KD tree node contract from serialized data.
+     */
     private static void validateNode(
             int nodeIndex,
             int treeNodeCount,
@@ -355,6 +364,9 @@ public final class SpatialRuntime {
         validateChildIndex(nodeIndex, "right_child", rightChild, treeNodeCount);
     }
 
+    /**
+     * Validates child index contract ({@code -1} or valid node index).
+     */
     private static void validateChildIndex(int nodeIndex, String field, int childIndex, int treeNodeCount) {
         if (childIndex != -1 && (childIndex < 0 || childIndex >= treeNodeCount)) {
             throw new IllegalArgumentException(
@@ -363,6 +375,9 @@ public final class SpatialRuntime {
         }
     }
 
+    /**
+     * Validates that root-reachable nodes form an acyclic tree with payload leaves.
+     */
     private static void validateReachableTree(
             int rootIndex,
             int[] leftChildren,
@@ -414,6 +429,9 @@ public final class SpatialRuntime {
         }
     }
 
+    /**
+     * Ensures spatial query APIs are used only when runtime is enabled.
+     */
     private void ensureEnabled() {
         if (!enabled) {
             throw new UnsupportedOperationException(
@@ -421,6 +439,9 @@ public final class SpatialRuntime {
         }
     }
 
+    /**
+     * Validates query coordinate numeric sanity.
+     */
     private static void validateQueryCoordinate(double value, String name) {
         if (!Double.isFinite(value)) {
             throw new IllegalArgumentException(name + " must be finite");

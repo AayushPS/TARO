@@ -33,6 +33,9 @@ public final class TimeUtils {
     // Unix epoch started on Thursday (1970-01-01). Offset by +3 to keep Monday = 0.
     private static final int EPOCH_DAY_OFFSET = 3;
 
+    /**
+     * Prevents instantiation of this utility class.
+     */
     private TimeUtils() {
         throw new AssertionError("Utility class - do not instantiate");
     }
@@ -247,6 +250,9 @@ public final class TimeUtils {
         return formatTimeOfDay(startSeconds) + "-" + formatTimeOfDay(endSeconds);
     }
 
+    /**
+     * Formats seconds-since-midnight as {@code HH:mm} (supports {@code 24:00} sentinel).
+     */
     private static String formatTimeOfDay(long seconds) {
         long hours = seconds / SECONDS_PER_HOUR;
         long minutes = (seconds % SECONDS_PER_HOUR) / 60;
@@ -256,6 +262,9 @@ public final class TimeUtils {
         return String.format("%02d:%02d", hours, minutes);
     }
 
+    /**
+     * Converts timestamp in model unit into epoch seconds (floor for milliseconds).
+     */
     private static long toEpochSeconds(long timestamp, EngineTimeUnit unit) {
         if (unit == null) {
             throw new IllegalArgumentException("Engine unit cannot be null");

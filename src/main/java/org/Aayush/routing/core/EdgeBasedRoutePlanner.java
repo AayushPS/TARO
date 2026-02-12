@@ -19,6 +19,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
 
     private final boolean useHeuristic;
 
+    /**
+     * Creates an edge-based planner in Dijkstra or A* priority mode.
+     */
     EdgeBasedRoutePlanner(boolean useHeuristic) {
         this.useHeuristic = useHeuristic;
     }
@@ -132,6 +135,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         return InternalRoutePlan.unreachable(departureTicks, settledStates);
     }
 
+    /**
+     * Returns whether a candidate goal label is better than current best.
+     */
     private static boolean isBetter(float newCost, long newArrival, float currentCost, long currentArrival) {
         if (newCost < currentCost) {
             return true;
@@ -139,6 +145,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         return Float.compare(newCost, currentCost) == 0 && newArrival < currentArrival;
     }
 
+    /**
+     * Returns whether one label dominates another in (cost, arrival) space.
+     */
     private static boolean dominates(float lhsCost, long lhsArrival, float rhsCost, long rhsArrival) {
         return lhsCost <= rhsCost && lhsArrival <= rhsArrival;
     }
@@ -183,6 +192,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         return labelId;
     }
 
+    /**
+     * Computes frontier priority score (g or g+h depending on planner mode).
+     */
     private double computePriority(EdgeGraph edgeGraph, GoalBoundHeuristic heuristic, int edgeId, float gScore) {
         if (!useHeuristic) {
             return gScore;
@@ -220,6 +232,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         return nodePath;
     }
 
+    /**
+     * Converts transition cost into integral arrival ticks with ceil semantics.
+     */
     private static long toArrivalTicks(float transitionCost) {
         if (!Float.isFinite(transitionCost) || transitionCost <= 0.0f) {
             return 0L;
@@ -231,6 +246,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         return (long) ceil;
     }
 
+    /**
+     * Adds two non-negative tick values with saturation at {@link Long#MAX_VALUE}.
+     */
     private static long saturatingAdd(long a, long b) {
         if (a >= Long.MAX_VALUE - b) {
             return Long.MAX_VALUE;
@@ -245,6 +263,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         private final IntArrayList predecessorLabelByLabel = new IntArrayList();
         private final BooleanArrayList activeByLabel = new BooleanArrayList();
 
+        /**
+         * Appends a new label and returns its label id.
+         */
         int add(int edgeId, float gScore, long arrivalTicks, int predecessorLabelId) {
             int labelId = edgeIdByLabel.size();
             edgeIdByLabel.add(edgeId);
@@ -255,26 +276,44 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
             return labelId;
         }
 
+        /**
+         * Returns edge id for a label.
+         */
         int edgeId(int labelId) {
             return edgeIdByLabel.getInt(labelId);
         }
 
+        /**
+         * Returns g-score for a label.
+         */
         float gScore(int labelId) {
             return gScoreByLabel.getFloat(labelId);
         }
 
+        /**
+         * Returns arrival ticks for a label.
+         */
         long arrivalTicks(int labelId) {
             return arrivalByLabel.getLong(labelId);
         }
 
+        /**
+         * Returns predecessor label id for path backtracking.
+         */
         int predecessorLabelId(int labelId) {
             return predecessorLabelByLabel.getInt(labelId);
         }
 
+        /**
+         * Returns whether a label is currently active in dominance set.
+         */
         boolean isActive(int labelId) {
             return activeByLabel.getBoolean(labelId);
         }
 
+        /**
+         * Marks a label as inactive.
+         */
         void deactivate(int labelId) {
             activeByLabel.set(labelId, false);
         }
@@ -287,6 +326,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
             long arrivalTicks,
             double priority
     ) implements Comparable<FrontierState> {
+        /**
+         * Orders frontier by priority, then arrival, then edge/label id for stability.
+         */
         @Override
         public int compareTo(FrontierState other) {
             int byPriority = Double.compare(this.priority, other.priority);

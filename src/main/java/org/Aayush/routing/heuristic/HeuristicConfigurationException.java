@@ -38,10 +38,16 @@ public final class HeuristicConfigurationException extends RuntimeException {
         this.reasonCode = requireReasonCode(reasonCode);
     }
 
+    /**
+     * Formats exception message with deterministic reason-code prefix.
+     */
     private static String formatMessage(String reasonCode, String message) {
         return "[" + requireReasonCode(reasonCode) + "] " + Objects.requireNonNull(message, "message");
     }
 
+    /**
+     * Validates reason-code contract.
+     */
     private static String requireReasonCode(String reasonCode) {
         String code = Objects.requireNonNull(reasonCode, "reasonCode");
         if (code.isBlank()) {

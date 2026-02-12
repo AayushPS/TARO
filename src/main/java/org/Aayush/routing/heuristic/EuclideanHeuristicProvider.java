@@ -26,6 +26,9 @@ public final class EuclideanHeuristicProvider implements HeuristicProvider {
         this.lowerBoundCostPerDistance = lowerBoundModel.lowerBoundCostPerDistance();
     }
 
+    /**
+     * Returns provider type discriminator.
+     */
     @Override
     public HeuristicType type() {
         return HeuristicType.EUCLIDEAN;
@@ -48,6 +51,9 @@ public final class EuclideanHeuristicProvider implements HeuristicProvider {
         );
     }
 
+    /**
+     * Validates goal node id against graph bounds.
+     */
     private void validateGoalNodeId(int goalNodeId) {
         if (goalNodeId < 0 || goalNodeId >= edgeGraph.nodeCount()) {
             throw new IllegalArgumentException(
@@ -76,6 +82,9 @@ public final class EuclideanHeuristicProvider implements HeuristicProvider {
             this.lowerBoundCostPerDistance = lowerBoundCostPerDistance;
         }
 
+        /**
+         * Returns admissible Euclidean estimate from node to bound goal.
+         */
         @Override
         public double estimateFromNode(int nodeId) {
             if (nodeId < 0 || nodeId >= nodeCount) {

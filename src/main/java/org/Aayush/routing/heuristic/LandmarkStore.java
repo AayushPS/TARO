@@ -24,6 +24,9 @@ public final class LandmarkStore {
     private final float[][] backwardDistances;
     private final long compatibilitySignature;
 
+    /**
+     * Creates an immutable landmark store without compatibility signature metadata.
+     */
     public LandmarkStore(
             int nodeCount,
             int[] landmarkNodeIds,
@@ -60,6 +63,9 @@ public final class LandmarkStore {
         this.compatibilitySignature = artifact.getCompatibilitySignature();
     }
 
+    /**
+     * Creates a store from a validated landmark artifact.
+     */
     public static LandmarkStore fromArtifact(LandmarkArtifact artifact) {
         Objects.requireNonNull(artifact, "artifact");
         return new LandmarkStore(
@@ -71,6 +77,9 @@ public final class LandmarkStore {
         );
     }
 
+    /**
+     * Loads landmarks from a TARO FlatBuffer and computes compatibility signature.
+     */
     public static LandmarkStore fromFlatBuffer(ByteBuffer buffer, int expectedNodeCount) {
         Objects.requireNonNull(buffer, "buffer");
         ByteBuffer bb = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN);
@@ -82,10 +91,16 @@ public final class LandmarkStore {
         return fromModel(model, expectedNodeCount, compatibilitySignature);
     }
 
+    /**
+     * Loads landmarks from a parsed model without compatibility signature metadata.
+     */
     public static LandmarkStore fromModel(Model model, int expectedNodeCount) {
         return fromModel(model, expectedNodeCount, UNKNOWN_COMPATIBILITY_SIGNATURE);
     }
 
+    /**
+     * Internal model loader with explicit compatibility signature.
+     */
     private static LandmarkStore fromModel(Model model, int expectedNodeCount, long compatibilitySignature) {
         Objects.requireNonNull(model, "model");
         if (expectedNodeCount <= 0) {
@@ -134,20 +149,32 @@ public final class LandmarkStore {
         return new LandmarkStore(expectedNodeCount, nodeIds, forward, backward, compatibilitySignature);
     }
 
+    /**
+     * Returns the number of configured landmarks.
+     */
     public int landmarkCount() {
         return landmarkNodeIds.length;
     }
 
+    /**
+     * Returns forward landmark distance for one landmark/node pair.
+     */
     public float forwardDistance(int landmarkIndex, int nodeId) {
         validateIndices(landmarkIndex, nodeId);
         return forwardDistances[landmarkIndex][nodeId];
     }
 
+    /**
+     * Returns backward landmark distance for one landmark/node pair.
+     */
     public float backwardDistance(int landmarkIndex, int nodeId) {
         validateIndices(landmarkIndex, nodeId);
         return backwardDistances[landmarkIndex][nodeId];
     }
 
+    /**
+     * Returns ALT lower bound from {@code fromNodeId} to {@code goalNodeId}.
+     */
     public double lowerBound(int fromNodeId, int goalNodeId) {
         validateNodeId(fromNodeId);
         validateNodeId(goalNodeId);
@@ -168,20 +195,32 @@ public final class LandmarkStore {
         return best;
     }
 
+    /**
+     * Returns a defensive copy of landmark node ids.
+     */
     public int[] landmarkNodeIdsCopy() {
         return Arrays.copyOf(landmarkNodeIds, landmarkNodeIds.length);
     }
 
+    /**
+     * Returns whether this store carries a deterministic compatibility signature.
+     */
     public boolean hasCompatibilitySignature() {
         return compatibilitySignature != UNKNOWN_COMPATIBILITY_SIGNATURE;
     }
 
+    /**
+     * Computes signature from graph/profile contracts embedded in a model buffer.
+     */
     private static long computeCompatibilitySignature(ByteBuffer buffer) {
         EdgeGraph edgeGraph = EdgeGraph.fromFlatBuffer(buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN));
         ProfileStore profileStore = ProfileStore.fromFlatBuffer(buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN));
         return LandmarkCompatibility.computeSignature(edgeGraph, profileStore);
     }
 
+    /**
+     * Deep-copies all landmark rows from an artifact.
+     */
     private static float[][] copyRows(LandmarkArtifact artifact, boolean forward) {
         int count = artifact.landmarkCount();
         float[][] rows = new float[count][];
@@ -191,6 +230,9 @@ public final class LandmarkStore {
         return rows;
     }
 
+    /**
+     * Deep-copies a 2D distance matrix.
+     */
     private static float[][] copyRows(float[][] source) {
         float[][] copy = new float[source.length][];
         for (int i = 0; i < source.length; i++) {
@@ -199,12 +241,18 @@ public final class LandmarkStore {
         return copy;
     }
 
+    /**
+     * Validates one encoded distance value against landmark store constraints.
+     */
     private static void validateDistanceValue(float value, String field) {
         if (Float.isNaN(value) || value < 0.0f || value == Float.NEGATIVE_INFINITY) {
             throw new IllegalArgumentException(field + " must be >= 0, +INF, and non-NaN");
         }
     }
 
+    /**
+     * Returns {@code max(0, a-b)} when both values are finite, otherwise {@code 0}.
+     */
     private double differenceIfFinite(float a, float b) {
         if (!Float.isFinite(a) || !Float.isFinite(b)) {
             return 0.0d;
@@ -212,6 +260,9 @@ public final class LandmarkStore {
         return Math.max(0.0d, (double) a - b);
     }
 
+    /**
+     * Validates landmark and node indexes before matrix access.
+     */
     private void validateIndices(int landmarkIndex, int nodeId) {
         if (landmarkIndex < 0 || landmarkIndex >= landmarkNodeIds.length) {
             throw new IllegalArgumentException("landmarkIndex out of bounds: " + landmarkIndex);
@@ -219,6 +270,9 @@ public final class LandmarkStore {
         validateNodeId(nodeId);
     }
 
+    /**
+     * Validates node id against this store's node-count contract.
+     */
     private void validateNodeId(int nodeId) {
         if (nodeId < 0 || nodeId >= nodeCount) {
             throw new IllegalArgumentException("nodeId out of bounds: " + nodeId + " [0," + nodeCount + ")");

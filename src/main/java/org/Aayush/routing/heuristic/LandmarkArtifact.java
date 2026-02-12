@@ -56,14 +56,23 @@ public final class LandmarkArtifact {
         }
     }
 
+    /**
+     * Returns number of landmark rows in this artifact.
+     */
     public int landmarkCount() {
         return landmarkNodeIds.length;
     }
 
+    /**
+     * Returns a defensive copy of landmark node ids.
+     */
     public int[] landmarkNodeIdsCopy() {
         return Arrays.copyOf(landmarkNodeIds, landmarkNodeIds.length);
     }
 
+    /**
+     * Returns a defensive copy of one forward-distance row.
+     */
     public float[] forwardDistancesCopy(int landmarkIndex) {
         if (landmarkIndex < 0 || landmarkIndex >= forwardDistances.length) {
             throw new IllegalArgumentException("landmarkIndex out of bounds: " + landmarkIndex);
@@ -71,6 +80,9 @@ public final class LandmarkArtifact {
         return Arrays.copyOf(forwardDistances[landmarkIndex], nodeCount);
     }
 
+    /**
+     * Returns a defensive copy of one backward-distance row.
+     */
     public float[] backwardDistancesCopy(int landmarkIndex) {
         if (landmarkIndex < 0 || landmarkIndex >= backwardDistances.length) {
             throw new IllegalArgumentException("landmarkIndex out of bounds: " + landmarkIndex);
@@ -78,6 +90,9 @@ public final class LandmarkArtifact {
         return Arrays.copyOf(backwardDistances[landmarkIndex], nodeCount);
     }
 
+    /**
+     * Copies and validates landmark node ids for uniqueness and bounds.
+     */
     static int[] copyAndValidateLandmarkNodes(int[] nodeIds, int nodeCount) {
         Objects.requireNonNull(nodeIds, "landmarkNodeIds");
         if (nodeIds.length == 0) {
@@ -100,6 +115,9 @@ public final class LandmarkArtifact {
         return copy;
     }
 
+    /**
+     * Copies and validates a distance matrix for row width and value constraints.
+     */
     static float[][] copyAndValidateDistances(float[][] distances, int nodeCount, String fieldName) {
         Objects.requireNonNull(distances, fieldName);
         float[][] copy = new float[distances.length][];
@@ -116,6 +134,9 @@ public final class LandmarkArtifact {
         return copy;
     }
 
+    /**
+     * Validates one distance row for non-negative, non-NaN values.
+     */
     private static void validateDistanceRow(float[] row, String fieldName, int rowIndex) {
         for (int node = 0; node < row.length; node++) {
             float value = row[node];

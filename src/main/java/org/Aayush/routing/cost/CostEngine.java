@@ -154,6 +154,9 @@ public final class CostEngine {
         computeInternal(edgeId, fromEdgeId, entryTicks, out);
     }
 
+    /**
+     * Shared execution path for both scalar and explainable cost requests.
+     */
     private float computeInternal(int edgeId, int fromEdgeId, long entryTicks, MutableCostBreakdown out) {
         validateEdgeId(edgeId);
         validatePredecessor(fromEdgeId);
@@ -218,6 +221,9 @@ public final class CostEngine {
         return effectiveCost;
     }
 
+    /**
+     * Computes base-temporal-live edge travel cost without turn penalties.
+     */
     private float computeEdgeTravelCost(float baseWeight, float temporalMultiplier, float livePenalty) {
         if (livePenalty == Float.POSITIVE_INFINITY) {
             return Float.POSITIVE_INFINITY;
@@ -226,6 +232,9 @@ public final class CostEngine {
         return toNonNegativeCost(baseTemporal * livePenalty, "edgeTravelCost");
     }
 
+    /**
+     * Combines edge travel and turn penalties with overflow-safe saturation.
+     */
     private static float combineWithTurn(float edgeTravelCost, float turnPenalty) {
         if (edgeTravelCost == Float.POSITIVE_INFINITY || turnPenalty == Float.POSITIVE_INFINITY) {
             return Float.POSITIVE_INFINITY;
@@ -233,17 +242,26 @@ public final class CostEngine {
         return toNonNegativeCost((double) edgeTravelCost + turnPenalty, "effectiveCost");
     }
 
+    /**
+     * Converts entry time into fractional bucket coordinate within one day.
+     */
     private double toFractionalBucket(long entryTicks) {
         long timeOfDayTicks = TimeUtils.getTimeOfDayTicks(entryTicks, engineTimeUnit);
         return (double) timeOfDayTicks / (double) bucketSizeTicks;
     }
 
+    /**
+     * Validates edge id against graph bounds.
+     */
     private void validateEdgeId(int edgeId) {
         if (edgeId < 0 || edgeId >= edgeGraph.edgeCount()) {
             throw new IllegalArgumentException("edgeId out of range: " + edgeId + " [0, " + edgeGraph.edgeCount() + ")");
         }
     }
 
+    /**
+     * Validates predecessor edge id, allowing {@link #NO_PREDECESSOR}.
+     */
     private void validatePredecessor(int fromEdgeId) {
         if (fromEdgeId == NO_PREDECESSOR) {
             return;
@@ -255,24 +273,36 @@ public final class CostEngine {
         }
     }
 
+    /**
+     * Validates that a factor/cost component is finite and non-negative.
+     */
     private static void ensureFiniteNonNegative(float value, String name) {
         if (!Float.isFinite(value) || value < 0.0f) {
             throw new IllegalStateException(name + " must be finite and >= 0, got " + value);
         }
     }
 
+    /**
+     * Validates overlay multiplier contract ({@code >=1.0} or {@code +INF}).
+     */
     private static void ensureValidLivePenalty(float value) {
         if (Float.isNaN(value) || value < 1.0f) {
             throw new IllegalStateException("livePenaltyMultiplier must be >= 1.0 or +INF, got " + value);
         }
     }
 
+    /**
+     * Validates turn penalty contract ({@code >=0.0} or {@code +INF}).
+     */
     private static void ensureValidTurnPenalty(float value) {
         if (Float.isNaN(value) || value < 0.0f || value == Float.NEGATIVE_INFINITY) {
             throw new IllegalStateException("turnPenalty must be >= 0.0 or +INF, got " + value);
         }
     }
 
+    /**
+     * Converts intermediate double cost to float with overflow saturation.
+     */
     private static float toNonNegativeCost(double value, String label) {
         if (Double.isNaN(value) || value < 0.0d) {
             throw new IllegalStateException(label + " must be >= 0 and not NaN, got " + value);
@@ -305,10 +335,16 @@ public final class CostEngine {
             float edgeTravelCost,
             float effectiveCost
     ) {
+        /**
+         * Returns whether this transition was blocked by live overlay state.
+         */
         public boolean blockedByLive() {
             return liveState == LiveOverlay.LookupState.BLOCKED;
         }
 
+        /**
+         * Returns whether an explicit infinite turn penalty forbids transition.
+         */
         public boolean forbiddenTurn() {
             return turnPenaltyApplied && turnPenalty == Float.POSITIVE_INFINITY;
         }
@@ -336,6 +372,9 @@ public final class CostEngine {
         public float edgeTravelCost;
         public float effectiveCost;
 
+        /**
+         * Converts this mutable container into an immutable snapshot record.
+         */
         public CostBreakdown toImmutable() {
             return new CostBreakdown(
                     edgeId,

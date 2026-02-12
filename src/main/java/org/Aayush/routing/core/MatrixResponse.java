@@ -53,6 +53,9 @@ public class MatrixResponse {
         return deepCopy(arrivalTicks);
     }
 
+    /**
+     * Deep-copies a boolean matrix.
+     */
     private static boolean[][] deepCopy(boolean[][] source) {
         boolean[][] copy = new boolean[source.length][];
         for (int i = 0; i < source.length; i++) {
@@ -61,6 +64,9 @@ public class MatrixResponse {
         return copy;
     }
 
+    /**
+     * Deep-copies a float matrix.
+     */
     private static float[][] deepCopy(float[][] source) {
         float[][] copy = new float[source.length][];
         for (int i = 0; i < source.length; i++) {
@@ -69,6 +75,9 @@ public class MatrixResponse {
         return copy;
     }
 
+    /**
+     * Deep-copies a long matrix.
+     */
     private static long[][] deepCopy(long[][] source) {
         long[][] copy = new long[source.length][];
         for (int i = 0; i < source.length; i++) {

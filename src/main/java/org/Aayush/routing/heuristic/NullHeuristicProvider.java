@@ -25,6 +25,9 @@ public final class NullHeuristicProvider implements HeuristicProvider {
         this.zeroEstimator = new BoundNullHeuristic(nodeCount);
     }
 
+    /**
+     * Returns provider type discriminator.
+     */
     @Override
     public HeuristicType type() {
         return HeuristicType.NONE;
@@ -42,6 +45,9 @@ public final class NullHeuristicProvider implements HeuristicProvider {
         return zeroEstimator;
     }
 
+    /**
+     * Validates goal node id against graph bounds.
+     */
     private void validateGoalNodeId(int goalNodeId) {
         if (goalNodeId < 0 || goalNodeId >= nodeCount) {
             throw new IllegalArgumentException(
@@ -53,10 +59,16 @@ public final class NullHeuristicProvider implements HeuristicProvider {
     private static final class BoundNullHeuristic implements GoalBoundHeuristic {
         private final int nodeCount;
 
+        /**
+         * Creates a zero heuristic estimator with bound checks.
+         */
         private BoundNullHeuristic(int nodeCount) {
             this.nodeCount = nodeCount;
         }
 
+        /**
+         * Returns constant zero estimate for any valid node.
+         */
         @Override
         public double estimateFromNode(int nodeId) {
             if (nodeId < 0 || nodeId >= nodeCount) {
