@@ -2,6 +2,13 @@
 
 TARO is a time-dependent routing engine that treats travel cost as a function of entry time rather than a static weight. It provides a high-performance, data-driven “physics engine” for movement. Clients bring their own map and time-series data; TARO compiles it into a `.taro` model and serves time-aware routing for single-route and matrix queries.
 
+## Current Runtime Status
+- `RouteCore` facade is implemented for point-to-point and matrix routing.
+- Algorithms: `DIJKSTRA` and `A_STAR`.
+- Heuristics: `NONE`, `EUCLIDEAN`, `SPHERICAL`, and `LANDMARK` (with precomputed landmark data).
+- Stage 7 live overlay (`LiveOverlay`/`LiveUpdate`) is implemented and integrated into cost composition.
+- Matrix execution currently uses a temporary pairwise planner path (`TemporaryMatrixPlanner`) with a Stage 14 revisit note for one-to-many optimization.
+
 ## Architecture Summary
 TARO follows a dual-runtime pipeline:
 - **Python Builder (Compiler)**: Offline ETL, validation, compression, and FlatBuffers serialization into a `.taro` model.
@@ -31,10 +38,42 @@ mvn clean package
 mvn exec:java -Dexec.mainClass=org.Aayush.app.Main
 ```
 
-## API Endpoints (Planned)
-- `GET /route`: Point-to-point routing (A*).
-- `POST /matrix`: One-to-many matrix routing (Dijkstra).
-- `POST /engine/live`: Live traffic injection / overrides.
+## Programmatic Java API
+Primary runtime contract:
+- `org.Aayush.routing.core.RouterService#route(RouteRequest)`
+- `org.Aayush.routing.core.RouterService#matrix(MatrixRequest)`
+
+Example request usage:
+```java
+RouterService router = /* build RouteCore with graph/profile/cost/id-mapper */;
+
+RouteResponse route = router.route(
+        RouteRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N42")
+                .departureTicks(1_706_171_400L)
+                .algorithm(RoutingAlgorithm.A_STAR)
+                .heuristicType(HeuristicType.EUCLIDEAN)
+                .build()
+);
+
+MatrixResponse matrix = router.matrix(
+        MatrixRequest.builder()
+                .sourceExternalId("N0")
+                .sourceExternalId("N1")
+                .targetExternalId("N10")
+                .targetExternalId("N11")
+                .departureTicks(1_706_171_400L)
+                .algorithm(RoutingAlgorithm.DIJKSTRA)
+                .heuristicType(HeuristicType.NONE)
+                .build()
+);
+```
+
+## HTTP API Status
+- No production HTTP transport is wired yet in this repository.
+- Current integration surface is the in-process Java API (`RouterService`/`RouteCore`).
+- Planned endpoint shapes are still tracked in stage docs.
 
 ## Stage 7 Live Overlay (Implemented)
 - Runtime classes: `org.Aayush.routing.overlay.LiveOverlay`, `org.Aayush.routing.overlay.LiveUpdate`
@@ -93,9 +132,11 @@ This keeps the schema namespace as `taro.model` but rewrites Java packages to
 - `src/main/java/org/Aayush/app/`: runtime entrypoints
 - `src/main/java/org/Aayush/core/id/`: ID mapping contracts and implementations
 - `src/main/java/org/Aayush/core/time/`: temporal utility functions
+- `src/main/java/org/Aayush/routing/core/`: RouteCore facade, request/response models, planners
 - `src/main/java/org/Aayush/routing/graph/`: graph topology and turn-cost structures
 - `src/main/java/org/Aayush/routing/search/`: queue/state/visited search primitives
 - `src/main/java/org/Aayush/routing/overlay/`: live runtime overlay for edge speed overrides
+- `src/main/java/org/Aayush/routing/heuristic/`: heuristic providers, calibration, landmark preprocessing/store
 - `src/main/java/org/Aayush/serialization/flatbuffers/`: generated FlatBuffers Java bindings
 - `src/test/java/org/Aayush/...`: tests mirrored to the same package boundaries
 - `src/main/python/`: Python utilities and builder components
@@ -109,6 +150,11 @@ This keeps the schema namespace as `taro.model` but rewrites Java packages to
 - Keep `core` framework-agnostic and reusable (no graph/search assumptions).
 - Treat `serialization.flatbuffers` as generated-only code.
 - Mirror tests to the package they validate so package-private contracts can be tested safely.
+
+## Documentation & Lombok Conventions
+- Add class-level and API-level Javadocs for new runtime classes, especially in `routing/core` and `routing/heuristic`.
+- Prefer Lombok for low-value boilerplate (`@Getter`, `@Builder`, `@Value`, `@RequiredArgsConstructor`, `@UtilityClass`) when it keeps behavior explicit and testable.
+- Keep generated FlatBuffers outputs untouched; apply documentation and Lombok conventions to hand-written runtime code only.
 
 ## License
 MIT. See `LICENSE`.
