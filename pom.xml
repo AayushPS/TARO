@@ -120,15 +120,15 @@
                                                     <minimum>0.90</minimum>
                                                 </limit>
                                             </limits>
-                                </rule>
-                            </rules>
-                            <excludes>
-                                <exclude>**/flatbuffers/**</exclude>
-                            </excludes>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
+                                        </rule>
+                                    </rules>
+                                <excludes>
+                                    <exclude>**/flatbuffers/**</exclude>
+                                </excludes>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                 </plugins>
             </build>
         </profile>

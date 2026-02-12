@@ -133,6 +133,42 @@ class SpatialRuntimeTest {
     }
 
     @Test
+    @DisplayName("Correctness: two-arg loader defaults to enabled runtime")
+    void testTwoArgLoaderDefaultsToEnabled() {
+        double[] coordinates = {
+                0.0, 0.0,
+                1.0, 1.0
+        };
+        KDNodeSpec[] nodes = {
+                new KDNodeSpec(0.0f, -1, -1, 0, 2, 0, 1)
+        };
+        int[] leafItems = {0, 1};
+
+        ByteBuffer model = buildModelBuffer(coordinates, nodes, leafItems, 0, true);
+        EdgeGraph graph = loadGraph(model);
+        SpatialRuntime runtime = SpatialRuntime.fromFlatBuffer(model.duplicate().order(ByteOrder.LITTLE_ENDIAN), graph);
+
+        assertTrue(runtime.enabled());
+        assertEquals(1, runtime.treeNodeCount());
+        assertEquals(2, runtime.leafItemCount());
+    }
+
+    @Test
+    @DisplayName("Correctness: toString reports enabled state and sizes")
+    void testToStringContainsRuntimeShape() {
+        RuntimeFixture fixture = buildFixture(new double[]{
+                0.0, 0.0,
+                1.0, 1.0,
+                2.0, 2.0
+        }, 2);
+        String text = fixture.runtime().toString();
+
+        assertTrue(text.contains("enabled=true"));
+        assertTrue(text.contains("treeNodes="));
+        assertTrue(text.contains("leafItems="));
+    }
+
+    @Test
     @DisplayName("Correctness: enabled runtime rejects missing spatial index")
     void testMissingSpatialIndexRejectedWhenEnabled() {
         double[] coordinates = {
@@ -230,6 +266,109 @@ class SpatialRuntimeTest {
         EdgeGraph badLeafItemGraph = loadGraph(badLeafItem);
         assertThrows(IllegalArgumentException.class, () ->
                 SpatialRuntime.fromFlatBuffer(badLeafItem.duplicate().order(ByteOrder.LITTLE_ENDIAN), badLeafItemGraph, true));
+
+        // invalid is_leaf flag
+        ByteBuffer badLeafFlag = buildModelBuffer(
+                coordinates,
+                new KDNodeSpec[]{new KDNodeSpec(0.0f, -1, -1, 0, 2, 0, 2)},
+                new int[]{0, 1},
+                0,
+                true
+        );
+        EdgeGraph badLeafFlagGraph = loadGraph(badLeafFlag);
+        assertThrows(IllegalArgumentException.class, () ->
+                SpatialRuntime.fromFlatBuffer(badLeafFlag.duplicate().order(ByteOrder.LITTLE_ENDIAN), badLeafFlagGraph, true));
+
+        // leaf nodes must not have child links
+        ByteBuffer badLeafChildren = buildModelBuffer(
+                coordinates,
+                new KDNodeSpec[]{new KDNodeSpec(0.0f, 0, -1, 0, 2, 0, 1)},
+                new int[]{0, 1},
+                0,
+                true
+        );
+        EdgeGraph badLeafChildrenGraph = loadGraph(badLeafChildren);
+        assertThrows(IllegalArgumentException.class, () ->
+                SpatialRuntime.fromFlatBuffer(badLeafChildren.duplicate().order(ByteOrder.LITTLE_ENDIAN), badLeafChildrenGraph, true));
+
+        // internal nodes must have at least one child
+        ByteBuffer badInternalNoChildren = buildModelBuffer(
+                coordinates,
+                new KDNodeSpec[]{new KDNodeSpec(0.0f, -1, -1, 0, 0, 0, 0)},
+                new int[]{0, 1},
+                0,
+                true
+        );
+        EdgeGraph badInternalNoChildrenGraph = loadGraph(badInternalNoChildren);
+        assertThrows(IllegalArgumentException.class, () ->
+                SpatialRuntime.fromFlatBuffer(
+                        badInternalNoChildren.duplicate().order(ByteOrder.LITTLE_ENDIAN),
+                        badInternalNoChildrenGraph,
+                        true
+                ));
+
+        // child indices must be in bounds (or -1)
+        ByteBuffer badChildOutOfBounds = buildModelBuffer(
+                coordinates,
+                new KDNodeSpec[]{new KDNodeSpec(0.0f, 3, -1, 0, 0, 0, 0)},
+                new int[]{0, 1},
+                0,
+                true
+        );
+        EdgeGraph badChildOutOfBoundsGraph = loadGraph(badChildOutOfBounds);
+        assertThrows(IllegalArgumentException.class, () ->
+                SpatialRuntime.fromFlatBuffer(
+                        badChildOutOfBounds.duplicate().order(ByteOrder.LITTLE_ENDIAN),
+                        badChildOutOfBoundsGraph,
+                        true
+                ));
+
+        // child indices below -1 are invalid
+        ByteBuffer badChildNegative = buildModelBuffer(
+                coordinates,
+                new KDNodeSpec[]{new KDNodeSpec(0.0f, -2, -1, 0, 0, 0, 0)},
+                new int[]{0, 1},
+                0,
+                true
+        );
+        EdgeGraph badChildNegativeGraph = loadGraph(badChildNegative);
+        assertThrows(IllegalArgumentException.class, () ->
+                SpatialRuntime.fromFlatBuffer(
+                        badChildNegative.duplicate().order(ByteOrder.LITTLE_ENDIAN),
+                        badChildNegativeGraph,
+                        true
+                ));
+
+        // reachable tree cannot share a child (must be a strict tree)
+        ByteBuffer badSharedChild = buildModelBuffer(
+                coordinates,
+                new KDNodeSpec[]{
+                        new KDNodeSpec(0.0f, 1, 1, 0, 0, 0, 0),
+                        new KDNodeSpec(0.0f, -1, -1, 0, 1, 0, 1)
+                },
+                new int[]{0},
+                0,
+                true
+        );
+        EdgeGraph badSharedChildGraph = loadGraph(badSharedChild);
+        assertThrows(IllegalArgumentException.class, () ->
+                SpatialRuntime.fromFlatBuffer(badSharedChild.duplicate().order(ByteOrder.LITTLE_ENDIAN), badSharedChildGraph, true));
+
+        // tree must expose at least one reachable payload item
+        ByteBuffer badReachablePayload = buildModelBuffer(
+                coordinates,
+                new KDNodeSpec[]{new KDNodeSpec(0.0f, -1, -1, 0, 0, 0, 1)},
+                new int[]{0},
+                0,
+                true
+        );
+        EdgeGraph badReachablePayloadGraph = loadGraph(badReachablePayload);
+        assertThrows(IllegalArgumentException.class, () ->
+                SpatialRuntime.fromFlatBuffer(
+                        badReachablePayload.duplicate().order(ByteOrder.LITTLE_ENDIAN),
+                        badReachablePayloadGraph,
+                        true
+                ));
     }
 
     @Test

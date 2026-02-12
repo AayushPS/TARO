@@ -22,8 +22,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * <li>O(1) expected lookup/update with {@link ConcurrentHashMap}.</li>
  * <li>Thread-safe concurrent readers and serialized writers.</li>
  * <li>Immutable published entries (writers replace the full entry atomically).</li>
- * <li>Hybrid cleanup:
- *     scheduled sweep + write-budgeted cleanup + optional read-opportunistic cleanup.</li>
+ * <li>Hybrid cleanup: scheduled sweep + write-budgeted cleanup.</li>
  * <li>Hard memory cap with configurable overflow policy.</li>
  * </ul>
  * <p>
@@ -151,8 +150,7 @@ public final class LiveOverlay {
 
     /**
      * Constructs an overlay with default operational policy:
-     * {@link CapacityPolicy#EVICT_EXPIRED_THEN_REJECT}, write cleanup budget {@code 32},
-     * and read-opportunistic cleanup enabled.
+     * {@link CapacityPolicy#EVICT_EXPIRED_THEN_REJECT} and write cleanup budget {@code 32}.
      *
      * @param maxLiveOverrides hard upper bound for number of tracked edge overrides.
      */
@@ -166,7 +164,7 @@ public final class LiveOverlay {
      * @param maxLiveOverrides hard upper bound for number of tracked edge overrides; must be {@code > 0}.
      * @param capacityPolicy overflow policy used when adding a new edge at capacity.
      * @param writeCleanupBudget number of expired entries to attempt to remove at ingest start; must be {@code >= 0}.
-     * @param readCleanupEnabled if true, lookup performs at most one opportunistic removal for expired entries.
+     * @param readCleanupEnabled retained for backward compatibility; lookup is side-effect free.
      */
     public LiveOverlay(
             int maxLiveOverrides,
@@ -191,9 +189,8 @@ public final class LiveOverlay {
     /**
      * Looks up the live state of one edge at the given engine time.
      * <p>
-     * Read path is lock-free with a single hash lookup. If an entry is expired, this method
-     * returns {@link LookupState#EXPIRED}; optionally it also performs one best-effort remove
-     * when read cleanup is enabled.
+     * Read path is lock-free with a single hash lookup and does not mutate internal state.
+     * If an entry is expired, this method returns {@link LookupState#EXPIRED}.
      * </p>
      *
      * @param edgeId edge identifier (must be non-negative).
@@ -208,10 +205,6 @@ public final class LiveOverlay {
         }
 
         if (entry.validUntilTicks <= nowTicks) {
-            if (readCleanupEnabled) {
-                // Opportunistic read cleanup with strict per-read cap of one remove.
-                entries.remove(edgeId, entry);
-            }
             return EXPIRED_RESULT;
         }
 

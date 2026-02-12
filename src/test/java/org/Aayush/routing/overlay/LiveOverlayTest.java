@@ -120,8 +120,8 @@ class LiveOverlayTest {
         assertTrue(overlay.upsert(LiveUpdate.of(2, 0.8f, 30), 0));
         LiveOverlay.LookupResult expired = overlay.lookup(2, 30);
         assertEquals(LiveOverlay.LookupState.EXPIRED, expired.state());
-        // Read-path opportunistic cleanup should remove this stale entry.
-        assertEquals(LiveOverlay.LookupState.MISSING, overlay.lookup(2, 30).state());
+        assertEquals(LiveOverlay.LookupState.EXPIRED, overlay.lookup(2, 30).state());
+        assertEquals(2, overlay.size(), "Lookup should not mutate overlay state");
     }
 
     @Test
@@ -255,6 +255,26 @@ class LiveOverlayTest {
         assertEquals(1, removed);
         assertEquals(1, overlay.size());
         assertEquals(LiveOverlay.LookupState.ACTIVE, overlay.lookup(4, 10).state());
+    }
+
+    @Test
+    @DisplayName("Lookup reads do not mutate repeated expired-entry semantics")
+    void testLookupStabilityForExpiredEntries() {
+        LiveOverlay overlay = new LiveOverlay(
+                4,
+                LiveOverlay.CapacityPolicy.REJECT_BATCH,
+                0,
+                true
+        );
+        assertTrue(overlay.upsert(LiveUpdate.of(9, 0.8f, 10), 0));
+
+        LiveOverlay.LookupResult first = overlay.lookup(9, 10);
+        LiveOverlay.LookupResult second = overlay.lookup(9, 10);
+        assertEquals(LiveOverlay.LookupState.EXPIRED, first.state());
+        assertEquals(LiveOverlay.LookupState.EXPIRED, second.state());
+        assertEquals(1.0f, first.livePenaltyMultiplier(), 0.0001f);
+        assertEquals(1.0f, second.livePenaltyMultiplier(), 0.0001f);
+        assertEquals(1, overlay.size(), "Expired entry cleanup should not happen on read");
     }
 
     @Test

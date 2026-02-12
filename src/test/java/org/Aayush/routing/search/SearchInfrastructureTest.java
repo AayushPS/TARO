@@ -276,6 +276,39 @@ class SearchInfrastructureTest {
             queue.recycle(first);
             queue.recycle(second);
         }
+
+        @Test
+        @DisplayName("Diagnostics: pool utilization tracks active-state ratio")
+        void testPoolUtilization() {
+            SearchQueue queue = new SearchQueue(10, 4);
+            assertEquals(0.0d, queue.getPoolUtilization(), 1e-12);
+
+            queue.insert(1, 10, 1.0f, -1);
+            queue.insert(2, 20, 2.0f, -1);
+            assertEquals(0.5d, queue.getPoolUtilization(), 1e-12);
+
+            SearchState state = queue.extractMin();
+            assertEquals(0.5d, queue.getPoolUtilization(), 1e-12);
+            queue.recycle(state);
+            assertEquals(0.25d, queue.getPoolUtilization(), 1e-12);
+
+            queue.clear();
+            assertEquals(0.0d, queue.getPoolUtilization(), 1e-12);
+        }
+
+        @Test
+        @DisplayName("Validation: recycle allows null and rejects double-recycle")
+        void testRecycleNullAndDoubleRecycleGuard() {
+            SearchQueue queue = new SearchQueue(10, 1);
+            queue.recycle(null); // no-op path
+
+            queue.insert(1, 0, 1.0f, -1);
+            SearchState state = queue.extractMin();
+            queue.recycle(state);
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> queue.recycle(state));
+            assertTrue(ex.getMessage().contains("double-recycle") || ex.getMessage().contains("overflow"));
+        }
     }
 
     @Nested

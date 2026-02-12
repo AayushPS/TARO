@@ -110,6 +110,20 @@ public final class CostEngine {
     }
 
     /**
+     * Exposes the graph contract used by this cost engine.
+     */
+    public EdgeGraph edgeGraph() {
+        return edgeGraph;
+    }
+
+    /**
+     * Exposes the profile contract used by this cost engine.
+     */
+    public ProfileStore profileStore() {
+        return profileStore;
+    }
+
+    /**
      * Convenience overload for requests without predecessor transition.
      */
     public float computeEdgeCost(int edgeId, long entryTicks) {
