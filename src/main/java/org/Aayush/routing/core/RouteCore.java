@@ -43,6 +43,9 @@ public final class RouteCore implements RouterService {
     public static final String REASON_COST_ENGINE_GRAPH_MISMATCH = "H12_COST_ENGINE_GRAPH_MISMATCH";
     public static final String REASON_COST_ENGINE_PROFILE_MISMATCH = "H12_COST_ENGINE_PROFILE_MISMATCH";
     public static final String REASON_EXTERNAL_MAPPING_FAILED = "H12_EXTERNAL_MAPPING_FAILED";
+    public static final String REASON_SEARCH_BUDGET_EXCEEDED = "H13_SEARCH_BUDGET_EXCEEDED";
+    public static final String REASON_NUMERIC_SAFETY_BREACH = "H13_NUMERIC_SAFETY_BREACH";
+    public static final String REASON_PATH_EVALUATION_FAILED = "H13_PATH_EVALUATION_FAILED";
 
     private static final GoalBoundHeuristic ZERO_HEURISTIC = nodeId -> 0.0d;
 
@@ -74,7 +77,8 @@ public final class RouteCore implements RouterService {
             CostEngine costEngine,
             IDMapper nodeIdMapper,
             LandmarkStore landmarkStore,
-            MatrixPlanner matrixPlanner
+            MatrixPlanner matrixPlanner,
+            RoutePlanner aStarPlanner
     ) {
         this.edgeGraph = Objects.requireNonNull(edgeGraph, "edgeGraph");
         this.profileStore = Objects.requireNonNull(profileStore, "profileStore");
@@ -83,9 +87,11 @@ public final class RouteCore implements RouterService {
         this.landmarkStore = landmarkStore;
         this.matrixPlanner = matrixPlanner == null ? new TemporaryMatrixPlanner() : matrixPlanner;
         this.dijkstraPlanner = new EdgeBasedRoutePlanner(false);
-        this.aStarPlanner = new EdgeBasedRoutePlanner(true);
 
         ensureCostEngineContracts();
+        this.aStarPlanner = aStarPlanner == null
+                ? new BidirectionalTdAStarPlanner(edgeGraph, costEngine)
+                : aStarPlanner;
         heuristicProviders.put(
                 HeuristicType.NONE,
                 HeuristicFactory.create(HeuristicType.NONE, edgeGraph, profileStore, costEngine, landmarkStore)
@@ -152,7 +158,27 @@ public final class RouteCore implements RouterService {
             case DIJKSTRA -> dijkstraPlanner;
             case A_STAR -> aStarPlanner;
         };
-        return planner.compute(edgeGraph, costEngine, heuristic, request);
+        try {
+            return planner.compute(edgeGraph, costEngine, heuristic, request);
+        } catch (SearchBudget.BudgetExceededException ex) {
+            throw new RouteCoreException(
+                    REASON_SEARCH_BUDGET_EXCEEDED,
+                    ex.reasonCode() + ": " + ex.getMessage(),
+                    ex
+            );
+        } catch (TerminationPolicy.NumericSafetyException ex) {
+            throw new RouteCoreException(
+                    REASON_NUMERIC_SAFETY_BREACH,
+                    ex.reasonCode() + ": " + ex.getMessage(),
+                    ex
+            );
+        } catch (PathEvaluator.PathEvaluationException ex) {
+            throw new RouteCoreException(
+                    REASON_PATH_EVALUATION_FAILED,
+                    ex.reasonCode() + ": " + ex.getMessage(),
+                    ex
+            );
+        }
     }
 
     /**

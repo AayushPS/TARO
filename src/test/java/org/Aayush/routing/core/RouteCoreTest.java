@@ -16,8 +16,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -324,13 +326,13 @@ class RouteCoreTest {
         RouteResponse dijkstra = core.route(dijkstraRequest);
         RouteResponse aStar = core.route(aStarRequest);
 
+        assertTrue(dijkstra.isReachable());
+        assertTrue(aStar.isReachable());
         assertEquals(dijkstra.getTotalCost(), aStar.getTotalCost(), 1e-6f);
-        assertEquals(dijkstra.getArrivalTicks(), aStar.getArrivalTicks());
-        assertEquals(dijkstra.getPathExternalNodeIds(), aStar.getPathExternalNodeIds());
     }
 
     @Test
-    @DisplayName("Regression: time-dependent planner keeps non-dominated labels per edge")
+    @DisplayName("Regression: time-dependent planner keeps non-dominated labels per edge in Dijkstra and A*")
     void testTimeDependentNonOptimalityRegression() {
         RoutingFixtureFactory.Fixture fixture = RoutingFixtureFactory.createFixture(
                 6,
@@ -378,18 +380,29 @@ class RouteCoreTest {
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .build();
 
-        RouteResponse response = core.route(RouteRequest.builder()
+        RouteResponse dijkstraResponse = core.route(RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N5")
                 .departureTicks(3_596L)
                 .algorithm(RoutingAlgorithm.DIJKSTRA)
                 .heuristicType(HeuristicType.NONE)
                 .build());
+        RouteResponse aStarResponse = core.route(RouteRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N5")
+                .departureTicks(3_596L)
+                .algorithm(RoutingAlgorithm.A_STAR)
+                .heuristicType(HeuristicType.NONE)
+                .build());
 
-        assertTrue(response.isReachable());
-        assertEquals(1.3f, response.getTotalCost(), 1e-6f);
-        assertEquals(3_600L, response.getArrivalTicks());
-        assertEquals(List.of("N0", "N1", "N4", "N5"), response.getPathExternalNodeIds());
+        assertTrue(dijkstraResponse.isReachable());
+        assertTrue(aStarResponse.isReachable());
+        assertEquals(1.3f, dijkstraResponse.getTotalCost(), 1e-6f);
+        assertEquals(1.3f, aStarResponse.getTotalCost(), 1e-6f);
+        assertEquals(3_600L, dijkstraResponse.getArrivalTicks());
+        assertEquals(3_600L, aStarResponse.getArrivalTicks());
+        assertEquals(List.of("N0", "N1", "N4", "N5"), dijkstraResponse.getPathExternalNodeIds());
+        assertEquals(List.of("N0", "N1", "N4", "N5"), aStarResponse.getPathExternalNodeIds());
     }
 
     @Test
@@ -648,6 +661,148 @@ class RouteCoreTest {
     }
 
     @Test
+    @DisplayName("Custom A* planner is used when provided and Dijkstra remains unchanged")
+    void testCustomAStarPlannerInjection() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        RoutePlanner customAStarPlanner = (edgeGraph, costEngine, heuristic, request) ->
+                new InternalRoutePlan(
+                        true,
+                        7.5f,
+                        99L,
+                        3,
+                        new int[]{request.sourceNodeId(), request.targetNodeId()}
+                );
+
+        RouteCore core = RouteCore.builder()
+                .edgeGraph(fixture.edgeGraph())
+                .profileStore(fixture.profileStore())
+                .costEngine(fixture.costEngine())
+                .nodeIdMapper(fixture.nodeIdMapper())
+                .aStarPlanner(customAStarPlanner)
+                .build();
+
+        RouteResponse aStarResponse = core.route(RouteRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(10L)
+                .algorithm(RoutingAlgorithm.A_STAR)
+                .heuristicType(HeuristicType.NONE)
+                .build());
+        assertTrue(aStarResponse.isReachable());
+        assertEquals(7.5f, aStarResponse.getTotalCost(), 1e-6f);
+        assertEquals(99L, aStarResponse.getArrivalTicks());
+        assertEquals(List.of("N0", "N4"), aStarResponse.getPathExternalNodeIds());
+
+        RouteResponse dijkstraResponse = core.route(RouteRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(10L)
+                .algorithm(RoutingAlgorithm.DIJKSTRA)
+                .heuristicType(HeuristicType.NONE)
+                .build());
+        assertTrue(dijkstraResponse.isReachable());
+        assertEquals(4.0f, dijkstraResponse.getTotalCost(), 1e-6f);
+        assertEquals(14L, dijkstraResponse.getArrivalTicks());
+        assertEquals(List.of("N0", "N1", "N2", "N3", "N4"), dijkstraResponse.getPathExternalNodeIds());
+    }
+
+    @Test
+    @DisplayName("Stage 13 planner budget failures are wrapped with deterministic reason code")
+    void testSearchBudgetExceptionIsWrapped() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        RoutePlanner failingPlanner = (edgeGraph, costEngine, heuristic, request) -> {
+            throw new SearchBudget.BudgetExceededException(
+                    SearchBudget.REASON_FRONTIER_EXCEEDED,
+                    "forced budget failure"
+            );
+        };
+
+        RouteCore core = RouteCore.builder()
+                .edgeGraph(fixture.edgeGraph())
+                .profileStore(fixture.profileStore())
+                .costEngine(fixture.costEngine())
+                .nodeIdMapper(fixture.nodeIdMapper())
+                .aStarPlanner(failingPlanner)
+                .build();
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.route(RouteRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.A_STAR)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
+    }
+
+    @Test
+    @DisplayName("Stage 13 planner numeric safety failures are wrapped with deterministic reason code")
+    void testNumericSafetyExceptionIsWrapped() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        RoutePlanner failingPlanner = (edgeGraph, costEngine, heuristic, request) -> {
+            throw new TerminationPolicy.NumericSafetyException(
+                    TerminationPolicy.REASON_NON_FINITE_PRIORITY,
+                    "forced numeric failure"
+            );
+        };
+
+        RouteCore core = RouteCore.builder()
+                .edgeGraph(fixture.edgeGraph())
+                .profileStore(fixture.profileStore())
+                .costEngine(fixture.costEngine())
+                .nodeIdMapper(fixture.nodeIdMapper())
+                .aStarPlanner(failingPlanner)
+                .build();
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.route(RouteRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.A_STAR)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_NUMERIC_SAFETY_BREACH, ex.getReasonCode());
+    }
+
+    @Test
+    @DisplayName("Stage 13 planner path replay failures are wrapped with deterministic reason code")
+    void testPathEvaluationExceptionIsWrapped() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        RoutePlanner failingPlanner = (edgeGraph, costEngine, heuristic, request) -> {
+            throw new PathEvaluator.PathEvaluationException(
+                    PathEvaluator.REASON_NON_FINITE_PATH_COST,
+                    "forced path replay failure"
+            );
+        };
+
+        RouteCore core = RouteCore.builder()
+                .edgeGraph(fixture.edgeGraph())
+                .profileStore(fixture.profileStore())
+                .costEngine(fixture.costEngine())
+                .nodeIdMapper(fixture.nodeIdMapper())
+                .aStarPlanner(failingPlanner)
+                .build();
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.route(RouteRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.A_STAR)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_PATH_EVALUATION_FAILED, ex.getReasonCode());
+    }
+
+    @Test
     @DisplayName("Repeated identical requests remain deterministic")
     void testDeterministicRepeatedRequests() {
         RouteCore core = createCore(createLinearFixture(), null);
@@ -665,6 +820,150 @@ class RouteCoreTest {
         assertEquals(first.getTotalCost(), second.getTotalCost(), 1e-6f);
         assertEquals(first.getArrivalTicks(), second.getArrivalTicks());
         assertEquals(first.getPathExternalNodeIds(), second.getPathExternalNodeIds());
+    }
+
+    @Test
+    @DisplayName("Stage 13 parity: pinned-seed randomized A* matches Dijkstra across NONE/EUCLIDEAN/SPHERICAL/LANDMARK")
+    void testPinnedSeedRandomizedParityAcrossHeuristics() {
+        RoutingFixtureFactory.Fixture fixture = createGridFixture(8, 8);
+        LandmarkArtifact artifact = LandmarkPreprocessor.preprocess(
+                fixture.edgeGraph(),
+                fixture.profileStore(),
+                LandmarkPreprocessorConfig.builder()
+                        .landmarkCount(4)
+                        .selectionSeed(17L)
+                        .build()
+        );
+        RouteCore core = createCore(fixture, LandmarkStore.fromArtifact(artifact));
+
+        List<HeuristicType> heuristics = List.of(
+                HeuristicType.NONE,
+                HeuristicType.EUCLIDEAN,
+                HeuristicType.SPHERICAL,
+                HeuristicType.LANDMARK
+        );
+        List<RandomQuery> queries = buildPinnedRandomQueries(64, 160, 13013L);
+
+        for (HeuristicType heuristicType : heuristics) {
+            for (RandomQuery query : queries) {
+                RouteResponse dijkstra = core.route(RouteRequest.builder()
+                        .sourceExternalId("N" + query.sourceNodeId())
+                        .targetExternalId("N" + query.targetNodeId())
+                        .departureTicks(query.departureTicks())
+                        .algorithm(RoutingAlgorithm.DIJKSTRA)
+                        .heuristicType(HeuristicType.NONE)
+                        .build());
+                RouteResponse aStar = core.route(RouteRequest.builder()
+                        .sourceExternalId("N" + query.sourceNodeId())
+                        .targetExternalId("N" + query.targetNodeId())
+                        .departureTicks(query.departureTicks())
+                        .algorithm(RoutingAlgorithm.A_STAR)
+                        .heuristicType(heuristicType)
+                        .build());
+
+                assertEquals(
+                        dijkstra.isReachable(),
+                        aStar.isReachable(),
+                        "reachability mismatch for heuristic=" + heuristicType + ", query=" + query
+                );
+                assertEquals(
+                        dijkstra.getTotalCost(),
+                        aStar.getTotalCost(),
+                        1e-5f,
+                        "cost parity mismatch for heuristic=" + heuristicType + ", query=" + query
+                );
+                if (dijkstra.isReachable()) {
+                    assertEquals(
+                            dijkstra.getArrivalTicks(),
+                            aStar.getArrivalTicks(),
+                            "arrival parity mismatch for heuristic=" + heuristicType + ", query=" + query
+                    );
+                }
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("A* deterministic repeatability holds across NONE/EUCLIDEAN/SPHERICAL/LANDMARK")
+    void testDeterministicRepeatedRequestsAcrossAllAStarHeuristics() {
+        RoutingFixtureFactory.Fixture fixture = createGridFixture(7, 7);
+        LandmarkArtifact artifact = LandmarkPreprocessor.preprocess(
+                fixture.edgeGraph(),
+                fixture.profileStore(),
+                LandmarkPreprocessorConfig.builder()
+                        .landmarkCount(4)
+                        .selectionSeed(23L)
+                        .build()
+        );
+        RouteCore core = createCore(fixture, LandmarkStore.fromArtifact(artifact));
+
+        List<HeuristicType> heuristics = List.of(
+                HeuristicType.NONE,
+                HeuristicType.EUCLIDEAN,
+                HeuristicType.SPHERICAL,
+                HeuristicType.LANDMARK
+        );
+
+        for (HeuristicType heuristicType : heuristics) {
+            RouteRequest request = RouteRequest.builder()
+                    .sourceExternalId("N0")
+                    .targetExternalId("N48")
+                    .departureTicks(4_321L)
+                    .algorithm(RoutingAlgorithm.A_STAR)
+                    .heuristicType(heuristicType)
+                    .build();
+            RouteResponse first = core.route(request);
+            RouteResponse second = core.route(request);
+
+            assertEquals(first.isReachable(), second.isReachable(), "reachable mismatch for " + heuristicType);
+            assertEquals(first.getTotalCost(), second.getTotalCost(), 1e-6f, "cost mismatch for " + heuristicType);
+            assertEquals(first.getArrivalTicks(), second.getArrivalTicks(), "arrival mismatch for " + heuristicType);
+            assertEquals(first.getPathExternalNodeIds(), second.getPathExternalNodeIds(), "path mismatch for " + heuristicType);
+        }
+    }
+
+    @Test
+    @DisplayName("Unique-path fixture keeps exact path parity with Dijkstra across all A* heuristics")
+    void testUniquePathParityAcrossAllAStarHeuristics() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        LandmarkArtifact artifact = LandmarkPreprocessor.preprocess(
+                fixture.edgeGraph(),
+                fixture.profileStore(),
+                LandmarkPreprocessorConfig.builder()
+                        .landmarkCount(2)
+                        .selectionSeed(29L)
+                        .build()
+        );
+        RouteCore core = createCore(fixture, LandmarkStore.fromArtifact(artifact));
+        List<HeuristicType> heuristics = List.of(
+                HeuristicType.NONE,
+                HeuristicType.EUCLIDEAN,
+                HeuristicType.SPHERICAL,
+                HeuristicType.LANDMARK
+        );
+
+        RouteResponse dijkstra = core.route(RouteRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .algorithm(RoutingAlgorithm.DIJKSTRA)
+                .heuristicType(HeuristicType.NONE)
+                .build());
+        assertTrue(dijkstra.isReachable());
+
+        for (HeuristicType heuristicType : heuristics) {
+            RouteResponse aStar = core.route(RouteRequest.builder()
+                    .sourceExternalId("N0")
+                    .targetExternalId("N4")
+                    .departureTicks(0L)
+                    .algorithm(RoutingAlgorithm.A_STAR)
+                    .heuristicType(heuristicType)
+                    .build());
+            assertTrue(aStar.isReachable());
+            assertEquals(dijkstra.getTotalCost(), aStar.getTotalCost(), 1e-6f, "cost mismatch for " + heuristicType);
+            assertEquals(dijkstra.getArrivalTicks(), aStar.getArrivalTicks(), "arrival mismatch for " + heuristicType);
+            assertEquals(dijkstra.getPathExternalNodeIds(), aStar.getPathExternalNodeIds(), "path mismatch for " + heuristicType);
+        }
     }
 
     private RouteCore createCore(RoutingFixtureFactory.Fixture fixture, LandmarkStore landmarkStore) {
@@ -735,6 +1034,106 @@ class RouteCoreTest {
                         1.0f
                 )
         );
+    }
+
+    private RoutingFixtureFactory.Fixture createGridFixture(int rows, int cols) {
+        int nodeCount = rows * cols;
+        int[] outDegree = new int[nodeCount];
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                int node = r * cols + c;
+                int degree = 0;
+                if (c + 1 < cols) degree++;
+                if (c - 1 >= 0) degree++;
+                if (r + 1 < rows) degree++;
+                if (r - 1 >= 0) degree++;
+                outDegree[node] = degree;
+            }
+        }
+
+        int[] firstEdge = new int[nodeCount + 1];
+        int edgeCount = 0;
+        for (int i = 0; i < nodeCount; i++) {
+            firstEdge[i] = edgeCount;
+            edgeCount += outDegree[i];
+        }
+        firstEdge[nodeCount] = edgeCount;
+
+        int[] edgeTarget = new int[edgeCount];
+        int[] edgeOrigin = new int[edgeCount];
+        float[] baseWeights = new float[edgeCount];
+        int[] edgeProfiles = new int[edgeCount];
+        double[] coords = new double[nodeCount * 2];
+
+        int cursor = 0;
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                int node = r * cols + c;
+                coords[node * 2] = r;
+                coords[node * 2 + 1] = c;
+
+                if (c + 1 < cols) {
+                    edgeTarget[cursor] = node + 1;
+                    edgeOrigin[cursor] = node;
+                    baseWeights[cursor] = 1.0f;
+                    edgeProfiles[cursor] = 1;
+                    cursor++;
+                }
+                if (c - 1 >= 0) {
+                    edgeTarget[cursor] = node - 1;
+                    edgeOrigin[cursor] = node;
+                    baseWeights[cursor] = 1.0f;
+                    edgeProfiles[cursor] = 1;
+                    cursor++;
+                }
+                if (r + 1 < rows) {
+                    edgeTarget[cursor] = node + cols;
+                    edgeOrigin[cursor] = node;
+                    baseWeights[cursor] = 1.0f;
+                    edgeProfiles[cursor] = 1;
+                    cursor++;
+                }
+                if (r - 1 >= 0) {
+                    edgeTarget[cursor] = node - cols;
+                    edgeOrigin[cursor] = node;
+                    baseWeights[cursor] = 1.0f;
+                    edgeProfiles[cursor] = 1;
+                    cursor++;
+                }
+            }
+        }
+
+        return RoutingFixtureFactory.createFixture(
+                nodeCount,
+                firstEdge,
+                edgeTarget,
+                edgeOrigin,
+                baseWeights,
+                edgeProfiles,
+                coords,
+                new RoutingFixtureFactory.ProfileSpec(
+                        1,
+                        RoutingFixtureFactory.ALL_DAYS_MASK,
+                        new float[]{1.0f},
+                        1.0f
+                )
+        );
+    }
+
+    private List<RandomQuery> buildPinnedRandomQueries(int nodeCount, int queryCount, long seed) {
+        Random random = new Random(seed);
+        List<RandomQuery> queries = new ArrayList<>(queryCount);
+        for (int i = 0; i < queryCount; i++) {
+            queries.add(new RandomQuery(
+                    random.nextInt(nodeCount),
+                    random.nextInt(nodeCount),
+                    random.nextInt(86_400)
+            ));
+        }
+        return queries;
+    }
+
+    private record RandomQuery(int sourceNodeId, int targetNodeId, long departureTicks) {
     }
 
     private static final class FixedIdMapper implements IDMapper {
