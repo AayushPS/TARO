@@ -1,14 +1,13 @@
 package org.Aayush.routing.core;
 
 /**
- * Stage 12 temporary matrix planner.
+ * Pairwise matrix compatibility planner.
  *
- * NOTE(Stage 14 revisit): Replace this pairwise route expansion with
- * dedicated one-to-many Dijkstra matrix execution and parity/perf gates.
+ * <p>Retained in Stage 14 as an A* compatibility path and optional fallback.</p>
  */
 final class TemporaryMatrixPlanner implements MatrixPlanner {
-    static final String STAGE14_REVISIT_NOTE =
-            "NOTE(Stage 14 revisit): Replace Stage 12 temporary matrix execution path with the dedicated one-to-many Dijkstra matrix engine, and enforce A*/Dijkstra parity and performance gates before closing Stage 14.";
+    static final String STAGE14_PAIRWISE_COMPATIBILITY_NOTE =
+            "Stage 14 compatibility mode: pairwise matrix expansion via RouteCore.computeInternal.";
 
     /**
      * Expands matrix request via pairwise route calls.
@@ -21,9 +20,17 @@ final class TemporaryMatrixPlanner implements MatrixPlanner {
         boolean[][] reachable = new boolean[sourceCount][targetCount];
         float[][] costs = new float[sourceCount][targetCount];
         long[][] arrivals = new long[sourceCount][targetCount];
+        int[] rowWorkStates = new int[sourceCount];
+        int[] rowSettledStates = new int[sourceCount];
+        int[] rowLabelPeaks = new int[sourceCount];
+        int[] rowFrontierPeaks = new int[sourceCount];
+        long requestWorkStates = 0L;
+        long requestSettledStates = 0L;
 
         for (int i = 0; i < sourceCount; i++) {
             int sourceNodeId = request.sourceNodeIds()[i];
+            long rowWork = 0L;
+            long rowSettled = 0L;
             for (int j = 0; j < targetCount; j++) {
                 int targetNodeId = request.targetNodeIds()[j];
                 InternalRouteRequest routeRequest = new InternalRouteRequest(
@@ -38,9 +45,35 @@ final class TemporaryMatrixPlanner implements MatrixPlanner {
                 reachable[i][j] = plan.reachable();
                 costs[i][j] = plan.totalCost();
                 arrivals[i][j] = plan.arrivalTicks();
+                rowWork += Math.max(0, plan.settledStates());
+                rowSettled += Math.max(0, plan.settledStates());
             }
+            rowWorkStates[i] = toBoundedInt(rowWork);
+            rowSettledStates[i] = toBoundedInt(rowSettled);
+            requestWorkStates += rowWork;
+            requestSettledStates += rowSettled;
         }
 
-        return new MatrixPlan(reachable, costs, arrivals, STAGE14_REVISIT_NOTE);
+        MatrixExecutionStats executionStats = MatrixExecutionStats.of(
+                requestWorkStates,
+                requestSettledStates,
+                0,
+                0,
+                rowWorkStates,
+                rowSettledStates,
+                rowLabelPeaks,
+                rowFrontierPeaks
+        );
+        return new MatrixPlan(reachable, costs, arrivals, STAGE14_PAIRWISE_COMPATIBILITY_NOTE, executionStats);
+    }
+
+    private static int toBoundedInt(long value) {
+        if (value <= 0L) {
+            return 0;
+        }
+        if (value >= Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) value;
     }
 }

@@ -1,13 +1,13 @@
 package org.Aayush.routing.core;
 
 /**
- * Internal matrix planner abstraction for Stage 12 route orchestration.
+ * Internal matrix planner abstraction.
  */
 interface MatrixPlanner {
     /**
      * Computes many-to-many routing outputs for a normalized request.
      *
-     * @param routeCore route core used to execute pairwise/internal searches.
+     * @param routeCore route core runtime contract.
      * @param request normalized matrix request in internal node-id space.
      * @return matrix planning result.
      */

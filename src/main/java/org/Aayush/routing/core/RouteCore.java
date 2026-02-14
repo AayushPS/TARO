@@ -46,6 +46,8 @@ public final class RouteCore implements RouterService {
     public static final String REASON_SEARCH_BUDGET_EXCEEDED = "H13_SEARCH_BUDGET_EXCEEDED";
     public static final String REASON_NUMERIC_SAFETY_BREACH = "H13_NUMERIC_SAFETY_BREACH";
     public static final String REASON_PATH_EVALUATION_FAILED = "H13_PATH_EVALUATION_FAILED";
+    public static final String REASON_MATRIX_SEARCH_BUDGET_EXCEEDED = "H14_MATRIX_SEARCH_BUDGET_EXCEEDED";
+    public static final String REASON_MATRIX_NUMERIC_SAFETY_BREACH = "H14_MATRIX_NUMERIC_SAFETY_BREACH";
 
     private static final GoalBoundHeuristic ZERO_HEURISTIC = nodeId -> 0.0d;
 
@@ -58,6 +60,8 @@ public final class RouteCore implements RouterService {
     private final RoutePlanner dijkstraPlanner;
     private final RoutePlanner aStarPlanner;
     private final MatrixPlanner matrixPlanner;
+    private final ThreadLocal<MatrixExecutionStats> matrixExecutionStats =
+            ThreadLocal.withInitial(() -> MatrixExecutionStats.empty(0));
     private final ConcurrentMap<HeuristicType, HeuristicProvider> heuristicProviders = new ConcurrentHashMap<>();
 
     /**
@@ -85,7 +89,7 @@ public final class RouteCore implements RouterService {
         this.costEngine = Objects.requireNonNull(costEngine, "costEngine");
         this.nodeIdMapper = Objects.requireNonNull(nodeIdMapper, "nodeIdMapper");
         this.landmarkStore = landmarkStore;
-        this.matrixPlanner = matrixPlanner == null ? new TemporaryMatrixPlanner() : matrixPlanner;
+        this.matrixPlanner = matrixPlanner == null ? new OneToManyDijkstraMatrixPlanner() : matrixPlanner;
         this.dijkstraPlanner = new EdgeBasedRoutePlanner(false);
 
         ensureCostEngineContracts();
@@ -136,17 +140,36 @@ public final class RouteCore implements RouterService {
     @Override
     public MatrixResponse matrix(MatrixRequest request) {
         InternalMatrixRequest internalRequest = toInternalMatrixRequest(request);
-        MatrixPlan matrixPlan = matrixPlanner.compute(this, internalRequest);
-        return MatrixResponse.builder()
-                .sourceExternalIds(List.copyOf(request.getSourceExternalIds()))
-                .targetExternalIds(List.copyOf(request.getTargetExternalIds()))
-                .reachable(copy(matrixPlan.reachable()))
-                .totalCosts(copy(matrixPlan.totalCosts()))
-                .arrivalTicks(copy(matrixPlan.arrivalTicks()))
-                .algorithm(internalRequest.algorithm())
-                .heuristicType(internalRequest.heuristicType())
-                .implementationNote(matrixPlan.implementationNote())
-                .build();
+        try {
+            MatrixPlan matrixPlan = matrixPlanner.compute(this, internalRequest);
+            matrixExecutionStats.set(matrixPlan.executionStats());
+            return MatrixResponse.builder()
+                    .sourceExternalIds(List.copyOf(request.getSourceExternalIds()))
+                    .targetExternalIds(List.copyOf(request.getTargetExternalIds()))
+                    .reachable(copy(matrixPlan.reachable()))
+                    .totalCosts(copy(matrixPlan.totalCosts()))
+                    .arrivalTicks(copy(matrixPlan.arrivalTicks()))
+                    .algorithm(internalRequest.algorithm())
+                    .heuristicType(internalRequest.heuristicType())
+                    .implementationNote(matrixPlan.implementationNote())
+                    .build();
+        } catch (MatrixSearchBudget.BudgetExceededException ex) {
+            throw new RouteCoreException(
+                    REASON_MATRIX_SEARCH_BUDGET_EXCEEDED,
+                    ex.reasonCode() + ": " + ex.getMessage(),
+                    ex
+            );
+        } catch (TerminationPolicy.NumericSafetyException ex) {
+            throw new RouteCoreException(
+                    REASON_MATRIX_NUMERIC_SAFETY_BREACH,
+                    ex.reasonCode() + ": " + ex.getMessage(),
+                    ex
+            );
+        }
+    }
+
+    MatrixExecutionStats matrixExecutionStatsContract() {
+        return matrixExecutionStats.get();
     }
 
     /**
@@ -179,6 +202,14 @@ public final class RouteCore implements RouterService {
                     ex
             );
         }
+    }
+
+    EdgeGraph edgeGraphContract() {
+        return edgeGraph;
+    }
+
+    CostEngine costEngineContract() {
+        return costEngine;
     }
 
     /**

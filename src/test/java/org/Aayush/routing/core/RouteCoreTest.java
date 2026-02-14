@@ -494,7 +494,7 @@ class RouteCoreTest {
     }
 
     @Test
-    @DisplayName("Matrix is fully wired and includes Stage 14 revisit note")
+    @DisplayName("Matrix is fully wired and uses Stage 14 native implementation by default for Dijkstra")
     void testMatrixWiringAndNote() {
         RouteCore core = createCore(createLinearFixture(), null);
         MatrixResponse response = core.matrix(MatrixRequest.builder()
@@ -503,13 +503,13 @@ class RouteCoreTest {
                 .targetExternalId("N3")
                 .targetExternalId("N4")
                 .departureTicks(5L)
-                .algorithm(RoutingAlgorithm.A_STAR)
+                .algorithm(RoutingAlgorithm.DIJKSTRA)
                 .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertEquals(List.of("N0", "N1"), response.getSourceExternalIds());
         assertEquals(List.of("N3", "N4"), response.getTargetExternalIds());
-        assertEquals(TemporaryMatrixPlanner.STAGE14_REVISIT_NOTE, response.getImplementationNote());
+        assertEquals(OneToManyDijkstraMatrixPlanner.STAGE14_NATIVE_IMPLEMENTATION_NOTE, response.getImplementationNote());
         assertEquals(2, response.getReachable().length);
         assertEquals(2, response.getReachable()[0].length);
         assertTrue(response.getReachable()[0][0]);
@@ -517,6 +517,24 @@ class RouteCoreTest {
         assertEquals(4.0f, response.getTotalCosts()[0][1], 1e-6f); // N0 -> N4
         assertEquals(2.0f, response.getTotalCosts()[1][0], 1e-6f); // N1 -> N3
         assertEquals(3.0f, response.getTotalCosts()[1][1], 1e-6f); // N1 -> N4
+    }
+
+    @Test
+    @DisplayName("Matrix A* request uses Stage 14 compatibility pairwise execution")
+    void testMatrixAStarCompatibilityMode() {
+        RouteCore core = createCore(createLinearFixture(), null);
+        MatrixResponse response = core.matrix(MatrixRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .algorithm(RoutingAlgorithm.A_STAR)
+                .heuristicType(HeuristicType.NONE)
+                .build());
+
+        assertEquals(TemporaryMatrixPlanner.STAGE14_PAIRWISE_COMPATIBILITY_NOTE, response.getImplementationNote());
+        assertTrue(response.getReachable()[0][0]);
+        assertEquals(4.0f, response.getTotalCosts()[0][0], 1e-6f);
+        assertEquals(4L, response.getArrivalTicks()[0][0]);
     }
 
     @Test
@@ -658,6 +676,56 @@ class RouteCoreTest {
         assertTrue(response.getReachable()[0][0]);
         assertEquals(42.5f, response.getTotalCosts()[0][0], 1e-6f);
         assertEquals(123L, response.getArrivalTicks()[0][0]);
+    }
+
+    @Test
+    @DisplayName("Stage 14 matrix budget failures are wrapped with deterministic reason code")
+    void testMatrixBudgetExceptionIsWrapped() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        MatrixPlanner failingPlanner = (routeCore, request) -> {
+            throw new MatrixSearchBudget.BudgetExceededException(
+                    MatrixSearchBudget.REASON_ROW_WORK_EXCEEDED,
+                    "forced matrix budget failure"
+            );
+        };
+        RouteCore core = createCore(fixture, null, fixture.nodeIdMapper(), fixture.costEngine(), failingPlanner);
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.matrix(MatrixRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.DIJKSTRA)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_MATRIX_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
+    }
+
+    @Test
+    @DisplayName("Stage 14 matrix numeric safety failures are wrapped with deterministic reason code")
+    void testMatrixNumericSafetyExceptionIsWrapped() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        MatrixPlanner failingPlanner = (routeCore, request) -> {
+            throw new TerminationPolicy.NumericSafetyException(
+                    TerminationPolicy.REASON_NON_FINITE_PRIORITY,
+                    "forced matrix numeric failure"
+            );
+        };
+        RouteCore core = createCore(fixture, null, fixture.nodeIdMapper(), fixture.costEngine(), failingPlanner);
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.matrix(MatrixRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.DIJKSTRA)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_MATRIX_NUMERIC_SAFETY_BREACH, ex.getReasonCode());
     }
 
     @Test

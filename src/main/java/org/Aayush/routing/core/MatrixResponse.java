@@ -29,7 +29,7 @@ public class MatrixResponse {
     RoutingAlgorithm algorithm;
     /** Heuristic mode used during matrix computation. */
     HeuristicType heuristicType;
-    /** Planner implementation note for observability and migration tracking. */
+    /** Planner implementation note for observability and execution-mode tracing. */
     String implementationNote;
 
     /**

@@ -318,6 +318,9 @@ Each stage contains:
 
 ## Stage 14: One-to-Many Dijkstra Matrix
 
+### Implementation Status
+- Implemented (closed on 2026-02-14).
+
 ### Functional Requirements
 - Compute one-to-many and matrix travel costs.
 - Early terminate when all targets are settled.
