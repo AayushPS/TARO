@@ -509,7 +509,7 @@ class RouteCoreTest {
 
         assertEquals(List.of("N0", "N1"), response.getSourceExternalIds());
         assertEquals(List.of("N3", "N4"), response.getTargetExternalIds());
-        assertEquals(OneToManyDijkstraMatrixPlanner.STAGE14_NATIVE_IMPLEMENTATION_NOTE, response.getImplementationNote());
+        assertEquals(OneToManyDijkstraMatrixPlanner.NATIVE_IMPLEMENTATION_NOTE, response.getImplementationNote());
         assertEquals(2, response.getReachable().length);
         assertEquals(2, response.getReachable()[0].length);
         assertTrue(response.getReachable()[0][0]);
@@ -531,7 +531,7 @@ class RouteCoreTest {
                 .heuristicType(HeuristicType.NONE)
                 .build());
 
-        assertEquals(TemporaryMatrixPlanner.STAGE14_PAIRWISE_COMPATIBILITY_NOTE, response.getImplementationNote());
+        assertEquals(TemporaryMatrixPlanner.PAIRWISE_COMPATIBILITY_NOTE, response.getImplementationNote());
         assertTrue(response.getReachable()[0][0]);
         assertEquals(4.0f, response.getTotalCosts()[0][0], 1e-6f);
         assertEquals(4L, response.getArrivalTicks()[0][0]);

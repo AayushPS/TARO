@@ -1,7 +1,10 @@
 package org.Aayush.routing.core;
 
 /**
- * Stage 12 route-core facade contract.
+ * Public route and matrix service contract.
+ *
+ * <p>Implementations are expected to perform deterministic input validation and
+ * throw reason-coded runtime exceptions for contract failures.</p>
  */
 public interface RouterService {
     /**

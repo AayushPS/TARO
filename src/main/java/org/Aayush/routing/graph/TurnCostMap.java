@@ -11,7 +11,7 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 
 /**
- * Stage 5: Turn Cost Lookup Structure.
+ * Read-only turn-penalty lookup optimized for hot-path routing transitions.
  * <p>
  * A high-performance, read-only hash map optimized for storing turn penalties.
  * It maps (from_edge, to_edge) -> penalty using an open-addressing scheme
@@ -73,7 +73,7 @@ public class TurnCostMap {
 
     /**
      * Gets the turn penalty for transitioning from one edge to another.
-     * * @param fromEdge The source edge index.
+     * @param fromEdge The source edge index.
      * @param toEdge   The destination edge index.
      * @return The penalty in seconds, {@link #DEFAULT_COST} if not found,
      * or {@link #FORBIDDEN_TURN} if restricted.
@@ -153,7 +153,7 @@ public class TurnCostMap {
 
     /**
      * Parses the FlatBuffer to build the optimized hash map.
-     * * @param buffer The ByteBuffer containing the root Taro Model.
+     * @param buffer The ByteBuffer containing the root Taro Model.
      * @return A ready-to-use TurnCostMap.
      */
     public static TurnCostMap fromFlatBuffer(ByteBuffer buffer) {

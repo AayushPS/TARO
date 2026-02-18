@@ -5,7 +5,7 @@ import org.Aayush.routing.graph.EdgeGraph;
 import java.util.Objects;
 
 /**
- * Stage 11 null heuristic provider.
+ * Null heuristic provider.
  *
  * <p>Always returns zero estimates and therefore behaves like plain Dijkstra
  * while still honoring bound-check contracts.</p>

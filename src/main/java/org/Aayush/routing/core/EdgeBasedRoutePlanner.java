@@ -11,7 +11,15 @@ import org.Aayush.routing.heuristic.GoalBoundHeuristic;
 import java.util.PriorityQueue;
 
 /**
- * Stage 12 edge-based shortest path planner.
+ * Single-direction edge-based shortest-path planner.
+ *
+ * <p>The planner runs label-setting search on edge states (not node states), which preserves
+ * predecessor-edge context needed for turn penalties in {@link CostEngine}. It supports two
+ * priority modes controlled by {@code useHeuristic}:</p>
+ * <ul>
+ * <li>{@code false}: pure Dijkstra priority ({@code g}).</li>
+ * <li>{@code true}: A* priority ({@code g + h}).</li>
+ * </ul>
  */
 final class EdgeBasedRoutePlanner implements RoutePlanner {
     private static final float INF = Float.POSITIVE_INFINITY;
@@ -26,6 +34,12 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         this.useHeuristic = useHeuristic;
     }
 
+    /**
+     * Computes one point-to-point route in internal node-id space.
+     *
+     * <p>Dominance is maintained per edge on {@code (cost, arrival)} labels, allowing
+     * multiple non-dominated labels to survive when temporal dynamics matter.</p>
+     */
     @Override
     public InternalRoutePlan compute(
             EdgeGraph edgeGraph,
@@ -136,7 +150,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
     }
 
     /**
-     * Returns whether a candidate goal label is better than current best.
+     * Returns whether a candidate goal label is better than current best goal.
+     *
+     * <p>Primary key is total cost, tie-breaker is earlier arrival.</p>
      */
     private static boolean isBetter(float newCost, long newArrival, float currentCost, long currentArrival) {
         if (newCost < currentCost) {
@@ -146,7 +162,7 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
     }
 
     /**
-     * Returns whether one label dominates another in (cost, arrival) space.
+     * Returns whether one label dominates another in {@code (cost, arrival)} space.
      */
     private static boolean dominates(float lhsCost, long lhsArrival, float rhsCost, long rhsArrival) {
         return lhsCost <= rhsCost && lhsArrival <= rhsArrival;
@@ -193,7 +209,10 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
     }
 
     /**
-     * Computes frontier priority score (g or g+h depending on planner mode).
+     * Computes frontier priority score.
+     *
+     * <p>When heuristic mode is enabled, invalid heuristic outputs are clamped to zero so
+     * the queue ordering remains numerically safe and monotonic.</p>
      */
     private double computePriority(EdgeGraph edgeGraph, GoalBoundHeuristic heuristic, int edgeId, float gScore) {
         if (!useHeuristic) {
@@ -256,6 +275,12 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         return a + b;
     }
 
+    /**
+     * Compact mutable storage for forward labels.
+     *
+     * <p>Structure-of-arrays layout keeps per-field access cache-friendly while preserving
+     * stable label ids for predecessor backtracking.</p>
+     */
     private static final class LabelStore {
         private final IntArrayList edgeIdByLabel = new IntArrayList();
         private final FloatArrayList gScoreByLabel = new FloatArrayList();

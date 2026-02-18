@@ -10,10 +10,15 @@ import java.util.Objects;
 import java.util.PriorityQueue;
 
 /**
- * Stage 13 bidirectional time-dependent A* planner.
+ * Bidirectional time-dependent A* planner with deterministic guardrails.
  *
- * <p>Forward lane remains exact under full cost-engine semantics.
- * Reverse lane computes admissible lower bounds on the reverse graph.</p>
+ * <p>Execution model:</p>
+ * <ul>
+ * <li>Forward lane runs exact edge-based expansion using full {@link CostEngine} semantics.</li>
+ * <li>Backward lane runs on a reverse adjacency index and accumulates lower-bound distances.</li>
+ * <li>Forward priorities use {@code g + max(heuristic, reverseBoundWhenAvailable)}.</li>
+ * <li>Termination is delegated to {@link TerminationPolicy} for numeric-safety consistency.</li>
+ * </ul>
  */
 final class BidirectionalTdAStarPlanner implements RoutePlanner {
     private static final float INF = Float.POSITIVE_INFINITY;
@@ -64,6 +69,12 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         this.pathEvaluator = Objects.requireNonNull(pathEvaluator, "pathEvaluator");
     }
 
+    /**
+     * Computes one route request using bidirectional time-dependent A*.
+     *
+     * <p>On success, the winning edge path is replayed through {@link PathEvaluator} to
+     * guarantee response cost/arrival exactly matches the authoritative cost engine.</p>
+     */
     @Override
     public InternalRoutePlan compute(
             EdgeGraph edgeGraph,
@@ -251,6 +262,12 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         return budgetedWorkStates;
     }
 
+    /**
+     * Inserts a forward label when it is not dominated on the same edge.
+     *
+     * <p>Dominated existing labels are deactivated eagerly to keep frontier and label-store
+     * growth bounded by useful states only.</p>
+     */
     private static int addLabelIfNonDominated(
             PlannerQueryContext context,
             int edgeId,
@@ -308,6 +325,9 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         return Float.compare(nextCost, bestGoalCost) == 0 && nextArrival < bestGoalArrival;
     }
 
+    /**
+     * Reconstructs source-to-goal edge path from predecessor label chain.
+     */
     private static int[] buildEdgePath(DominanceLabelStore labelStore, int terminalLabelId) {
         IntArrayList reversed = new IntArrayList();
         int cursor = terminalLabelId;
@@ -323,6 +343,9 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         return edgePath;
     }
 
+    /**
+     * Computes forward frontier priority as {@code g + boundedEstimate}.
+     */
     private double computeForwardPriority(
             GoalBoundHeuristic heuristic,
             int nodeId,
@@ -343,6 +366,9 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         return estimate;
     }
 
+    /**
+     * Enforces total frontier-size budget across forward and backward lanes.
+     */
     private void checkFrontierBudget(
             PriorityQueue<ForwardFrontierState> forwardFrontier,
             PriorityQueue<BackwardFrontierState> backwardFrontier
@@ -350,6 +376,9 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         searchBudget.checkFrontierSize(forwardFrontier.size() + backwardFrontier.size());
     }
 
+    /**
+     * Increments global work-state counter and enforces settled/work budget.
+     */
     private int incrementBudgetedWorkStates(int currentWorkStates) {
         int nextWorkStates = currentWorkStates + 1;
         searchBudget.checkSettledStates(nextWorkStates);
@@ -374,6 +403,9 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         return a + b;
     }
 
+    /**
+     * Builds per-edge reverse lower bounds used by backward search.
+     */
     private static float[] computeReverseLowerBoundByEdge(EdgeGraph edgeGraph, ProfileStore profileStore) {
         int edgeCount = edgeGraph.edgeCount();
         float[] lowerBounds = new float[edgeCount];
@@ -398,6 +430,9 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         return lowerBounds;
     }
 
+    /**
+     * Validates that runtime graph/profile instances match planner construction contracts.
+     */
     private void validatePlannerContract(EdgeGraph edgeGraph, CostEngine costEngine) {
         if (edgeGraph != plannerGraphContract || costEngine.edgeGraph() != plannerGraphContract) {
             throw new IllegalArgumentException(

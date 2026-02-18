@@ -5,7 +5,7 @@ import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.heuristic.GoalBoundHeuristic;
 
 /**
- * Internal planner abstraction for Stage 12 route orchestration.
+ * Internal planner abstraction used by route orchestration.
  */
 interface RoutePlanner {
     /**

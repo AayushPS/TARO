@@ -7,7 +7,7 @@ import org.Aayush.serialization.flatbuffers.taro.model.Landmark;
 import java.util.Objects;
 
 /**
- * FlatBuffers serializer helper for Stage 12 landmark artifacts.
+ * FlatBuffers serializer helper for landmark artifacts.
  */
 @UtilityClass
 public final class LandmarkSerializer {

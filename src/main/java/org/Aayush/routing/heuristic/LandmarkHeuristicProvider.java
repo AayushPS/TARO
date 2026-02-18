@@ -5,7 +5,7 @@ import org.Aayush.routing.graph.EdgeGraph;
 import java.util.Objects;
 
 /**
- * Stage 12 ALT heuristic provider backed by precomputed landmark arrays.
+ * ALT heuristic provider backed by precomputed landmark arrays.
  */
 public final class LandmarkHeuristicProvider implements HeuristicProvider {
     private final int nodeCount;

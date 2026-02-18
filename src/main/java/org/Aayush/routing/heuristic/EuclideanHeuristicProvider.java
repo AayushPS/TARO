@@ -5,7 +5,7 @@ import org.Aayush.routing.graph.EdgeGraph;
 import java.util.Objects;
 
 /**
- * Stage 11 Euclidean heuristic provider.
+ * Euclidean heuristic provider.
  *
  * <p>Uses straight-line (L2) distance in graph coordinate space and scales it
  * by the calibrated admissible lower-bound cost-per-distance factor.</p>

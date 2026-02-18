@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Stage 7 live overlay store for per-edge runtime overrides.
+ * Live overlay store for per-edge runtime speed overrides.
  * <p>
  * The overlay stores short-lived speed factors keyed by edge id. Lookup is designed
  * for the hot path of the routing cost engine:
@@ -220,7 +220,7 @@ public final class LiveOverlay {
      *
      * @param edgeId edge identifier (must be non-negative).
      * @param nowTicks current engine time in ticks.
-     * @return canonical multiplier for Stage 7 cost integration.
+     * @return canonical multiplier for cost-engine integration.
      */
     public float livePenaltyMultiplier(int edgeId, long nowTicks) {
         return lookup(edgeId, nowTicks).livePenaltyMultiplier();

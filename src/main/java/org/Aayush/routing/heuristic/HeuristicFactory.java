@@ -6,7 +6,7 @@ import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.profile.ProfileStore;
 
 /**
- * Strict Stage 11 heuristic factory.
+ * Strict heuristic factory for constructing validated providers.
  *
  * <p>Centralizes validation so all heuristic providers are created with the same
  * graph/profile/cost contracts and deterministic failure reason codes.</p>

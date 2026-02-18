@@ -1,5 +1,7 @@
 package org.Aayush.routing.core;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
 import org.Aayush.routing.cost.CostEngine;
 import org.Aayush.routing.graph.EdgeGraph;
 
@@ -18,7 +20,7 @@ final class PathEvaluator {
     }
 
     /**
-     * Replays one edge path through the stage-10 cost engine.
+     * Replays one edge path through the configured cost engine.
      */
     Evaluation evaluateEdgePath(CostEngine costEngine, int[] edgePath, long departureTicks) {
         float totalCost = 0.0f;
@@ -91,16 +93,14 @@ final class PathEvaluator {
     /**
      * Deterministic path replay exception with reason code.
      */
+    @Getter
+    @Accessors(fluent = true)
     static final class PathEvaluationException extends RuntimeException {
         private final String reasonCode;
 
         PathEvaluationException(String reasonCode, String message) {
             super(message);
             this.reasonCode = reasonCode;
-        }
-
-        String reasonCode() {
-            return reasonCode;
         }
     }
 }

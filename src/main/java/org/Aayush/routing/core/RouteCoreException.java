@@ -5,7 +5,7 @@ import lombok.Getter;
 import java.util.Objects;
 
 /**
- * Stage 12 route-core contract exception with deterministic reason codes.
+ * Route-core contract exception with deterministic reason codes.
  */
 @Getter
 public final class RouteCoreException extends RuntimeException {

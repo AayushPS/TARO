@@ -10,7 +10,7 @@ import java.util.PriorityQueue;
 import java.util.SplittableRandom;
 
 /**
- * Stage 12 deterministic ALT landmark preprocessing.
+ * Deterministic ALT landmark preprocessing.
  *
  * <p>Builds landmark node selection and forward/backward lower-bound distance
  * tables that back {@link LandmarkHeuristicProvider}.</p>

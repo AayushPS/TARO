@@ -3,14 +3,16 @@ package org.Aayush.routing.core;
 /**
  * Pairwise matrix compatibility planner.
  *
- * <p>Retained in Stage 14 as an A* compatibility path and optional fallback.</p>
+ * <p>This planner expands each source/target cell via {@link RouteCore#computeInternal(InternalRouteRequest)}.
+ * It is intentionally simple and contract-preserving, and acts as compatibility mode for
+ * execution paths that are not handled by the native one-to-many Dijkstra planner.</p>
  */
 final class TemporaryMatrixPlanner implements MatrixPlanner {
-    static final String STAGE14_PAIRWISE_COMPATIBILITY_NOTE =
-            "Stage 14 compatibility mode: pairwise matrix expansion via RouteCore.computeInternal.";
+    static final String PAIRWISE_COMPATIBILITY_NOTE =
+            "Compatibility mode: pairwise matrix expansion via RouteCore.computeInternal.";
 
     /**
-     * Expands matrix request via pairwise route calls.
+     * Expands matrix request via independent pairwise route calls.
      */
     @Override
     public MatrixPlan compute(RouteCore routeCore, InternalMatrixRequest request) {
@@ -64,7 +66,7 @@ final class TemporaryMatrixPlanner implements MatrixPlanner {
                 rowLabelPeaks,
                 rowFrontierPeaks
         );
-        return new MatrixPlan(reachable, costs, arrivals, STAGE14_PAIRWISE_COMPATIBILITY_NOTE, executionStats);
+        return new MatrixPlan(reachable, costs, arrivals, PAIRWISE_COMPATIBILITY_NOTE, executionStats);
     }
 
     private static int toBoundedInt(long value) {

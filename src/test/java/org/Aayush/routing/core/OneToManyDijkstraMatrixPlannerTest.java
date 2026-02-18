@@ -37,7 +37,7 @@ class OneToManyDijkstraMatrixPlannerTest {
         assertTrue(matrix.getReachable()[0][0]);
         assertEquals(route.getTotalCost(), matrix.getTotalCosts()[0][0], 1e-6f);
         assertEquals(route.getArrivalTicks(), matrix.getArrivalTicks()[0][0]);
-        assertEquals(OneToManyDijkstraMatrixPlanner.STAGE14_NATIVE_IMPLEMENTATION_NOTE, matrix.getImplementationNote());
+        assertEquals(OneToManyDijkstraMatrixPlanner.NATIVE_IMPLEMENTATION_NOTE, matrix.getImplementationNote());
     }
 
     @Test
@@ -104,7 +104,7 @@ class OneToManyDijkstraMatrixPlannerTest {
         assertTrue(response.getReachable()[0][0]);
         assertEquals(4.0f, response.getTotalCosts()[0][0], 1e-6f);
         assertEquals(4L, response.getArrivalTicks()[0][0]);
-        assertEquals(TemporaryMatrixPlanner.STAGE14_PAIRWISE_COMPATIBILITY_NOTE, response.getImplementationNote());
+        assertEquals(TemporaryMatrixPlanner.PAIRWISE_COMPATIBILITY_NOTE, response.getImplementationNote());
     }
 
     @Test

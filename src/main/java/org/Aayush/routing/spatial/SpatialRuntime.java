@@ -16,7 +16,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Stage 8: Spatial Runtime (KD query engine over serialized spatial index).
+ * Spatial runtime (KD query engine over serialized spatial index).
  * <p>
  * This class is immutable after construction and safe for concurrent reads.
  * It supports nearest-node lookup on top of a serialized KD tree.

@@ -6,7 +6,7 @@ import lombok.experimental.Accessors;
 import java.util.Objects;
 
 /**
- * Thrown when Stage 11 heuristic contracts cannot be satisfied.
+ * Thrown when heuristic contracts cannot be satisfied.
  *
  * <p>Messages are prefixed with deterministic reason-code text for observability.</p>
  */

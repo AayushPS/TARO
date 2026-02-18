@@ -6,7 +6,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Immutable Stage 12 landmark preprocessing output.
+ * Immutable output of landmark preprocessing.
  */
 @Getter
 public final class LandmarkArtifact {

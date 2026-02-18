@@ -7,7 +7,7 @@ import org.Aayush.routing.profile.ProfileStore;
 import java.util.Objects;
 
 /**
- * Deterministic compatibility signature for Stage 12 landmark artifacts.
+ * Deterministic compatibility signature for landmark artifacts.
  */
 @UtilityClass
 final class LandmarkCompatibility {

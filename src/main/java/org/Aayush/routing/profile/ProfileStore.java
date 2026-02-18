@@ -8,7 +8,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * Stage 9: Immutable profile lookup store for temporal multipliers.
+ * Immutable profile lookup store for temporal multipliers.
  * <p>
  * Contract summary:
  * </p>

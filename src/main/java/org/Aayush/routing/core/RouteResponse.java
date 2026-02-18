@@ -9,6 +9,9 @@ import java.util.List;
 
 /**
  * Client-facing point-to-point route response.
+ *
+ * <p>When {@code reachable=false}, {@code pathExternalNodeIds} is empty and
+ * {@code totalCost} is typically {@code +INF}.</p>
  */
 @Value
 @Builder

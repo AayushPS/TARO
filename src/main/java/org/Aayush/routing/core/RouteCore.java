@@ -19,12 +19,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Stage 12 route-core orchestration facade.
+ * Main routing orchestration entry point.
  *
- * <p>This class is the main runtime entry point that:
- * validates incoming requests, maps external ids to internal node ids,
- * resolves heuristic providers, delegates search execution, and maps plans
- * back into external response models.</p>
+ * <p>The facade owns runtime contracts for graph/profile/cost-engine identity and
+ * applies deterministic request validation before any search starts. Execution flow:</p>
+ * <ul>
+ * <li>Normalize client payloads from external node ids to internal node ids.</li>
+ * <li>Validate algorithm/heuristic compatibility and required fields.</li>
+ * <li>Resolve or lazily build heuristic providers with strict contract checks.</li>
+ * <li>Delegate to point-to-point or matrix planners.</li>
+ * <li>Wrap planner guardrail exceptions into {@link RouteCoreException} with stable reason codes.</li>
+ * <li>Map internal node paths and matrices back to external response payloads.</li>
+ * </ul>
  */
 public final class RouteCore implements RouterService {
     public static final String REASON_ROUTE_REQUEST_REQUIRED = "H12_ROUTE_REQUEST_REQUIRED";
@@ -69,7 +75,7 @@ public final class RouteCore implements RouterService {
      *
      * @param edgeGraph edge-based graph runtime.
      * @param profileStore temporal profile runtime.
-     * @param costEngine stage-10 cost engine bound to graph/profile.
+     * @param costEngine time-dependent cost engine bound to graph/profile.
      * @param nodeIdMapper external-to-internal node id mapper.
      * @param landmarkStore optional landmark runtime (required for LANDMARK heuristic).
      * @param matrixPlanner optional matrix planner override.
@@ -103,10 +109,11 @@ public final class RouteCore implements RouterService {
     }
 
     /**
-     * Executes one client route request.
+     * Executes one client point-to-point request.
      *
-     * @param request route request in external id space.
-     * @return route response mapped back to external id space.
+     * @param request route request in external-id space.
+     * @return response containing reachability, path, cost, and planner metadata.
+     * @throws RouteCoreException when request contracts or planner guardrails fail.
      */
     @Override
     public RouteResponse route(RouteRequest request) {
@@ -132,10 +139,11 @@ public final class RouteCore implements RouterService {
     }
 
     /**
-     * Executes one client matrix request.
+     * Executes one client many-to-many matrix request.
      *
-     * @param request matrix request in external id space.
-     * @return matrix response mapped back to external id space.
+     * @param request matrix request in external-id space.
+     * @return matrix response with row/column mapping, costs, arrivals, and execution note.
+     * @throws RouteCoreException when request contracts or matrix guardrails fail.
      */
     @Override
     public MatrixResponse matrix(MatrixRequest request) {
@@ -168,12 +176,21 @@ public final class RouteCore implements RouterService {
         }
     }
 
+    /**
+     * Returns telemetry from the most recent matrix call on the current thread.
+     *
+     * <p>Matrix execution is thread-confined through thread-local planner contexts, so
+     * telemetry is also exposed per-thread to avoid cross-request contamination.</p>
+     */
     MatrixExecutionStats matrixExecutionStatsContract() {
         return matrixExecutionStats.get();
     }
 
     /**
-     * Computes one normalized internal route request.
+     * Computes one normalized internal request using the algorithm selected in the request.
+     *
+     * <p>All planner-specific guardrail exceptions are normalized to route-core reason codes
+     * to keep caller error handling stable even when planner internals evolve.</p>
      */
     InternalRoutePlan computeInternal(InternalRouteRequest request) {
         GoalBoundHeuristic heuristic = resolveGoalBoundHeuristic(request);
@@ -204,18 +221,25 @@ public final class RouteCore implements RouterService {
         }
     }
 
+    /**
+     * Exposes the graph runtime contract used by planners.
+     */
     EdgeGraph edgeGraphContract() {
         return edgeGraph;
     }
 
+    /**
+     * Exposes the cost-engine runtime contract used by planners.
+     */
     CostEngine costEngineContract() {
         return costEngine;
     }
 
     /**
-     * Resolves goal-bound heuristic for an internal request.
+     * Resolves a goal-bound heuristic for the current request.
      *
-     * <p>Dijkstra always uses a zero heuristic.</p>
+     * <p>Dijkstra bypasses provider creation and always uses a zero estimate, guaranteeing
+     * exact uniform-cost semantics regardless of requested heuristic type.</p>
      */
     private GoalBoundHeuristic resolveGoalBoundHeuristic(InternalRouteRequest request) {
         if (request.algorithm() == RoutingAlgorithm.DIJKSTRA) {
@@ -234,7 +258,10 @@ public final class RouteCore implements RouterService {
     }
 
     /**
-     * Builds and validates a heuristic provider for one heuristic type.
+     * Builds and validates a heuristic provider for one heuristic mode.
+     *
+     * <p>Provider construction is centralized so all planner calls share identical
+     * graph/profile/cost contracts.</p>
      */
     private HeuristicProvider buildHeuristicProvider(HeuristicType heuristicType) {
         try {
@@ -249,7 +276,9 @@ public final class RouteCore implements RouterService {
     }
 
     /**
-     * Normalizes and validates client route request into internal node-id request.
+     * Normalizes and validates a route request into internal-node form.
+     *
+     * <p>This conversion enforces all external request invariants before planner invocation.</p>
      */
     private InternalRouteRequest toInternalRouteRequest(RouteRequest request) {
         if (request == null) {
@@ -271,7 +300,10 @@ public final class RouteCore implements RouterService {
     }
 
     /**
-     * Normalizes and validates client matrix request into internal node-id request.
+     * Normalizes and validates a matrix request into internal-node form.
+     *
+     * <p>Both source and target lists must be non-empty and every external id must map to
+     * an in-range internal node id.</p>
      */
     private InternalMatrixRequest toInternalMatrixRequest(MatrixRequest request) {
         if (request == null) {
@@ -304,7 +336,7 @@ public final class RouteCore implements RouterService {
     }
 
     /**
-     * Resolves external node id to internal node id with bounds validation.
+     * Resolves one external node id to an internal node id with bounds validation.
      */
     private int toInternalNodeId(String externalId, String requiredReasonCode, String fieldName) {
         if (externalId == null || externalId.isBlank()) {
@@ -330,7 +362,7 @@ public final class RouteCore implements RouterService {
     }
 
     /**
-     * Maps an internal node path to immutable external-id path.
+     * Maps an internal node path to an immutable external-id path.
      */
     private List<String> toExternalNodePath(int[] nodePath) {
         List<String> externalPath = new ArrayList<>(nodePath.length);
@@ -381,7 +413,10 @@ public final class RouteCore implements RouterService {
     }
 
     /**
-     * Validates that cost-engine contracts point to the same graph/profile instances.
+     * Validates cost-engine identity contracts against this facade runtime.
+     *
+     * <p>Identity equality is required to prevent mixing unrelated graph/profile instances
+     * in one execution context.</p>
      */
     private void ensureCostEngineContracts() {
         if (costEngine.edgeGraph() != edgeGraph) {

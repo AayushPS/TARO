@@ -12,7 +12,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Immutable runtime container for Stage 12 landmark arrays.
+ * Immutable runtime container for precomputed landmark distance arrays.
  */
 @Getter
 public final class LandmarkStore {

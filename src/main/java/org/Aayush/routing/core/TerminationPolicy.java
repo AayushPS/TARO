@@ -1,5 +1,8 @@
 package org.Aayush.routing.core;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 /**
  * Encapsulates deterministic planner stop and safety checks.
  */
@@ -8,7 +11,7 @@ final class TerminationPolicy {
     static final String REASON_NEGATIVE_PRIORITY = "H13_NUMERIC_NEGATIVE_PRIORITY";
 
     /**
-     * Default Stage 13 termination policy.
+     * Default termination policy.
      */
     static TerminationPolicy defaults() {
         return new TerminationPolicy();
@@ -43,16 +46,14 @@ final class TerminationPolicy {
     /**
      * Deterministic exception for numeric guardrail failures.
      */
+    @Getter
+    @Accessors(fluent = true)
     static final class NumericSafetyException extends RuntimeException {
         private final String reasonCode;
 
         NumericSafetyException(String reasonCode, String message) {
             super(message);
             this.reasonCode = reasonCode;
-        }
-
-        String reasonCode() {
-            return reasonCode;
         }
     }
 }

@@ -4,7 +4,7 @@ import lombok.Builder;
 import lombok.Value;
 
 /**
- * Stage 12 configuration for landmark preprocessing.
+ * Configuration for landmark preprocessing.
  */
 @Value
 @Builder

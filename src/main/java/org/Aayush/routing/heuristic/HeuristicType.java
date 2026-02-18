@@ -1,10 +1,11 @@
 package org.Aayush.routing.heuristic;
 
 /**
- * Stage 11+ heuristic modes.
+ * Supported heuristic modes.
  *
- * <p>Stage 11 modes: {@code NONE}, {@code EUCLIDEAN}, {@code SPHERICAL}.</p>
- * <p>Stage 12 adds {@code LANDMARK} (ALT).</p>
+ * <p>{@code NONE} disables heuristic guidance (pure Dijkstra behavior).</p>
+ * <p>{@code EUCLIDEAN} and {@code SPHERICAL} derive admissible lower bounds from geometry.</p>
+ * <p>{@code LANDMARK} uses ALT lower bounds from precomputed landmark distances.</p>
  */
 public enum HeuristicType {
     NONE,

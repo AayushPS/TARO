@@ -1,5 +1,8 @@
 package org.Aayush.routing.core;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 /**
  * Per-query deterministic bounds for planner work and memory growth.
  */
@@ -100,16 +103,14 @@ final class SearchBudget {
     /**
      * Deterministic exception for budget fail-fast paths.
      */
+    @Getter
+    @Accessors(fluent = true)
     static final class BudgetExceededException extends RuntimeException {
         private final String reasonCode;
 
         BudgetExceededException(String reasonCode, String message) {
             super(message);
             this.reasonCode = reasonCode;
-        }
-
-        String reasonCode() {
-            return reasonCode;
         }
     }
 }

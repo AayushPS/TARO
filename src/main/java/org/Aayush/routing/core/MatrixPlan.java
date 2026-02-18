@@ -16,10 +16,16 @@ record MatrixPlan(
         String implementationNote,
         MatrixExecutionStats executionStats
 ) {
+    /**
+     * Creates plan with explicit implementation note and empty execution telemetry.
+     */
     MatrixPlan(boolean[][] reachable, float[][] totalCosts, long[][] arrivalTicks, String implementationNote) {
         this(reachable, totalCosts, arrivalTicks, implementationNote, MatrixExecutionStats.empty(reachable.length));
     }
 
+    /**
+     * Normalizes null telemetry to an empty stats object.
+     */
     MatrixPlan {
         if (executionStats == null) {
             executionStats = MatrixExecutionStats.empty(reachable.length);

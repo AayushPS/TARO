@@ -18,7 +18,7 @@ import java.util.NoSuchElementException;
 import java.util.function.IntConsumer;
 
 /**
- * Stage 4: Memory-Efficient Edge-Based Graph (Physical Layer).
+ * Memory-efficient edge-based graph storage for routing queries.
  * <p>
  * ARCHITECTURAL NOTE:
  * This class acts as the "Dumb Physical Layer". It provides raw, efficient access
@@ -26,7 +26,7 @@ import java.util.function.IntConsumer;
  * <p>
  * - It exposes coordinates as generic X/Y doubles (matching the Schema).
  * - It DOES NOT implement spatial logic (distance, adjacency resolution).
- * - Higher-level traits (Stage 15+ Addressing) should consume this class.
+ * - Higher-level request and trait layers should consume this class.
  * <p>
  * Features:
  * - SoA (Structure of Arrays) layout for cache locality.

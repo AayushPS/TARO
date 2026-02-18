@@ -3,7 +3,7 @@ package org.Aayush.routing.heuristic;
 import lombok.experimental.UtilityClass;
 
 /**
- * Numeric helpers for Stage 11 geometry distance computations.
+ * Numeric helpers for geometry distance computations.
  */
 @UtilityClass
 final class GeometryDistance {

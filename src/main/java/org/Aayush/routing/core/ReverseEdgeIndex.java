@@ -7,6 +7,9 @@ import java.util.Objects;
 
 /**
  * Immutable reverse adjacency index for incoming-edge traversal by node.
+ *
+ * <p>Backed by CSR-style arrays where each node maps to a contiguous range inside
+ * {@code incomingEdgeIds}. This enables allocation-free incoming-edge scans.</p>
  */
 final class ReverseEdgeIndex {
     private final int nodeCount;
@@ -20,7 +23,7 @@ final class ReverseEdgeIndex {
     }
 
     /**
-     * Builds a reverse index for one immutable edge graph instance.
+     * Builds reverse adjacency for one immutable edge graph instance.
      */
     static ReverseEdgeIndex build(EdgeGraph edgeGraph) {
         Objects.requireNonNull(edgeGraph, "edgeGraph");
@@ -68,7 +71,7 @@ final class ReverseEdgeIndex {
     }
 
     /**
-     * Returns incoming edge id at reverse index position.
+     * Returns incoming edge id at one reverse-array position.
      */
     int incomingEdgeIdAt(int reverseIndexPosition) {
         return incomingEdgeIds[reverseIndexPosition];

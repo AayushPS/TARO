@@ -1,7 +1,7 @@
 package org.Aayush.routing.heuristic;
 
 /**
- * Stage 11 heuristic provider contract.
+ * Heuristic provider contract used by route planners.
  *
  * <p>Providers are immutable and thread-safe. Binding returns an immutable goal-bound
  * estimator suitable for concurrent hot-path reads.</p>

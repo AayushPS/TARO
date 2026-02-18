@@ -5,10 +5,10 @@ import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import java.util.Map;
 
 /**
- * Stage 1: ID Translation Layer (Implementation)
- * * A standalone implementation of IDMapper using the FastUtil library
+ * Fast bidirectional mapper between external string ids and internal dense integer ids.
+ * A standalone implementation of IDMapper using the FastUtil library
  * for memory efficiency and performance.
- * * This class is immutable and thread-safe for concurrent reads.
+ * This class is immutable and thread-safe for concurrent reads.
  */
 public class FastUtilIDMapper implements IDMapper{
     

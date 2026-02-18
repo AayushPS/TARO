@@ -9,11 +9,15 @@ import java.util.Objects;
 import java.util.PriorityQueue;
 
 /**
- * Stage 14 native one-to-many matrix planner for DIJKSTRA requests.
+ * Native one-to-many matrix planner for DIJKSTRA requests.
+ *
+ * <p>For each source row, the planner runs one edge-based Dijkstra expansion and writes
+ * results for all requested targets. Non-DIJKSTRA or heuristic-enabled requests are
+ * delegated to the compatibility planner.</p>
  */
 final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
-    static final String STAGE14_NATIVE_IMPLEMENTATION_NOTE =
-            "Stage 14 native one-to-many Dijkstra matrix planner.";
+    static final String NATIVE_IMPLEMENTATION_NOTE =
+            "Native one-to-many Dijkstra matrix planner.";
 
     private static final int NO_LABEL = -1;
 
@@ -41,6 +45,9 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         this.terminationPolicy = Objects.requireNonNull(terminationPolicy, "terminationPolicy");
     }
 
+    /**
+     * Computes a matrix for a normalized request, choosing native or compatibility mode.
+     */
     @Override
     public MatrixPlan compute(RouteCore routeCore, InternalMatrixRequest request) {
         Objects.requireNonNull(routeCore, "routeCore");
@@ -57,6 +64,9 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         );
     }
 
+    /**
+     * Executes native one-to-many matrix planning for all source rows.
+     */
     private MatrixPlan computeNative(
             EdgeGraph edgeGraph,
             CostEngine costEngine,
@@ -121,11 +131,14 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
                 reachable,
                 totalCosts,
                 arrivalTicks,
-                STAGE14_NATIVE_IMPLEMENTATION_NOTE,
+                NATIVE_IMPLEMENTATION_NOTE,
                 executionStats
         );
     }
 
+    /**
+     * Computes one source row against deduplicated targets.
+     */
     private void computeRow(
             EdgeGraph edgeGraph,
             CostEngine costEngine,
@@ -240,6 +253,9 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         }
     }
 
+    /**
+     * Returns true when all targets are resolved and frontier cannot improve them further.
+     */
     private boolean canTerminateAfterAllTargetsResolved(
             MatrixQueryContext context,
             PriorityQueue<ForwardFrontierState> frontier
@@ -257,6 +273,9 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         );
     }
 
+    /**
+     * Inserts a label if it is non-dominated for the same edge.
+     */
     private static int addLabelIfNonDominated(
             MatrixQueryContext context,
             int edgeId,
@@ -314,11 +333,17 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         return a + b;
     }
 
+    /**
+     * Applies shared numeric guardrails to frontier priorities.
+     */
     private void ensureValidPriority(double priority) {
         // Uses TerminationPolicy numeric guardrails without changing stop behavior.
         terminationPolicy.shouldTerminate(Float.POSITIVE_INFINITY, priority);
     }
 
+    /**
+     * Materializes row outputs from deduplicated-target buffers into original column order.
+     */
     private static void writeRowOutput(
             MatrixTargetIndex targetIndex,
             MatrixQueryContext context,

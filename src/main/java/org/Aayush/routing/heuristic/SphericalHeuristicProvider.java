@@ -5,7 +5,7 @@ import org.Aayush.routing.graph.EdgeGraph;
 import java.util.Objects;
 
 /**
- * Stage 11 spherical heuristic provider based on great-circle distance.
+ * Spherical heuristic provider based on great-circle distance.
  *
  * <p>Assumes graph coordinates are geodetic latitude/longitude degrees and
  * scales great-circle distance by an admissible lower-bound cost factor.</p>

@@ -8,7 +8,7 @@ import org.Aayush.core.time.TimeUtils;
 import java.util.Objects;
 
 /**
- * Stage 7 canonical live update payload.
+ * Canonical live-update payload for runtime overlay ingestion.
  * <p>
  * This is an immutable ingest record for {@link LiveOverlay}. Expiry is always stored
  * as an absolute engine tick ({@code validUntilTicks}) so ingest/lookup logic remains

@@ -7,7 +7,10 @@ import java.util.Arrays;
 import java.util.PriorityQueue;
 
 /**
- * Thread-confined reusable row buffers for Stage 14 matrix execution.
+ * Thread-confined mutable state for one matrix source-row expansion.
+ *
+ * <p>The context is reused across rows on the same thread to minimize allocations.
+ * Callers must invoke {@link #resetForRow(int)} before each row.</p>
  */
 final class MatrixQueryContext {
     private static final float INF = Float.POSITIVE_INFINITY;
@@ -29,7 +32,9 @@ final class MatrixQueryContext {
     private int rowFrontierPeak;
 
     /**
-     * Resets all per-row mutable structures and initializes target buffers.
+     * Resets all mutable structures for one source row and prepares target buffers.
+     *
+     * @param uniqueTargetCount number of deduplicated targets for this request.
      */
     void resetForRow(int uniqueTargetCount) {
         labelStore.clear();
@@ -64,6 +69,9 @@ final class MatrixQueryContext {
         return frontier;
     }
 
+    /**
+     * Returns active-label list for one edge, creating it lazily when needed.
+     */
     IntArrayList activeLabelsForEdge(int edgeId) {
         IntArrayList labels = activeLabelsByEdge.get(edgeId);
         if (labels == null) {
@@ -76,6 +84,11 @@ final class MatrixQueryContext {
         return labels;
     }
 
+    /**
+     * Updates best-known result for one deduplicated target.
+     *
+     * @return true when target best value was improved.
+     */
     boolean updateTargetBest(int uniqueTargetIndex, float candidateCost, long candidateArrival) {
         float currentCost = bestCostByTarget[uniqueTargetIndex];
         long currentArrival = bestArrivalByTarget[uniqueTargetIndex];
@@ -107,6 +120,9 @@ final class MatrixQueryContext {
         return unresolvedTargets;
     }
 
+    /**
+     * Returns the maximum resolved target cost in this row.
+     */
     double maxResolvedTargetCost() {
         double max = 0.0d;
         for (int i = 0; i < targetCount; i++) {
@@ -117,19 +133,31 @@ final class MatrixQueryContext {
         return max;
     }
 
+    /**
+     * Observes current label-store size for row peak telemetry.
+     */
     void observeLabelCount() {
         rowLabelPeak = Math.max(rowLabelPeak, labelStore.size());
     }
 
+    /**
+     * Observes current frontier size for row peak telemetry.
+     */
     void observeFrontierSize() {
         rowFrontierPeak = Math.max(rowFrontierPeak, frontier.size());
     }
 
+    /**
+     * Increments row work-state counter.
+     */
     int incrementRowWorkStates() {
         rowWorkStates++;
         return rowWorkStates;
     }
 
+    /**
+     * Increments row settled-state counter.
+     */
     void incrementRowSettledStates() {
         rowSettledStates++;
     }

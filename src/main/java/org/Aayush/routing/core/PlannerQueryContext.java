@@ -8,7 +8,10 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import java.util.PriorityQueue;
 
 /**
- * Thread-confined reusable query buffers for Stage 13 planner internals.
+ * Thread-confined mutable state for one bidirectional A* query.
+ *
+ * <p>Holds dominance labels, reverse-lane distance maps, and both frontiers. The
+ * instance is reused per thread to reduce allocation pressure in hot paths.</p>
  */
 final class PlannerQueryContext {
     private static final float INF = Float.POSITIVE_INFINITY;
@@ -26,7 +29,7 @@ final class PlannerQueryContext {
     }
 
     /**
-     * Resets all per-query mutable structures.
+     * Resets all mutable structures for a new query.
      */
     void reset() {
         labelStore.clear();
@@ -50,6 +53,9 @@ final class PlannerQueryContext {
         return labelStore;
     }
 
+    /**
+     * Returns active-label list for one edge, allocating on first touch.
+     */
     IntArrayList activeLabelsForEdge(int edgeId) {
         IntArrayList labels = activeLabelsByEdge.get(edgeId);
         if (labels == null) {
@@ -62,18 +68,30 @@ final class PlannerQueryContext {
         return labels;
     }
 
+    /**
+     * Returns current best reverse-lane lower bound for a node.
+     */
     float reverseBest(int nodeId) {
         return reverseBestByNode.get(nodeId);
     }
 
+    /**
+     * Publishes improved reverse-lane lower bound for a node.
+     */
     void setReverseBest(int nodeId, float distance) {
         reverseBestByNode.put(nodeId, distance);
     }
 
+    /**
+     * Returns whether reverse lane settled this node.
+     */
     boolean isReverseSettled(int nodeId) {
         return reverseSettledByNode.contains(nodeId);
     }
 
+    /**
+     * Marks node as settled in reverse lane.
+     */
     void markReverseSettled(int nodeId) {
         reverseSettledByNode.add(nodeId);
     }

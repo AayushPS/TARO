@@ -2,6 +2,9 @@ package org.Aayush.routing.core;
 
 /**
  * Internal matrix planner abstraction.
+ *
+ * <p>Implementations accept fully normalized internal requests and return raw planner
+ * outputs plus execution metadata consumed by {@link RouteCore}.</p>
  */
 interface MatrixPlanner {
     /**

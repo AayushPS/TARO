@@ -1,7 +1,10 @@
 package org.Aayush.routing.core;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 /**
- * Deterministic Stage 14 bounds for one-to-many matrix planner work/memory.
+ * Deterministic bounds for one-to-many matrix planner work and memory.
  */
 final class MatrixSearchBudget {
     static final int UNBOUNDED = Integer.MAX_VALUE;
@@ -34,7 +37,7 @@ final class MatrixSearchBudget {
     }
 
     /**
-     * Creates Stage 14 budget with explicit deterministic bounds.
+     * Creates matrix-search budget with explicit deterministic bounds.
      */
     static MatrixSearchBudget of(
             int maxRowWorkStates,
@@ -46,7 +49,7 @@ final class MatrixSearchBudget {
     }
 
     /**
-     * Loads deterministic Stage 14 budget values from system properties.
+     * Loads deterministic matrix-search budget values from system properties.
      */
     static MatrixSearchBudget defaults() {
         return MatrixSearchBudget.of(
@@ -125,18 +128,16 @@ final class MatrixSearchBudget {
     }
 
     /**
-     * Deterministic exception for Stage 14 matrix budget fail-fast paths.
+     * Deterministic exception for matrix budget fail-fast paths.
      */
+    @Getter
+    @Accessors(fluent = true)
     static final class BudgetExceededException extends RuntimeException {
         private final String reasonCode;
 
         BudgetExceededException(String reasonCode, String message) {
             super(message);
             this.reasonCode = reasonCode;
-        }
-
-        String reasonCode() {
-            return reasonCode;
         }
     }
 }

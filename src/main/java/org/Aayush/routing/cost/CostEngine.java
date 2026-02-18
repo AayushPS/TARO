@@ -11,7 +11,7 @@ import org.Aayush.routing.profile.ProfileStore;
 import java.util.Objects;
 
 /**
- * Stage 10: Time-dependent edge cost composition engine.
+ * Time-dependent edge cost composition engine.
  * <p>
  * Canonical effective edge travel cost:
  * </p>
@@ -34,7 +34,7 @@ public final class CostEngine {
     public static final int NO_PREDECESSOR = -1;
 
     /**
-     * Temporal profile sampling mode for Stage 10.
+     * Temporal profile sampling mode for cost evaluation.
      */
     public enum TemporalSamplingPolicy {
         /** Uses integer bucket index from normalized entry tick. */

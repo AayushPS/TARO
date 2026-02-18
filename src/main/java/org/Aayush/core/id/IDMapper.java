@@ -5,9 +5,7 @@ import lombok.experimental.StandardException;
 import java.util.Map;
 
 /**
- * Stage 1: ID Translation Layer (Interface)
- * Defines the contract for bidirectional mapping between External IDs (String) 
- * and Internal IDs (int).
+ * Bidirectional mapping contract between external string ids and internal dense integer ids.
  */
 public interface IDMapper {
 
@@ -27,9 +25,27 @@ public interface IDMapper {
      */
     String toExternal(int internalId);
 
+    /**
+     * Checks whether an external id has a mapped internal id.
+     *
+     * @param externalId external id to test.
+     * @return true when the external id is present.
+     */
     boolean containsExternal(String externalId);
+
+    /**
+     * Checks whether an internal id is within mapper bounds.
+     *
+     * @param internalId internal id to test.
+     * @return true when the internal id is present.
+     */
     boolean containsInternal(int internalId);
 
+    /**
+     * Returns number of id pairs in the mapping.
+     *
+     * @return total mapping size.
+     */
     int size();
 
     /**
@@ -42,7 +58,8 @@ public interface IDMapper {
     /**
      * Factory method to create the default immutable implementation.
      * Uses the standalone FastUtilIDMapper class.
-     * * @param mappings A map of External ID -> Internal ID. 
+     *
+     * @param mappings A map of External ID -> Internal ID.
      * Indices must be a dense range from 0 to size-1.
      * @return An immutable IDMapper instance.
      */

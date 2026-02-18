@@ -4,10 +4,10 @@ package org.Aayush.routing.core;
  * Internal route planning output.
  *
  * @param reachable whether target is reachable from source.
- * @param totalCost total computed route cost.
- * @param arrivalTicks arrival tick at target.
+ * @param totalCost total computed route cost (or {@code +INF} when unreachable).
+ * @param arrivalTicks arrival tick at target (or departure tick when unreachable).
  * @param settledStates count of settled states during search.
- * @param nodePath internal node path from source to target.
+ * @param nodePath internal node path from source to target (empty when unreachable).
  */
 record InternalRoutePlan(
         boolean reachable,

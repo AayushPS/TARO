@@ -35,6 +35,9 @@ final class MatrixExecutionStats {
         this.rowFrontierPeaks = rowFrontierPeaks.clone();
     }
 
+    /**
+     * Creates execution stats from request-wide and per-row counters.
+     */
     static MatrixExecutionStats of(
             long requestWorkStates,
             long requestSettledStates,
@@ -57,40 +60,67 @@ final class MatrixExecutionStats {
         );
     }
 
+    /**
+     * Returns a zeroed telemetry object for the provided source-row count.
+     */
     static MatrixExecutionStats empty(int sourceRows) {
         int size = Math.max(0, sourceRows);
         int[] zeros = new int[size];
         return new MatrixExecutionStats(0L, 0L, 0, 0, zeros, zeros, zeros, zeros);
     }
 
+    /**
+     * Total row-work counter aggregated across the request.
+     */
     long requestWorkStates() {
         return requestWorkStates;
     }
 
+    /**
+     * Total settled-state counter aggregated across the request.
+     */
     long requestSettledStates() {
         return requestSettledStates;
     }
 
+    /**
+     * Peak active-label count observed in any row.
+     */
     int requestLabelPeak() {
         return requestLabelPeak;
     }
 
+    /**
+     * Peak frontier size observed in any row.
+     */
     int requestFrontierPeak() {
         return requestFrontierPeak;
     }
 
+    /**
+     * Defensive copy of per-row work-state counters.
+     */
     int[] rowWorkStates() {
         return rowWorkStates.clone();
     }
 
+    /**
+     * Defensive copy of per-row settled-state counters.
+     */
     int[] rowSettledStates() {
         return rowSettledStates.clone();
     }
 
+    /**
+     * Defensive copy of per-row label peaks.
+     */
     int[] rowLabelPeaks() {
         return rowLabelPeaks.clone();
     }
 
+    /**
+     * Defensive copy of per-row frontier peaks.
+     */
     int[] rowFrontierPeaks() {
         return rowFrontierPeaks.clone();
     }
