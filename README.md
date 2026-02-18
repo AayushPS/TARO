@@ -7,7 +7,7 @@ TARO is a time-dependent routing engine that treats travel cost as a function of
 - Algorithms: `DIJKSTRA` and `A_STAR`.
 - Heuristics: `NONE`, `EUCLIDEAN`, `SPHERICAL`, and `LANDMARK` (with precomputed landmark data).
 - Stage 7 live overlay (`LiveOverlay`/`LiveUpdate`) is implemented and integrated into cost composition.
-- Matrix execution currently uses a temporary pairwise planner path (`TemporaryMatrixPlanner`) with a Stage 14 revisit note for one-to-many optimization.
+- Matrix execution uses the native one-to-many planner for `DIJKSTRA + NONE`; `A_STAR` matrix requests remain on the pairwise compatibility path (`TemporaryMatrixPlanner`).
 
 ## Architecture Summary
 TARO follows a dual-runtime pipeline:
