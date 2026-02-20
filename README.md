@@ -6,6 +6,11 @@ TARO is a time-dependent routing engine that treats travel cost as a function of
 - `RouteCore` facade is implemented for point-to-point and matrix routing.
 - Algorithms: `DIJKSTRA` and `A_STAR`.
 - Heuristics: `NONE`, `EUCLIDEAN`, `SPHERICAL`, and `LANDMARK` (with precomputed landmark data).
+- Stage 15 addressing trait is implemented:
+  typed `AddressInput` route/matrix normalization,
+  `external_id` and coordinate inputs,
+  deterministic `H15_*` validation contracts,
+  and resolved endpoint metadata on route responses.
 - Stage 7 live overlay (`LiveOverlay`/`LiveUpdate`) is implemented and integrated into cost composition.
 - Matrix execution uses the native one-to-many planner for `DIJKSTRA + NONE`; `A_STAR` matrix requests remain on the pairwise compatibility path (`TemporaryMatrixPlanner`).
 
@@ -65,6 +70,19 @@ MatrixResponse matrix = router.matrix(
                 .targetExternalId("N11")
                 .departureTicks(1_706_171_400L)
                 .algorithm(RoutingAlgorithm.DIJKSTRA)
+                .heuristicType(HeuristicType.NONE)
+                .build()
+);
+
+RouteResponse typedRoute = router.route(
+        RouteRequest.builder()
+                .sourceAddress(AddressInput.ofXY(12.34, 56.78))
+                .targetAddress(AddressInput.ofXY(13.02, 57.11))
+                .addressingTraitId("DEFAULT")
+                .coordinateDistanceStrategyId("XY")
+                .maxSnapDistance(250.0)
+                .departureTicks(1_706_171_400L)
+                .algorithm(RoutingAlgorithm.A_STAR)
                 .heuristicType(HeuristicType.NONE)
                 .build()
 );

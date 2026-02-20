@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Singular;
 import lombok.Value;
 import org.Aayush.routing.heuristic.HeuristicType;
+import org.Aayush.routing.traits.addressing.ResolvedAddress;
 
 import java.util.List;
 
@@ -30,6 +31,10 @@ public class RouteResponse {
     RoutingAlgorithm algorithm;
     /** Heuristic type that was bound during planning. */
     HeuristicType heuristicType;
+    /** Resolved addressing metadata for source endpoint. */
+    ResolvedAddress sourceResolvedAddress;
+    /** Resolved addressing metadata for target endpoint. */
+    ResolvedAddress targetResolvedAddress;
     /** Path expressed in external node ids from source to target. */
     @Singular("pathNode")
     List<String> pathExternalNodeIds;

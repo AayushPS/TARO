@@ -11,6 +11,12 @@ import org.Aayush.routing.heuristic.HeuristicProvider;
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.heuristic.LandmarkStore;
 import org.Aayush.routing.profile.ProfileStore;
+import org.Aayush.routing.spatial.SpatialRuntime;
+import org.Aayush.routing.traits.addressing.AddressingPolicy;
+import org.Aayush.routing.traits.addressing.AddressingTelemetry;
+import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
+import org.Aayush.routing.traits.addressing.AddressingTraitEngine;
+import org.Aayush.routing.traits.addressing.CoordinateStrategyRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +30,7 @@ import java.util.concurrent.ConcurrentMap;
  * <p>The facade owns runtime contracts for graph/profile/cost-engine identity and
  * applies deterministic request validation before any search starts. Execution flow:</p>
  * <ul>
- * <li>Normalize client payloads from external node ids to internal node ids.</li>
+ * <li>Normalize client payloads from external/typed addressing to internal node ids.</li>
  * <li>Validate algorithm/heuristic compatibility and required fields.</li>
  * <li>Resolve or lazily build heuristic providers with strict contract checks.</li>
  * <li>Delegate to point-to-point or matrix planners.</li>
@@ -55,6 +61,22 @@ public final class RouteCore implements RouterService {
     public static final String REASON_MATRIX_SEARCH_BUDGET_EXCEEDED = "H14_MATRIX_SEARCH_BUDGET_EXCEEDED";
     public static final String REASON_MATRIX_NUMERIC_SAFETY_BREACH = "H14_MATRIX_NUMERIC_SAFETY_BREACH";
 
+    public static final String REASON_ADDRESSING_TRAIT_REQUIRED = "H15_ADDRESSING_TRAIT_REQUIRED";
+    public static final String REASON_UNKNOWN_ADDRESSING_TRAIT = "H15_UNKNOWN_ADDRESSING_TRAIT";
+    public static final String REASON_UNSUPPORTED_ADDRESS_TYPE = "H15_UNSUPPORTED_ADDRESS_TYPE";
+    public static final String REASON_MALFORMED_TYPED_PAYLOAD = "H15_MALFORMED_TYPED_PAYLOAD";
+    public static final String REASON_NON_FINITE_COORDINATES = "H15_NON_FINITE_COORDINATES";
+    public static final String REASON_LAT_LON_RANGE = "H15_LAT_LON_RANGE";
+    public static final String REASON_COORDINATE_STRATEGY_REQUIRED = "H15_COORDINATE_STRATEGY_REQUIRED";
+    public static final String REASON_UNKNOWN_COORDINATE_STRATEGY = "H15_UNKNOWN_COORDINATE_STRATEGY";
+    public static final String REASON_UNKNOWN_TYPED_EXTERNAL_NODE = "H15_UNKNOWN_TYPED_EXTERNAL_NODE";
+    public static final String REASON_COORDINATE_STRATEGY_FAILURE = "H15_COORDINATE_STRATEGY_FAILURE";
+    public static final String REASON_SPATIAL_RUNTIME_UNAVAILABLE = "H15_SPATIAL_RUNTIME_UNAVAILABLE";
+    public static final String REASON_SNAP_THRESHOLD_EXCEEDED = "H15_SNAP_THRESHOLD_EXCEEDED";
+    public static final String REASON_MIXED_MODE_DISABLED = "H15_MIXED_MODE_DISABLED";
+    public static final String REASON_TYPED_LEGACY_AMBIGUITY = "H15_TYPED_LEGACY_AMBIGUITY";
+    public static final String REASON_INVALID_MAX_SNAP_DISTANCE = "H15_INVALID_MAX_SNAP_DISTANCE";
+
     private static final GoalBoundHeuristic ZERO_HEURISTIC = nodeId -> 0.0d;
 
     private final EdgeGraph edgeGraph;
@@ -66,8 +88,17 @@ public final class RouteCore implements RouterService {
     private final RoutePlanner dijkstraPlanner;
     private final RoutePlanner aStarPlanner;
     private final MatrixPlanner matrixPlanner;
+
+    private final SpatialRuntime spatialRuntime;
+    private final AddressingTraitEngine addressingTraitEngine;
+    private final AddressingTraitCatalog addressingTraitCatalog;
+    private final CoordinateStrategyRegistry coordinateStrategyRegistry;
+    private final AddressingPolicy addressingPolicy;
+
     private final ThreadLocal<MatrixExecutionStats> matrixExecutionStats =
             ThreadLocal.withInitial(() -> MatrixExecutionStats.empty(0));
+    private final ThreadLocal<AddressingTelemetry> addressingTelemetry =
+            ThreadLocal.withInitial(AddressingTelemetry::empty);
     private final ConcurrentMap<HeuristicType, HeuristicProvider> heuristicProviders = new ConcurrentHashMap<>();
 
     /**
@@ -88,7 +119,12 @@ public final class RouteCore implements RouterService {
             IDMapper nodeIdMapper,
             LandmarkStore landmarkStore,
             MatrixPlanner matrixPlanner,
-            RoutePlanner aStarPlanner
+            RoutePlanner aStarPlanner,
+            SpatialRuntime spatialRuntime,
+            AddressingTraitEngine addressingTraitEngine,
+            AddressingTraitCatalog addressingTraitCatalog,
+            CoordinateStrategyRegistry coordinateStrategyRegistry,
+            AddressingPolicy addressingPolicy
     ) {
         this.edgeGraph = Objects.requireNonNull(edgeGraph, "edgeGraph");
         this.profileStore = Objects.requireNonNull(profileStore, "profileStore");
@@ -97,6 +133,16 @@ public final class RouteCore implements RouterService {
         this.landmarkStore = landmarkStore;
         this.matrixPlanner = matrixPlanner == null ? new OneToManyDijkstraMatrixPlanner() : matrixPlanner;
         this.dijkstraPlanner = new EdgeBasedRoutePlanner(false);
+
+        this.spatialRuntime = spatialRuntime;
+        this.addressingTraitEngine = addressingTraitEngine == null ? new AddressingTraitEngine() : addressingTraitEngine;
+        this.addressingTraitCatalog = addressingTraitCatalog == null
+                ? AddressingTraitCatalog.defaultCatalog()
+                : addressingTraitCatalog;
+        this.coordinateStrategyRegistry = coordinateStrategyRegistry == null
+                ? CoordinateStrategyRegistry.defaultRegistry()
+                : coordinateStrategyRegistry;
+        this.addressingPolicy = addressingPolicy == null ? AddressingPolicy.defaults() : addressingPolicy;
 
         ensureCostEngineContracts();
         this.aStarPlanner = aStarPlanner == null
@@ -111,13 +157,17 @@ public final class RouteCore implements RouterService {
     /**
      * Executes one client point-to-point request.
      *
-     * @param request route request in external-id space.
-     * @return response containing reachability, path, cost, and planner metadata.
+     * @param request route request in external-id or typed addressing space.
+     * @return response containing reachability, path, cost, planner metadata, and resolved endpoints.
      * @throws RouteCoreException when request contracts or planner guardrails fail.
      */
     @Override
     public RouteResponse route(RouteRequest request) {
-        InternalRouteRequest internalRequest = toInternalRouteRequest(request);
+        addressingTelemetry.set(AddressingTelemetry.empty());
+        NormalizedRouteRequest normalized = normalizeRouteRequest(request);
+        addressingTelemetry.set(normalized.addressingTelemetry());
+
+        InternalRouteRequest internalRequest = normalized.internalRequest();
         InternalRoutePlan plan = computeInternal(internalRequest);
 
         RouteResponse.RouteResponseBuilder builder = RouteResponse.builder()
@@ -127,7 +177,9 @@ public final class RouteCore implements RouterService {
                 .totalCost(plan.totalCost())
                 .settledStates(plan.settledStates())
                 .algorithm(internalRequest.algorithm())
-                .heuristicType(internalRequest.heuristicType());
+                .heuristicType(internalRequest.heuristicType())
+                .sourceResolvedAddress(normalized.sourceResolvedAddress())
+                .targetResolvedAddress(normalized.targetResolvedAddress());
 
         if (plan.reachable()) {
             for (String node : toExternalNodePath(plan.nodePath())) {
@@ -141,19 +193,23 @@ public final class RouteCore implements RouterService {
     /**
      * Executes one client many-to-many matrix request.
      *
-     * @param request matrix request in external-id space.
+     * @param request matrix request in external-id or typed addressing space.
      * @return matrix response with row/column mapping, costs, arrivals, and execution note.
      * @throws RouteCoreException when request contracts or matrix guardrails fail.
      */
     @Override
     public MatrixResponse matrix(MatrixRequest request) {
-        InternalMatrixRequest internalRequest = toInternalMatrixRequest(request);
+        addressingTelemetry.set(AddressingTelemetry.empty());
+        NormalizedMatrixRequest normalized = normalizeMatrixRequest(request);
+        addressingTelemetry.set(normalized.addressingTelemetry());
+
+        InternalMatrixRequest internalRequest = normalized.internalRequest();
         try {
             MatrixPlan matrixPlan = matrixPlanner.compute(this, internalRequest);
             matrixExecutionStats.set(matrixPlan.executionStats());
             return MatrixResponse.builder()
-                    .sourceExternalIds(List.copyOf(request.getSourceExternalIds()))
-                    .targetExternalIds(List.copyOf(request.getTargetExternalIds()))
+                    .sourceExternalIds(normalized.sourceExternalIds())
+                    .targetExternalIds(normalized.targetExternalIds())
                     .reachable(copy(matrixPlan.reachable()))
                     .totalCosts(copy(matrixPlan.totalCosts()))
                     .arrivalTicks(copy(matrixPlan.arrivalTicks()))
@@ -178,12 +234,16 @@ public final class RouteCore implements RouterService {
 
     /**
      * Returns telemetry from the most recent matrix call on the current thread.
-     *
-     * <p>Matrix execution is thread-confined through thread-local planner contexts, so
-     * telemetry is also exposed per-thread to avoid cross-request contamination.</p>
      */
     MatrixExecutionStats matrixExecutionStatsContract() {
         return matrixExecutionStats.get();
+    }
+
+    /**
+     * Returns telemetry from the most recent Stage 15 addressing normalization.
+     */
+    AddressingTelemetry addressingTelemetryContract() {
+        return addressingTelemetry.get();
     }
 
     /**
@@ -237,9 +297,6 @@ public final class RouteCore implements RouterService {
 
     /**
      * Resolves a goal-bound heuristic for the current request.
-     *
-     * <p>Dijkstra bypasses provider creation and always uses a zero estimate, guaranteeing
-     * exact uniform-cost semantics regardless of requested heuristic type.</p>
      */
     private GoalBoundHeuristic resolveGoalBoundHeuristic(InternalRouteRequest request) {
         if (request.algorithm() == RoutingAlgorithm.DIJKSTRA) {
@@ -259,9 +316,6 @@ public final class RouteCore implements RouterService {
 
     /**
      * Builds and validates a heuristic provider for one heuristic mode.
-     *
-     * <p>Provider construction is centralized so all planner calls share identical
-     * graph/profile/cost contracts.</p>
      */
     private HeuristicProvider buildHeuristicProvider(HeuristicType heuristicType) {
         try {
@@ -277,88 +331,71 @@ public final class RouteCore implements RouterService {
 
     /**
      * Normalizes and validates a route request into internal-node form.
-     *
-     * <p>This conversion enforces all external request invariants before planner invocation.</p>
      */
-    private InternalRouteRequest toInternalRouteRequest(RouteRequest request) {
+    private NormalizedRouteRequest normalizeRouteRequest(RouteRequest request) {
         if (request == null) {
             throw new RouteCoreException(REASON_ROUTE_REQUEST_REQUIRED, "route request must be provided");
         }
+
         RoutingAlgorithm algorithm = requireAlgorithm(request.getAlgorithm());
         HeuristicType heuristicType = requireHeuristicType(request.getHeuristicType());
         validateAlgorithmHeuristicPair(algorithm, heuristicType);
 
-        int sourceNodeId = toInternalNodeId(request.getSourceExternalId(), REASON_SOURCE_EXTERNAL_ID_REQUIRED, "sourceExternalId");
-        int targetNodeId = toInternalNodeId(request.getTargetExternalId(), REASON_TARGET_EXTERNAL_ID_REQUIRED, "targetExternalId");
-        return new InternalRouteRequest(
-                sourceNodeId,
-                targetNodeId,
+        AddressingTraitEngine.RouteResolution addressing = addressingTraitEngine.resolveRoute(request, addressingContext());
+        InternalRouteRequest internalRequest = new InternalRouteRequest(
+                addressing.sourceNodeId(),
+                addressing.targetNodeId(),
                 request.getDepartureTicks(),
                 algorithm,
                 heuristicType
+        );
+
+        return new NormalizedRouteRequest(
+                internalRequest,
+                addressing.sourceResolvedAddress(),
+                addressing.targetResolvedAddress(),
+                addressing.telemetry()
         );
     }
 
     /**
      * Normalizes and validates a matrix request into internal-node form.
-     *
-     * <p>Both source and target lists must be non-empty and every external id must map to
-     * an in-range internal node id.</p>
      */
-    private InternalMatrixRequest toInternalMatrixRequest(MatrixRequest request) {
+    private NormalizedMatrixRequest normalizeMatrixRequest(MatrixRequest request) {
         if (request == null) {
             throw new RouteCoreException(REASON_MATRIX_REQUEST_REQUIRED, "matrix request must be provided");
         }
+
         RoutingAlgorithm algorithm = requireAlgorithm(request.getAlgorithm());
         HeuristicType heuristicType = requireHeuristicType(request.getHeuristicType());
         validateAlgorithmHeuristicPair(algorithm, heuristicType);
 
-        List<String> sourceIds = request.getSourceExternalIds();
-        if (sourceIds == null || sourceIds.isEmpty()) {
-            throw new RouteCoreException(REASON_SOURCE_LIST_REQUIRED, "sourceExternalIds must be non-empty");
-        }
-        List<String> targetIds = request.getTargetExternalIds();
-        if (targetIds == null || targetIds.isEmpty()) {
-            throw new RouteCoreException(REASON_TARGET_LIST_REQUIRED, "targetExternalIds must be non-empty");
-        }
+        AddressingTraitEngine.MatrixResolution addressing = addressingTraitEngine.resolveMatrix(request, addressingContext());
+        InternalMatrixRequest internalRequest = new InternalMatrixRequest(
+                addressing.sourceNodeIds(),
+                addressing.targetNodeIds(),
+                request.getDepartureTicks(),
+                algorithm,
+                heuristicType
+        );
 
-        int[] sourceNodeIds = new int[sourceIds.size()];
-        for (int i = 0; i < sourceIds.size(); i++) {
-            sourceNodeIds[i] = toInternalNodeId(sourceIds.get(i), REASON_SOURCE_EXTERNAL_ID_REQUIRED, "sourceExternalIds[" + i + "]");
-        }
-
-        int[] targetNodeIds = new int[targetIds.size()];
-        for (int i = 0; i < targetIds.size(); i++) {
-            targetNodeIds[i] = toInternalNodeId(targetIds.get(i), REASON_TARGET_EXTERNAL_ID_REQUIRED, "targetExternalIds[" + i + "]");
-        }
-
-        return new InternalMatrixRequest(sourceNodeIds, targetNodeIds, request.getDepartureTicks(), algorithm, heuristicType);
+        return new NormalizedMatrixRequest(
+                internalRequest,
+                addressing.sourceExternalIds(),
+                addressing.targetExternalIds(),
+                addressing.telemetry()
+        );
     }
 
-    /**
-     * Resolves one external node id to an internal node id with bounds validation.
-     */
-    private int toInternalNodeId(String externalId, String requiredReasonCode, String fieldName) {
-        if (externalId == null || externalId.isBlank()) {
-            throw new RouteCoreException(requiredReasonCode, fieldName + " must be non-blank");
-        }
-        final int internalNodeId;
-        try {
-            internalNodeId = nodeIdMapper.toInternal(externalId);
-        } catch (IDMapper.UnknownIDException ex) {
-            throw new RouteCoreException(
-                    REASON_UNKNOWN_EXTERNAL_NODE,
-                    "unknown external node id: " + externalId,
-                    ex
-            );
-        }
-        if (internalNodeId < 0 || internalNodeId >= edgeGraph.nodeCount()) {
-            throw new RouteCoreException(
-                    REASON_INTERNAL_NODE_OUT_OF_BOUNDS,
-                    "mapped internal node id out of range for " + externalId + ": " + internalNodeId
-            );
-        }
-        return internalNodeId;
+    private AddressingTraitEngine.ResolveContext addressingContext() {
+        return new AddressingTraitEngine.ResolveContext(
+                edgeGraph,
+                nodeIdMapper,
+                spatialRuntime,
+                addressingTraitCatalog,
+                coordinateStrategyRegistry,
+                addressingPolicy
+        );
     }
 
     /**
@@ -367,17 +404,21 @@ public final class RouteCore implements RouterService {
     private List<String> toExternalNodePath(int[] nodePath) {
         List<String> externalPath = new ArrayList<>(nodePath.length);
         for (int nodeId : nodePath) {
-            try {
-                externalPath.add(nodeIdMapper.toExternal(nodeId));
-            } catch (RuntimeException ex) {
-                throw new RouteCoreException(
-                        REASON_EXTERNAL_MAPPING_FAILED,
-                        "failed to map internal node " + nodeId + " to external id",
-                        ex
-                );
-            }
+            externalPath.add(mapInternalToExternal(nodeId));
         }
         return List.copyOf(externalPath);
+    }
+
+    private String mapInternalToExternal(int internalNodeId) {
+        try {
+            return nodeIdMapper.toExternal(internalNodeId);
+        } catch (RuntimeException ex) {
+            throw new RouteCoreException(
+                    REASON_EXTERNAL_MAPPING_FAILED,
+                    "failed to map internal node " + internalNodeId + " to external id",
+                    ex
+            );
+        }
     }
 
     /**
@@ -414,9 +455,6 @@ public final class RouteCore implements RouterService {
 
     /**
      * Validates cost-engine identity contracts against this facade runtime.
-     *
-     * <p>Identity equality is required to prevent mixing unrelated graph/profile instances
-     * in one execution context.</p>
      */
     private void ensureCostEngineContracts() {
         if (costEngine.edgeGraph() != edgeGraph) {
@@ -464,5 +502,25 @@ public final class RouteCore implements RouterService {
             copy[i] = source[i].clone();
         }
         return copy;
+    }
+
+    private record NormalizedRouteRequest(
+            InternalRouteRequest internalRequest,
+            org.Aayush.routing.traits.addressing.ResolvedAddress sourceResolvedAddress,
+            org.Aayush.routing.traits.addressing.ResolvedAddress targetResolvedAddress,
+            AddressingTelemetry addressingTelemetry
+    ) {
+    }
+
+    private record NormalizedMatrixRequest(
+            InternalMatrixRequest internalRequest,
+            List<String> sourceExternalIds,
+            List<String> targetExternalIds,
+            AddressingTelemetry addressingTelemetry
+    ) {
+        private NormalizedMatrixRequest {
+            sourceExternalIds = List.copyOf(sourceExternalIds);
+            targetExternalIds = List.copyOf(targetExternalIds);
+        }
     }
 }

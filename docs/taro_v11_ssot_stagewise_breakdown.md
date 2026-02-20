@@ -343,6 +343,9 @@ Each stage contains:
 
 ## Stage 15: Addressing Trait
 
+### Implementation Status
+- Implemented (closed on 2026-02-20).
+
 ### Functional Requirements
 - Support abstract ID and spatial coordinate addressing.
 - Resolve typed request input to internal graph anchors.
