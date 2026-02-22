@@ -50,6 +50,7 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         int sourceNodeId = request.sourceNodeId();
         int targetNodeId = request.targetNodeId();
         long departureTicks = request.departureTicks();
+        var temporalContext = request.temporalContext();
 
         if (sourceNodeId == targetNodeId) {
             return new InternalRoutePlan(true, 0.0f, departureTicks, 0, new int[]{sourceNodeId});
@@ -63,7 +64,12 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         iterator.resetForNode(sourceNodeId);
         while (iterator.hasNext()) {
             int edgeId = iterator.next();
-            float transitionCost = costEngine.computeEdgeCost(edgeId, CostEngine.NO_PREDECESSOR, departureTicks);
+            float transitionCost = costEngine.computeEdgeCost(
+                    edgeId,
+                    CostEngine.NO_PREDECESSOR,
+                    departureTicks,
+                    temporalContext
+            );
             if (!Float.isFinite(transitionCost)) {
                 continue;
             }
@@ -115,7 +121,7 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
             iterator.reset(edgeId);
             while (iterator.hasNext()) {
                 int nextEdgeId = iterator.next();
-                float transitionCost = costEngine.computeEdgeCost(nextEdgeId, edgeId, bestArrival);
+                float transitionCost = costEngine.computeEdgeCost(nextEdgeId, edgeId, bestArrival, temporalContext);
                 if (!Float.isFinite(transitionCost)) {
                     continue;
                 }

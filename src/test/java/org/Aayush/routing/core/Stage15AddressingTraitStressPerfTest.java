@@ -9,6 +9,7 @@ import org.Aayush.routing.traits.addressing.AddressType;
 import org.Aayush.routing.traits.addressing.AddressingTelemetry;
 import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
 import org.Aayush.routing.traits.addressing.CoordinateStrategyRegistry;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.KDNode;
 import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
@@ -285,6 +286,7 @@ class Stage15AddressingTraitStressPerfTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .spatialRuntime(spatialRuntime)
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .build();
     }
 

@@ -11,6 +11,10 @@ TARO is a time-dependent routing engine that treats travel cost as a function of
   `external_id` and coordinate inputs,
   deterministic `H15_*` validation contracts,
   and resolved endpoint metadata on route responses.
+- Stage 16 temporal trait is implemented:
+  startup-locked temporal mode selection (`LINEAR` or `CALENDAR`),
+  explicit calendar timezone policies (`UTC` or `MODEL_TIMEZONE`) with deterministic `H16_*` validation contracts,
+  and DST-safe temporal context resolution in the cost path.
 - Stage 7 live overlay (`LiveOverlay`/`LiveUpdate`) is implemented and integrated into cost composition.
 - Matrix execution uses the native one-to-many planner for `DIJKSTRA + NONE`; `A_STAR` matrix requests remain on the pairwise compatibility path (`TemporaryMatrixPlanner`).
 

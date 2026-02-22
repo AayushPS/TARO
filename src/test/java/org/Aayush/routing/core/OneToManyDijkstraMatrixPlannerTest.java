@@ -2,6 +2,7 @@ package org.Aayush.routing.core;
 
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -140,6 +141,7 @@ class OneToManyDijkstraMatrixPlannerTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .build();
     }
 

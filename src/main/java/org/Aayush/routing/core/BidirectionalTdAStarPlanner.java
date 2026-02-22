@@ -91,6 +91,7 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         int sourceNodeId = request.sourceNodeId();
         int targetNodeId = request.targetNodeId();
         long departureTicks = request.departureTicks();
+        var temporalContext = request.temporalContext();
 
         if (sourceNodeId == targetNodeId) {
             return new InternalRoutePlan(true, 0.0f, departureTicks, 0, new int[]{sourceNodeId});
@@ -110,7 +111,12 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         iterator.resetForNode(sourceNodeId);
         while (iterator.hasNext()) {
             int edgeId = iterator.next();
-            float transitionCost = costEngine.computeEdgeCost(edgeId, CostEngine.NO_PREDECESSOR, departureTicks);
+            float transitionCost = costEngine.computeEdgeCost(
+                    edgeId,
+                    CostEngine.NO_PREDECESSOR,
+                    departureTicks,
+                    temporalContext
+            );
             if (!Float.isFinite(transitionCost)) {
                 continue;
             }
@@ -172,7 +178,12 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
             iterator.reset(settledEdgeId);
             while (iterator.hasNext()) {
                 int nextEdgeId = iterator.next();
-                float transitionCost = costEngine.computeEdgeCost(nextEdgeId, settledEdgeId, settledArrival);
+                float transitionCost = costEngine.computeEdgeCost(
+                        nextEdgeId,
+                        settledEdgeId,
+                        settledArrival,
+                        temporalContext
+                );
                 if (!Float.isFinite(transitionCost)) {
                     continue;
                 }
@@ -215,7 +226,12 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         }
 
         int[] edgePath = buildEdgePath(labelStore, bestGoalLabelId);
-        PathEvaluator.Evaluation evaluation = pathEvaluator.evaluateEdgePath(costEngine, edgePath, departureTicks);
+        PathEvaluator.Evaluation evaluation = pathEvaluator.evaluateEdgePath(
+                costEngine,
+                edgePath,
+                departureTicks,
+                temporalContext
+        );
         int[] nodePath = pathEvaluator.toNodePath(edgeGraph, sourceNodeId, edgePath);
         return new InternalRoutePlan(true, evaluation.totalCost(), evaluation.arrivalTicks(), settledStates, nodePath);
     }

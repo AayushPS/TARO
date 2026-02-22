@@ -7,6 +7,8 @@ import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.graph.TurnCostMap;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.profile.ProfileStore;
+import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
+import org.Aayush.routing.traits.temporal.TemporalContextResolver;
 
 import java.util.Objects;
 
@@ -27,6 +29,8 @@ import java.util.Objects;
  */
 @Accessors(fluent = true)
 public final class CostEngine {
+    private static final ResolvedTemporalContext DEFAULT_TEMPORAL_CONTEXT =
+            ResolvedTemporalContext.defaultCalendarUtc();
 
     /**
      * Sentinel predecessor when no turn transition is available.
@@ -106,7 +110,19 @@ public final class CostEngine {
      * Fast-path scalar cost computation without breakdown object allocation.
      */
     public float computeEdgeCost(int edgeId, int fromEdgeId, long entryTicks) {
-        return computeInternal(edgeId, fromEdgeId, entryTicks, null);
+        return computeEdgeCost(edgeId, fromEdgeId, entryTicks, DEFAULT_TEMPORAL_CONTEXT);
+    }
+
+    /**
+     * Fast-path scalar cost computation with explicit temporal context.
+     */
+    public float computeEdgeCost(
+            int edgeId,
+            int fromEdgeId,
+            long entryTicks,
+            ResolvedTemporalContext temporalContext
+    ) {
+        return computeInternal(edgeId, fromEdgeId, entryTicks, temporalContext, null);
     }
 
     /**
@@ -131,11 +147,30 @@ public final class CostEngine {
     }
 
     /**
+     * Convenience overload with explicit temporal context and no predecessor transition.
+     */
+    public float computeEdgeCost(int edgeId, long entryTicks, ResolvedTemporalContext temporalContext) {
+        return computeEdgeCost(edgeId, NO_PREDECESSOR, entryTicks, temporalContext);
+    }
+
+    /**
      * Explainable cost computation. Intended for debugging/telemetry paths.
      */
     public CostBreakdown explainEdgeCost(int edgeId, int fromEdgeId, long entryTicks) {
+        return explainEdgeCost(edgeId, fromEdgeId, entryTicks, DEFAULT_TEMPORAL_CONTEXT);
+    }
+
+    /**
+     * Explainable cost computation with explicit temporal context.
+     */
+    public CostBreakdown explainEdgeCost(
+            int edgeId,
+            int fromEdgeId,
+            long entryTicks,
+            ResolvedTemporalContext temporalContext
+    ) {
         MutableCostBreakdown breakdown = new MutableCostBreakdown();
-        computeInternal(edgeId, fromEdgeId, entryTicks, breakdown);
+        computeInternal(edgeId, fromEdgeId, entryTicks, temporalContext, breakdown);
         return breakdown.toImmutable();
     }
 
@@ -147,38 +182,73 @@ public final class CostEngine {
     }
 
     /**
+     * Convenience overload with explicit temporal context and no predecessor transition.
+     */
+    public CostBreakdown explainEdgeCost(int edgeId, long entryTicks, ResolvedTemporalContext temporalContext) {
+        return explainEdgeCost(edgeId, NO_PREDECESSOR, entryTicks, temporalContext);
+    }
+
+    /**
      * Allocation-free explain path for callers that reuse breakdown container.
      */
     public void explainEdgeCost(int edgeId, int fromEdgeId, long entryTicks, MutableCostBreakdown out) {
+        explainEdgeCost(edgeId, fromEdgeId, entryTicks, DEFAULT_TEMPORAL_CONTEXT, out);
+    }
+
+    /**
+     * Allocation-free explain path for callers that reuse breakdown container and pass temporal context.
+     */
+    public void explainEdgeCost(
+            int edgeId,
+            int fromEdgeId,
+            long entryTicks,
+            ResolvedTemporalContext temporalContext,
+            MutableCostBreakdown out
+    ) {
         Objects.requireNonNull(out, "out");
-        computeInternal(edgeId, fromEdgeId, entryTicks, out);
+        computeInternal(edgeId, fromEdgeId, entryTicks, temporalContext, out);
     }
 
     /**
      * Shared execution path for both scalar and explainable cost requests.
      */
-    private float computeInternal(int edgeId, int fromEdgeId, long entryTicks, MutableCostBreakdown out) {
+    private float computeInternal(
+            int edgeId,
+            int fromEdgeId,
+            long entryTicks,
+            ResolvedTemporalContext temporalContext,
+            MutableCostBreakdown out
+    ) {
         validateEdgeId(edgeId);
         validatePredecessor(fromEdgeId);
+        ResolvedTemporalContext resolvedTemporalContext = Objects.requireNonNull(temporalContext, "temporalContext");
+        TemporalContextResolver temporalResolver = Objects.requireNonNull(
+                resolvedTemporalContext.getResolver(),
+                "temporalContext.resolver"
+        );
 
         float baseWeight = edgeGraph.getBaseWeight(edgeId);
         ensureFiniteNonNegative(baseWeight, "baseWeight");
 
         int profileId = edgeGraph.getProfileId(edgeId);
-        int dayOfWeek = TimeUtils.getDayOfWeek(entryTicks, engineTimeUnit);
-        int bucketIndex = TimeUtils.toBucket(entryTicks, bucketSizeSeconds, engineTimeUnit);
+        int dayOfWeek = temporalResolver.resolveDayOfWeek(entryTicks, engineTimeUnit);
+        int bucketIndex = temporalResolver.resolveBucketIndex(entryTicks, bucketSizeSeconds, engineTimeUnit);
         double fractionalBucket = Double.NaN;
         float temporalMultiplier = switch (temporalSamplingPolicy) {
             case DISCRETE -> {
                 if (out != null) {
                     // Expose diagnostic fractional position only for explain path in discrete mode.
-                    fractionalBucket = toFractionalBucket(entryTicks);
+                    fractionalBucket = temporalResolver.resolveFractionalBucket(entryTicks, bucketSizeTicks, engineTimeUnit);
                 }
-                yield profileStore.getMultiplierForDay(profileId, dayOfWeek, bucketIndex);
+                yield temporalResolver.dayMaskAware()
+                        ? profileStore.getMultiplierForDay(profileId, dayOfWeek, bucketIndex)
+                        : profileStore.getMultiplier(profileId, bucketIndex);
             }
             case INTERPOLATED -> {
-                fractionalBucket = toFractionalBucket(entryTicks);
-                yield profileStore.interpolateForDay(profileId, dayOfWeek, fractionalBucket);
+                fractionalBucket = temporalResolver.resolveFractionalBucket(entryTicks, bucketSizeTicks, engineTimeUnit);
+                yield temporalResolver.dayMaskAware()
+                        ? profileStore.interpolateForDay(profileId, dayOfWeek, fractionalBucket)
+                        : profileStore.interpolate(profileId, fractionalBucket);
             }
         };
         ensureFiniteNonNegative(temporalMultiplier, "temporalMultiplier");
@@ -240,14 +310,6 @@ public final class CostEngine {
             return Float.POSITIVE_INFINITY;
         }
         return toNonNegativeCost((double) edgeTravelCost + turnPenalty, "effectiveCost");
-    }
-
-    /**
-     * Converts entry time into fractional bucket coordinate within one day.
-     */
-    private double toFractionalBucket(long entryTicks) {
-        long timeOfDayTicks = TimeUtils.getTimeOfDayTicks(entryTicks, engineTimeUnit);
-        return (double) timeOfDayTicks / (double) bucketSizeTicks;
     }
 
     /**

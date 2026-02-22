@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -86,6 +87,29 @@ class ModelContractValidatorTest {
                 () -> ModelContractValidator.validateMetadataContract(model, "ValidatorTest")
         );
         assertTrue(ex.getMessage().contains("tick_duration_ns"));
+    }
+
+    @Test
+    @DisplayName("Profile timezone parsing accepts valid ids")
+    void testProfileTimezoneParsing() {
+        ZoneId zoneId = ModelContractValidator.parseProfileTimezone("America/New_York", "ValidatorTest");
+        assertEquals("America/New_York", zoneId.getId());
+    }
+
+    @Test
+    @DisplayName("Profile timezone parsing rejects missing or invalid values")
+    void testProfileTimezoneParsingValidation() {
+        IllegalArgumentException missing = assertThrows(
+                IllegalArgumentException.class,
+                () -> ModelContractValidator.parseProfileTimezone("   ", "ValidatorTest")
+        );
+        assertTrue(missing.getMessage().contains("profile_timezone"));
+
+        IllegalArgumentException invalid = assertThrows(
+                IllegalArgumentException.class,
+                () -> ModelContractValidator.parseProfileTimezone("Invalid/Timezone", "ValidatorTest")
+        );
+        assertTrue(invalid.getMessage().contains("profile_timezone"));
     }
 
     private Model parseModel(ByteBuffer buffer) {

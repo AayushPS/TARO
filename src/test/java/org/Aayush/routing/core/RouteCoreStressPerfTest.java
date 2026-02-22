@@ -10,6 +10,7 @@ import org.Aayush.routing.heuristic.LandmarkPreprocessorConfig;
 import org.Aayush.routing.heuristic.LandmarkStore;
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -896,7 +897,8 @@ class RouteCoreStressPerfTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(costEngine)
                 .nodeIdMapper(fixture.nodeIdMapper())
-                .landmarkStore(landmarkStore);
+                .landmarkStore(landmarkStore)
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc());
         if (aStarPlanner != null) {
             builder.aStarPlanner(aStarPlanner);
         }

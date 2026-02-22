@@ -4,6 +4,10 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.Accessors;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.Objects;
+
 /**
  * Shared deterministic time helpers for routing/profile runtime logic.
  *
@@ -74,6 +78,22 @@ public final class TimeUtils {
     }
 
     /**
+     * Converts timestamps from model ticks to local-time bucket index using a zone id.
+     *
+     * @param timestamp timestamp in model ticks.
+     * @param bucketSizeSeconds bucket size in seconds.
+     * @param unit unit used by {@code timestamp}.
+     * @param zoneId local timezone used for bucket derivation.
+     * @return bucket index in range {@code [0, bucketsPerDay - 1]}.
+     */
+    public static int toBucket(long timestamp, int bucketSizeSeconds, EngineTimeUnit unit, ZoneId zoneId) {
+        Objects.requireNonNull(zoneId, "zoneId");
+        long epochSeconds = toEpochSeconds(timestamp, unit);
+        int offsetSeconds = zoneId.getRules().getOffset(Instant.ofEpochSecond(epochSeconds)).getTotalSeconds();
+        return toBucketWithOffset(epochSeconds, bucketSizeSeconds, offsetSeconds);
+    }
+
+    /**
      * Extracts day of week from Unix epoch.
      *
      * @param epochSec Unix timestamp in seconds (UTC).
@@ -111,6 +131,21 @@ public final class TimeUtils {
     }
 
     /**
+     * Extracts local day-of-week from model ticks and a zone id.
+     *
+     * @param timestamp timestamp in model ticks.
+     * @param unit unit used by {@code timestamp}.
+     * @param zoneId local timezone used for day derivation.
+     * @return day-of-week where Monday = 0 and Sunday = 6.
+     */
+    public static int getDayOfWeek(long timestamp, EngineTimeUnit unit, ZoneId zoneId) {
+        Objects.requireNonNull(zoneId, "zoneId");
+        long epochSeconds = toEpochSeconds(timestamp, unit);
+        int offsetSeconds = zoneId.getRules().getOffset(Instant.ofEpochSecond(epochSeconds)).getTotalSeconds();
+        return getDayOfWeekWithOffset(epochSeconds, offsetSeconds);
+    }
+
+    /**
      * Returns seconds elapsed since midnight (UTC).
      *
      * @param epochSec Unix timestamp in seconds (UTC).
@@ -137,6 +172,71 @@ public final class TimeUtils {
     public static long getTimeOfDayTicks(long timestamp, EngineTimeUnit unit) {
         long seconds = getTimeOfDay(toEpochSeconds(timestamp, unit));
         return Math.multiplyExact(seconds, unit.ticksPerSecond());
+    }
+
+    /**
+     * Returns local elapsed ticks since midnight for a timezone-aware timestamp.
+     *
+     * @param timestamp timestamp in model ticks.
+     * @param unit unit used by {@code timestamp}.
+     * @param zoneId local timezone used for time-of-day derivation.
+     * @return elapsed ticks since local midnight.
+     */
+    public static long getTimeOfDayTicks(long timestamp, EngineTimeUnit unit, ZoneId zoneId) {
+        Objects.requireNonNull(zoneId, "zoneId");
+        long epochSeconds = toEpochSeconds(timestamp, unit);
+        int offsetSeconds = zoneId.getRules().getOffset(Instant.ofEpochSecond(epochSeconds)).getTotalSeconds();
+        return getTimeOfDayTicksFromEpochSecondsWithOffset(epochSeconds, unit, offsetSeconds);
+    }
+
+    /**
+     * Extracts day-of-week after applying timezone offset to epoch seconds.
+     *
+     * @param epochSec Unix timestamp in seconds (UTC).
+     * @param offsetSeconds timezone offset to apply in seconds.
+     * @return day-of-week where Monday = 0 and Sunday = 6.
+     */
+    public static int getDayOfWeekWithOffset(long epochSec, int offsetSeconds) {
+        long localEpochSeconds = Math.addExact(epochSec, offsetSeconds);
+        return getDayOfWeek(localEpochSeconds);
+    }
+
+    /**
+     * Converts UTC epoch seconds to local bucket index using offset seconds.
+     *
+     * @param epochSec Unix timestamp in seconds (UTC).
+     * @param bucketSizeSeconds bucket size in seconds.
+     * @param offsetSeconds timezone offset to apply in seconds.
+     * @return local bucket index.
+     */
+    public static int toBucketWithOffset(long epochSec, int bucketSizeSeconds, int offsetSeconds) {
+        long localEpochSeconds = Math.addExact(epochSec, offsetSeconds);
+        return toBucket(localEpochSeconds, bucketSizeSeconds);
+    }
+
+    /**
+     * Returns local seconds since midnight after applying offset.
+     *
+     * @param epochSec Unix timestamp in seconds (UTC).
+     * @param offsetSeconds timezone offset to apply in seconds.
+     * @return local seconds since midnight in range {@code [0, 86399]}.
+     */
+    public static long getTimeOfDayWithOffset(long epochSec, int offsetSeconds) {
+        long localEpochSeconds = Math.addExact(epochSec, offsetSeconds);
+        return getTimeOfDay(localEpochSeconds);
+    }
+
+    /**
+     * Returns local elapsed ticks since midnight from UTC epoch seconds and offset.
+     *
+     * @param epochSec Unix timestamp in seconds (UTC).
+     * @param unit engine tick unit.
+     * @param offsetSeconds timezone offset to apply in seconds.
+     * @return elapsed local ticks since midnight.
+     */
+    public static long getTimeOfDayTicksFromEpochSecondsWithOffset(long epochSec, EngineTimeUnit unit, int offsetSeconds) {
+        long localSeconds = getTimeOfDayWithOffset(epochSec, offsetSeconds);
+        return Math.multiplyExact(localSeconds, unit.ticksPerSecond());
     }
 
     /**
@@ -265,7 +365,7 @@ public final class TimeUtils {
     /**
      * Converts timestamp in model unit into epoch seconds (floor for milliseconds).
      */
-    private static long toEpochSeconds(long timestamp, EngineTimeUnit unit) {
+    public static long toEpochSeconds(long timestamp, EngineTimeUnit unit) {
         if (unit == null) {
             throw new IllegalArgumentException("Engine unit cannot be null");
         }

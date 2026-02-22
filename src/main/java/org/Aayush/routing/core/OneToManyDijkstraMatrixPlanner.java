@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.Aayush.routing.cost.CostEngine;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.heuristic.HeuristicType;
+import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
 
 import java.util.Objects;
 import java.util.PriorityQueue;
@@ -89,6 +90,7 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         long requestSettledStates = 0L;
         int requestLabelPeak = 0;
         int requestFrontierPeak = 0;
+        var temporalContext = request.temporalContext();
 
         for (int row = 0; row < sourceCount; row++) {
             computeRow(
@@ -96,6 +98,7 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
                     costEngine,
                     request.sourceNodeIds()[row],
                     request.departureTicks(),
+                    temporalContext,
                     targetIndex,
                     context,
                     requestWorkStates
@@ -144,6 +147,7 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
             CostEngine costEngine,
             int sourceNodeId,
             long departureTicks,
+            ResolvedTemporalContext temporalContext,
             MatrixTargetIndex targetIndex,
             MatrixQueryContext context,
             long[] requestWorkStates
@@ -164,7 +168,12 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         iterator.resetForNode(sourceNodeId);
         while (iterator.hasNext()) {
             int edgeId = iterator.next();
-            float transitionCost = costEngine.computeEdgeCost(edgeId, CostEngine.NO_PREDECESSOR, departureTicks);
+            float transitionCost = costEngine.computeEdgeCost(
+                    edgeId,
+                    CostEngine.NO_PREDECESSOR,
+                    departureTicks,
+                    temporalContext
+            );
             if (!Float.isFinite(transitionCost)) {
                 continue;
             }
@@ -220,7 +229,12 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
             iterator.reset(settledEdgeId);
             while (iterator.hasNext()) {
                 int nextEdgeId = iterator.next();
-                float transitionCost = costEngine.computeEdgeCost(nextEdgeId, settledEdgeId, settledArrival);
+                float transitionCost = costEngine.computeEdgeCost(
+                        nextEdgeId,
+                        settledEdgeId,
+                        settledArrival,
+                        temporalContext
+                );
                 if (!Float.isFinite(transitionCost)) {
                     continue;
                 }

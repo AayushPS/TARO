@@ -368,6 +368,9 @@ Each stage contains:
 
 ## Stage 16: Temporal Trait
 
+### Implementation Status
+- Implemented (closed on 2026-02-22).
+
 ### Functional Requirements
 - Provide linear and calendar temporal behavior.
 - Resolve bucket/day selection per trait policy.

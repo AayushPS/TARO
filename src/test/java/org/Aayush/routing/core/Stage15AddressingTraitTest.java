@@ -10,6 +10,7 @@ import org.Aayush.routing.traits.addressing.AddressingTelemetry;
 import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
 import org.Aayush.routing.traits.addressing.CoordinateDistanceStrategy;
 import org.Aayush.routing.traits.addressing.CoordinateStrategyRegistry;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.KDNode;
 import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
@@ -678,6 +679,7 @@ class Stage15AddressingTraitTest {
                 .nodeIdMapper(mapper)
                 .spatialRuntime(spatialRuntime)
                 .coordinateStrategyRegistry(coordinateStrategyRegistry)
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .build();
     }
 

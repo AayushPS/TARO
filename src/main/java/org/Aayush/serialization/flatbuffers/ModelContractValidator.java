@@ -6,6 +6,8 @@ import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 import org.Aayush.serialization.flatbuffers.taro.model.TimeUnit;
 
+import java.time.ZoneId;
+
 /**
  * Shared runtime validator for model-level metadata contracts.
  */
@@ -42,6 +44,42 @@ public final class ModelContractValidator {
         TimeUtils.EngineTimeUnit unit = fromFlatBufferTimeUnit(metadata.timeUnit(), loaderName);
         TimeUtils.validateTickDurationNs(unit, metadata.tickDurationNs());
         return unit;
+    }
+
+    /**
+     * Parses and validates {@code metadata.profile_timezone}.
+     *
+     * @param metadata model metadata table.
+     * @param loaderName logical loader name for deterministic error messages.
+     * @return validated timezone id.
+     */
+    public static ZoneId requireProfileTimezone(Metadata metadata, String loaderName) {
+        if (metadata == null) {
+            throw new IllegalArgumentException(loaderName + ": metadata missing");
+        }
+        return parseProfileTimezone(metadata.profileTimezone(), loaderName);
+    }
+
+    /**
+     * Parses a timezone id string using strict {@link ZoneId} rules.
+     *
+     * @param timezoneId timezone id string.
+     * @param loaderName logical loader name for deterministic error messages.
+     * @return validated timezone id.
+     */
+    public static ZoneId parseProfileTimezone(String timezoneId, String loaderName) {
+        if (timezoneId == null || timezoneId.isBlank()) {
+            throw new IllegalArgumentException(loaderName + ": metadata.profile_timezone missing");
+        }
+        String normalized = timezoneId.trim();
+        try {
+            return ZoneId.of(normalized);
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException(
+                    loaderName + ": metadata.profile_timezone invalid: " + normalized,
+                    ex
+            );
+        }
     }
 
     /**

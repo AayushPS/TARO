@@ -7,6 +7,13 @@ import org.Aayush.routing.graph.TurnCostMap;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.overlay.LiveUpdate;
 import org.Aayush.routing.profile.ProfileStore;
+import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
+import org.Aayush.routing.traits.temporal.TemporalPolicy;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeBinder;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
+import org.Aayush.routing.traits.temporal.TemporalStrategyRegistry;
+import org.Aayush.routing.traits.temporal.TemporalTimezonePolicyRegistry;
+import org.Aayush.routing.traits.temporal.TemporalTraitCatalog;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
@@ -351,6 +358,51 @@ class CostEngineTest {
         assertTrue(latch.await(20, java.util.concurrent.TimeUnit.SECONDS), "Concurrent determinism test timed out");
         executor.shutdownNow();
         assertFalse(failed.get(), "Concurrent reads produced non-deterministic costs");
+    }
+
+    @Test
+    @DisplayName("Explicit LINEAR temporal context ignores day masks")
+    void testLinearTemporalContextIgnoresDayMask() {
+        ProfileSpec[] profiles = new ProfileSpec[]{
+                new ProfileSpec(1, 0x1F, new float[]{2.0f, 2.0f}, 1.0f), // Mon..Fri only
+                new ProfileSpec(2, ALL_DAYS_MASK, new float[]{2.0f, 2.0f}, 1.0f)
+        };
+        ByteBuffer model = buildModelBuffer(profiles, null);
+        EdgeGraph edgeGraph = EdgeGraph.fromFlatBuffer(model.duplicate().order(ByteOrder.LITTLE_ENDIAN));
+        ProfileStore profileStore = ProfileStore.fromFlatBuffer(model.duplicate().order(ByteOrder.LITTLE_ENDIAN));
+
+        CostEngine engine = new CostEngine(
+                edgeGraph,
+                profileStore,
+                new LiveOverlay(32),
+                null,
+                TimeUtils.EngineTimeUnit.SECONDS,
+                BUCKET_SIZE_SECONDS,
+                CostEngine.TemporalSamplingPolicy.DISCRETE
+        );
+
+        TemporalRuntimeBinder binder = new TemporalRuntimeBinder();
+        ResolvedTemporalContext calendarContext = binder.bind(
+                TemporalRuntimeConfig.calendarUtc(),
+                TemporalTraitCatalog.defaultCatalog(),
+                TemporalStrategyRegistry.defaultRegistry(),
+                TemporalTimezonePolicyRegistry.defaultRegistry(),
+                TemporalPolicy.defaults()
+        ).getResolvedTemporalContext();
+        ResolvedTemporalContext linearContext = binder.bind(
+                TemporalRuntimeConfig.linear(),
+                TemporalTraitCatalog.defaultCatalog(),
+                TemporalStrategyRegistry.defaultRegistry(),
+                TemporalTimezonePolicyRegistry.defaultRegistry(),
+                TemporalPolicy.defaults()
+        ).getResolvedTemporalContext();
+
+        long sundayUtc = 259_200L; // 1970-01-04 Sunday
+        float calendarCost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, sundayUtc, calendarContext);
+        float linearCost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, sundayUtc, linearContext);
+
+        assertEquals(10.0f, calendarCost, 1e-6f); // day mask inactive -> DEFAULT_MULTIPLIER = 1.0
+        assertEquals(20.0f, linearCost, 1e-6f);   // day mask ignored -> profile multiplier = 2.0
     }
 
     private Fixture createFixture(TurnSpec... turns) {

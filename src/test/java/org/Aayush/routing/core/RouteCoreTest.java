@@ -12,6 +12,7 @@ import org.Aayush.routing.heuristic.LandmarkPreprocessorConfig;
 import org.Aayush.routing.heuristic.LandmarkStore;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -187,6 +188,22 @@ class RouteCoreTest {
     }
 
     @Test
+    @DisplayName("Constructor validation: temporal runtime config is required")
+    void testTemporalRuntimeConfigRequiredInConstructor() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> RouteCore.builder()
+                        .edgeGraph(fixture.edgeGraph())
+                        .profileStore(fixture.profileStore())
+                        .costEngine(fixture.costEngine())
+                        .nodeIdMapper(fixture.nodeIdMapper())
+                        .build()
+        );
+        assertEquals(RouteCore.REASON_TEMPORAL_CONFIG_REQUIRED, ex.getReasonCode());
+    }
+
+    @Test
     @DisplayName("Constructor validation: costEngine graph mismatch is rejected")
     void testCostEngineGraphMismatchInConstructor() {
         RoutingFixtureFactory.Fixture fixtureA = createLinearFixture();
@@ -199,6 +216,7 @@ class RouteCoreTest {
                         .profileStore(fixtureA.profileStore())
                         .costEngine(fixtureB.costEngine())
                         .nodeIdMapper(fixtureA.nodeIdMapper())
+                        .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                         .build()
         );
         assertEquals(RouteCore.REASON_COST_ENGINE_GRAPH_MISMATCH, ex.getReasonCode());
@@ -244,6 +262,7 @@ class RouteCoreTest {
                         .profileStore(fixtureA.profileStore())
                         .costEngine(mismatchedCostEngine)
                         .nodeIdMapper(fixtureA.nodeIdMapper())
+                        .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                         .build()
         );
         assertEquals(RouteCore.REASON_COST_ENGINE_PROFILE_MISMATCH, ex.getReasonCode());
@@ -378,6 +397,7 @@ class RouteCoreTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(discreteCostEngine)
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .build();
 
         RouteResponse dijkstraResponse = core.route(RouteRequest.builder()
@@ -747,6 +767,7 @@ class RouteCoreTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(customAStarPlanner)
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .build();
 
         RouteResponse aStarResponse = core.route(RouteRequest.builder()
@@ -791,6 +812,7 @@ class RouteCoreTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(failingPlanner)
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .build();
 
         RouteCoreException ex = assertThrows(
@@ -823,6 +845,7 @@ class RouteCoreTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(failingPlanner)
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .build();
 
         RouteCoreException ex = assertThrows(
@@ -855,6 +878,7 @@ class RouteCoreTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(failingPlanner)
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .build();
 
         RouteCoreException ex = assertThrows(
@@ -1050,7 +1074,8 @@ class RouteCoreTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(costEngine)
                 .nodeIdMapper(mapper)
-                .landmarkStore(landmarkStore);
+                .landmarkStore(landmarkStore)
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc());
         if (matrixPlanner != null) {
             builder.matrixPlanner(matrixPlanner);
         }

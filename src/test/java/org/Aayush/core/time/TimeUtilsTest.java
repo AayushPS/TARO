@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.time.ZoneId;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class TimeUtilsTest {
@@ -129,6 +132,30 @@ class TimeUtilsTest {
         long noonSec = 1706184000L;
         long noonMs = noonSec * 1000L;
         assertEquals(43_200_000L, TimeUtils.getTimeOfDayTicks(noonMs, TimeUtils.EngineTimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void testOffsetBasedLocalDayAndBucketHelpers() {
+        // 1970-01-03T23:00:00Z (Saturday UTC). With +02:00 offset it becomes Sunday 01:00.
+        long epochSec = 255_600L;
+        int plusTwoHours = 7_200;
+        assertEquals(6, TimeUtils.getDayOfWeekWithOffset(epochSec, plusTwoHours));
+        assertEquals(4, TimeUtils.toBucketWithOffset(epochSec, 900, plusTwoHours));
+    }
+
+    @Test
+    void testZoneAwareDayAtDstBoundary() {
+        ZoneId zoneId = ZoneId.of("America/New_York");
+        // 2026-03-08T07:00:00Z maps to 03:00 local after spring-forward jump.
+        long epochSec = 1_773_342_000L;
+        assertEquals(
+                TimeUtils.getDayOfWeekWithOffset(epochSec, -14_400),
+                TimeUtils.getDayOfWeek(epochSec, TimeUtils.EngineTimeUnit.SECONDS, zoneId)
+        );
+        assertEquals(
+                TimeUtils.toBucketWithOffset(epochSec, 900, -14_400),
+                TimeUtils.toBucket(epochSec, 900, TimeUtils.EngineTimeUnit.SECONDS, zoneId)
+        );
     }
 
     // ========== FIFO Validation Tests ==========

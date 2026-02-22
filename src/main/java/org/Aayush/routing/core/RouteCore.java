@@ -17,6 +17,15 @@ import org.Aayush.routing.traits.addressing.AddressingTelemetry;
 import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
 import org.Aayush.routing.traits.addressing.AddressingTraitEngine;
 import org.Aayush.routing.traits.addressing.CoordinateStrategyRegistry;
+import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
+import org.Aayush.routing.traits.temporal.TemporalContextResolver;
+import org.Aayush.routing.traits.temporal.TemporalPolicy;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeBinder;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
+import org.Aayush.routing.traits.temporal.TemporalStrategyRegistry;
+import org.Aayush.routing.traits.temporal.TemporalTelemetry;
+import org.Aayush.routing.traits.temporal.TemporalTimezonePolicyRegistry;
+import org.Aayush.routing.traits.temporal.TemporalTraitCatalog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,6 +86,17 @@ public final class RouteCore implements RouterService {
     public static final String REASON_TYPED_LEGACY_AMBIGUITY = "H15_TYPED_LEGACY_AMBIGUITY";
     public static final String REASON_INVALID_MAX_SNAP_DISTANCE = "H15_INVALID_MAX_SNAP_DISTANCE";
 
+    public static final String REASON_TEMPORAL_CONFIG_REQUIRED = "H16_TEMPORAL_CONFIG_REQUIRED";
+    public static final String REASON_UNKNOWN_TEMPORAL_TRAIT = "H16_UNKNOWN_TEMPORAL_TRAIT";
+    public static final String REASON_UNKNOWN_TEMPORAL_STRATEGY = "H16_UNKNOWN_TEMPORAL_STRATEGY";
+    public static final String REASON_TIMEZONE_POLICY_REQUIRED = "H16_TIMEZONE_POLICY_REQUIRED";
+    public static final String REASON_UNKNOWN_TIMEZONE_POLICY = "H16_UNKNOWN_TIMEZONE_POLICY";
+    public static final String REASON_TIMEZONE_POLICY_NOT_APPLICABLE = "H16_TIMEZONE_POLICY_NOT_APPLICABLE";
+    public static final String REASON_MODEL_TIMEZONE_REQUIRED = "H16_MODEL_TIMEZONE_REQUIRED";
+    public static final String REASON_INVALID_MODEL_TIMEZONE = "H16_INVALID_MODEL_TIMEZONE";
+    public static final String REASON_TEMPORAL_CONFIG_INCOMPATIBLE = "H16_TEMPORAL_CONFIG_INCOMPATIBLE";
+    public static final String REASON_TEMPORAL_RESOLUTION_FAILURE = "H16_TEMPORAL_RESOLUTION_FAILURE";
+
     private static final GoalBoundHeuristic ZERO_HEURISTIC = nodeId -> 0.0d;
 
     private final EdgeGraph edgeGraph;
@@ -94,6 +114,9 @@ public final class RouteCore implements RouterService {
     private final AddressingTraitCatalog addressingTraitCatalog;
     private final CoordinateStrategyRegistry coordinateStrategyRegistry;
     private final AddressingPolicy addressingPolicy;
+    private final TemporalContextResolver temporalContextResolver;
+    private final ResolvedTemporalContext resolvedTemporalContext;
+    private final TemporalTelemetry temporalTelemetry;
 
     private final ThreadLocal<MatrixExecutionStats> matrixExecutionStats =
             ThreadLocal.withInitial(() -> MatrixExecutionStats.empty(0));
@@ -110,6 +133,7 @@ public final class RouteCore implements RouterService {
      * @param nodeIdMapper external-to-internal node id mapper.
      * @param landmarkStore optional landmark runtime (required for LANDMARK heuristic).
      * @param matrixPlanner optional matrix planner override.
+     * @param temporalRuntimeConfig locked temporal runtime configuration (required).
      */
     @Builder
     public RouteCore(
@@ -124,7 +148,13 @@ public final class RouteCore implements RouterService {
             AddressingTraitEngine addressingTraitEngine,
             AddressingTraitCatalog addressingTraitCatalog,
             CoordinateStrategyRegistry coordinateStrategyRegistry,
-            AddressingPolicy addressingPolicy
+            AddressingPolicy addressingPolicy,
+            TemporalRuntimeConfig temporalRuntimeConfig,
+            TemporalTraitCatalog temporalTraitCatalog,
+            TemporalStrategyRegistry temporalStrategyRegistry,
+            TemporalTimezonePolicyRegistry temporalTimezonePolicyRegistry,
+            TemporalPolicy temporalPolicy,
+            TemporalRuntimeBinder temporalRuntimeBinder
     ) {
         this.edgeGraph = Objects.requireNonNull(edgeGraph, "edgeGraph");
         this.profileStore = Objects.requireNonNull(profileStore, "profileStore");
@@ -143,6 +173,50 @@ public final class RouteCore implements RouterService {
                 ? CoordinateStrategyRegistry.defaultRegistry()
                 : coordinateStrategyRegistry;
         this.addressingPolicy = addressingPolicy == null ? AddressingPolicy.defaults() : addressingPolicy;
+        TemporalRuntimeBinder bindingRuntimeBinder = temporalRuntimeBinder == null
+                ? new TemporalRuntimeBinder()
+                : temporalRuntimeBinder;
+        TemporalTraitCatalog resolvedTemporalTraitCatalog = temporalTraitCatalog == null
+                ? TemporalTraitCatalog.defaultCatalog()
+                : temporalTraitCatalog;
+        TemporalStrategyRegistry resolvedTemporalStrategyRegistry = temporalStrategyRegistry == null
+                ? TemporalStrategyRegistry.defaultRegistry()
+                : temporalStrategyRegistry;
+        TemporalTimezonePolicyRegistry resolvedTemporalTimezonePolicyRegistry = temporalTimezonePolicyRegistry == null
+                ? TemporalTimezonePolicyRegistry.defaultRegistry()
+                : temporalTimezonePolicyRegistry;
+        TemporalPolicy resolvedTemporalPolicy = temporalPolicy == null ? TemporalPolicy.defaults() : temporalPolicy;
+
+        TemporalRuntimeBinder.Binding temporalBinding;
+        try {
+            temporalBinding = bindingRuntimeBinder.bind(
+                    temporalRuntimeConfig,
+                    resolvedTemporalTraitCatalog,
+                    resolvedTemporalStrategyRegistry,
+                    resolvedTemporalTimezonePolicyRegistry,
+                    resolvedTemporalPolicy
+            );
+        } catch (RouteCoreException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new RouteCoreException(
+                    REASON_TEMPORAL_CONFIG_INCOMPATIBLE,
+                    "failed to bind temporal runtime config: " + ex.getMessage(),
+                    ex
+            );
+        }
+        this.temporalContextResolver = Objects.requireNonNull(
+                temporalBinding.getTemporalContextResolver(),
+                "temporalBinding.temporalContextResolver"
+        );
+        this.resolvedTemporalContext = Objects.requireNonNull(
+                temporalBinding.getResolvedTemporalContext(),
+                "temporalBinding.resolvedTemporalContext"
+        );
+        this.temporalTelemetry = Objects.requireNonNull(
+                temporalBinding.getTemporalTelemetry(),
+                "temporalBinding.temporalTelemetry"
+        );
 
         ensureCostEngineContracts();
         this.aStarPlanner = aStarPlanner == null
@@ -217,6 +291,12 @@ public final class RouteCore implements RouterService {
                     .heuristicType(internalRequest.heuristicType())
                     .implementationNote(matrixPlan.implementationNote())
                     .build();
+        } catch (TemporalContextResolver.TemporalResolutionException ex) {
+            throw new RouteCoreException(
+                    REASON_TEMPORAL_RESOLUTION_FAILURE,
+                    ex.reasonCode() + ": " + ex.getMessage(),
+                    ex
+            );
         } catch (MatrixSearchBudget.BudgetExceededException ex) {
             throw new RouteCoreException(
                     REASON_MATRIX_SEARCH_BUDGET_EXCEEDED,
@@ -247,6 +327,13 @@ public final class RouteCore implements RouterService {
     }
 
     /**
+     * Returns startup-bound temporal telemetry.
+     */
+    TemporalTelemetry temporalTelemetryContract() {
+        return temporalTelemetry;
+    }
+
+    /**
      * Computes one normalized internal request using the algorithm selected in the request.
      *
      * <p>All planner-specific guardrail exceptions are normalized to route-core reason codes
@@ -260,6 +347,12 @@ public final class RouteCore implements RouterService {
         };
         try {
             return planner.compute(edgeGraph, costEngine, heuristic, request);
+        } catch (TemporalContextResolver.TemporalResolutionException ex) {
+            throw new RouteCoreException(
+                    REASON_TEMPORAL_RESOLUTION_FAILURE,
+                    ex.reasonCode() + ": " + ex.getMessage(),
+                    ex
+            );
         } catch (SearchBudget.BudgetExceededException ex) {
             throw new RouteCoreException(
                     REASON_SEARCH_BUDGET_EXCEEDED,
@@ -347,7 +440,8 @@ public final class RouteCore implements RouterService {
                 addressing.targetNodeId(),
                 request.getDepartureTicks(),
                 algorithm,
-                heuristicType
+                heuristicType,
+                resolvedTemporalContext
         );
 
         return new NormalizedRouteRequest(
@@ -376,7 +470,8 @@ public final class RouteCore implements RouterService {
                 addressing.targetNodeIds(),
                 request.getDepartureTicks(),
                 algorithm,
-                heuristicType
+                heuristicType,
+                resolvedTemporalContext
         );
 
         return new NormalizedMatrixRequest(

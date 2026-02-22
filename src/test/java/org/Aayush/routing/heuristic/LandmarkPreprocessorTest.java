@@ -6,6 +6,7 @@ import org.Aayush.routing.core.RouteRequest;
 import org.Aayush.routing.core.RouteResponse;
 import org.Aayush.routing.core.RoutingAlgorithm;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
+import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
 import org.Aayush.serialization.flatbuffers.taro.model.TemporalProfile;
@@ -173,6 +174,7 @@ class LandmarkPreprocessorTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .build();
         RouteResponse sundayRoute = core.route(RouteRequest.builder()
                 .sourceExternalId("N0")
