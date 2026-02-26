@@ -25,6 +25,9 @@ final class MatrixQueryContext {
     private boolean[] reachedByTarget = new boolean[0];
     private int targetCount;
     private int unresolvedTargets;
+    private double maxResolvedTargetCost;
+    private int maxResolvedTargetIndex;
+    private boolean maxResolvedTargetDirty;
 
     private int rowSettledStates;
     private int rowWorkStates;
@@ -40,10 +43,7 @@ final class MatrixQueryContext {
         labelStore.clear();
         for (int i = 0; i < touchedEdges.size(); i++) {
             int edgeId = touchedEdges.getInt(i);
-            IntArrayList labels = activeLabelsByEdge.get(edgeId);
-            if (labels != null) {
-                labels.clear();
-            }
+            activeLabelsByEdge.remove(edgeId);
         }
         touchedEdges.clear();
         frontier.clear();
@@ -54,6 +54,9 @@ final class MatrixQueryContext {
         Arrays.fill(reachedByTarget, 0, uniqueTargetCount, false);
         this.targetCount = uniqueTargetCount;
         this.unresolvedTargets = uniqueTargetCount;
+        this.maxResolvedTargetCost = 0.0d;
+        this.maxResolvedTargetIndex = -1;
+        this.maxResolvedTargetDirty = false;
 
         rowSettledStates = 0;
         rowWorkStates = 0;
@@ -90,17 +93,19 @@ final class MatrixQueryContext {
      * @return true when target best value was improved.
      */
     boolean updateTargetBest(int uniqueTargetIndex, float candidateCost, long candidateArrival) {
+        boolean wasReached = reachedByTarget[uniqueTargetIndex];
         float currentCost = bestCostByTarget[uniqueTargetIndex];
         long currentArrival = bestArrivalByTarget[uniqueTargetIndex];
         if (!isBetter(candidateCost, candidateArrival, currentCost, currentArrival)) {
             return false;
         }
-        if (!reachedByTarget[uniqueTargetIndex]) {
+        if (!wasReached) {
             reachedByTarget[uniqueTargetIndex] = true;
             unresolvedTargets--;
         }
         bestCostByTarget[uniqueTargetIndex] = candidateCost;
         bestArrivalByTarget[uniqueTargetIndex] = candidateArrival;
+        updateResolvedTargetMax(uniqueTargetIndex, currentCost, candidateCost, wasReached);
         return true;
     }
 
@@ -124,13 +129,10 @@ final class MatrixQueryContext {
      * Returns the maximum resolved target cost in this row.
      */
     double maxResolvedTargetCost() {
-        double max = 0.0d;
-        for (int i = 0; i < targetCount; i++) {
-            if (reachedByTarget[i]) {
-                max = Math.max(max, bestCostByTarget[i]);
-            }
+        if (maxResolvedTargetDirty) {
+            recomputeResolvedTargetMax();
         }
-        return max;
+        return maxResolvedTargetCost;
     }
 
     /**
@@ -191,5 +193,55 @@ final class MatrixQueryContext {
             return true;
         }
         return Float.compare(newCost, currentCost) == 0 && newArrival < currentArrival;
+    }
+
+    private void updateResolvedTargetMax(
+            int uniqueTargetIndex,
+            float previousCost,
+            float newCost,
+            boolean wasReached
+    ) {
+        if (!Float.isFinite(newCost)) {
+            return;
+        }
+        if (!wasReached) {
+            if (maxResolvedTargetIndex < 0 || newCost > maxResolvedTargetCost) {
+                maxResolvedTargetCost = newCost;
+                maxResolvedTargetIndex = uniqueTargetIndex;
+                maxResolvedTargetDirty = false;
+            }
+            return;
+        }
+
+        if (uniqueTargetIndex == maxResolvedTargetIndex && newCost < previousCost) {
+            maxResolvedTargetDirty = true;
+            return;
+        }
+        if (newCost > maxResolvedTargetCost) {
+            maxResolvedTargetCost = newCost;
+            maxResolvedTargetIndex = uniqueTargetIndex;
+            maxResolvedTargetDirty = false;
+        }
+    }
+
+    private void recomputeResolvedTargetMax() {
+        double recomputedMax = 0.0d;
+        int recomputedIndex = -1;
+        for (int i = 0; i < targetCount; i++) {
+            if (!reachedByTarget[i]) {
+                continue;
+            }
+            float cost = bestCostByTarget[i];
+            if (!Float.isFinite(cost)) {
+                continue;
+            }
+            if (recomputedIndex < 0 || cost > recomputedMax) {
+                recomputedMax = cost;
+                recomputedIndex = i;
+            }
+        }
+        maxResolvedTargetCost = recomputedMax;
+        maxResolvedTargetIndex = recomputedIndex;
+        maxResolvedTargetDirty = false;
     }
 }

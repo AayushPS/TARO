@@ -41,7 +41,8 @@ final class TemporaryMatrixPlanner implements MatrixPlanner {
                         request.departureTicks(),
                         request.algorithm(),
                         request.heuristicType(),
-                        request.temporalContext()
+                        request.temporalContext(),
+                        request.transitionContext()
                 );
 
                 InternalRoutePlan plan = routeCore.computeInternal(routeRequest);

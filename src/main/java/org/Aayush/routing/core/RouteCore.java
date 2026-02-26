@@ -13,6 +13,8 @@ import org.Aayush.routing.heuristic.LandmarkStore;
 import org.Aayush.routing.profile.ProfileStore;
 import org.Aayush.routing.spatial.SpatialRuntime;
 import org.Aayush.routing.traits.addressing.AddressingPolicy;
+import org.Aayush.routing.traits.addressing.AddressingRuntimeBinder;
+import org.Aayush.routing.traits.addressing.AddressingRuntimeConfig;
 import org.Aayush.routing.traits.addressing.AddressingTelemetry;
 import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
 import org.Aayush.routing.traits.addressing.AddressingTraitEngine;
@@ -26,6 +28,14 @@ import org.Aayush.routing.traits.temporal.TemporalStrategyRegistry;
 import org.Aayush.routing.traits.temporal.TemporalTelemetry;
 import org.Aayush.routing.traits.temporal.TemporalTimezonePolicyRegistry;
 import org.Aayush.routing.traits.temporal.TemporalTraitCatalog;
+import org.Aayush.routing.traits.transition.ResolvedTransitionContext;
+import org.Aayush.routing.traits.transition.TransitionCostStrategy;
+import org.Aayush.routing.traits.transition.TransitionPolicy;
+import org.Aayush.routing.traits.transition.TransitionRuntimeBinder;
+import org.Aayush.routing.traits.transition.TransitionRuntimeConfig;
+import org.Aayush.routing.traits.transition.TransitionStrategyRegistry;
+import org.Aayush.routing.traits.transition.TransitionTelemetry;
+import org.Aayush.routing.traits.transition.TransitionTraitCatalog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -85,6 +95,9 @@ public final class RouteCore implements RouterService {
     public static final String REASON_MIXED_MODE_DISABLED = "H15_MIXED_MODE_DISABLED";
     public static final String REASON_TYPED_LEGACY_AMBIGUITY = "H15_TYPED_LEGACY_AMBIGUITY";
     public static final String REASON_INVALID_MAX_SNAP_DISTANCE = "H15_INVALID_MAX_SNAP_DISTANCE";
+    public static final String REASON_ADDRESSING_CONFIG_REQUIRED = "H15_ADDRESSING_CONFIG_REQUIRED";
+    public static final String REASON_ADDRESSING_CONFIG_INCOMPATIBLE = "H15_ADDRESSING_CONFIG_INCOMPATIBLE";
+    public static final String REASON_ADDRESSING_RUNTIME_MISMATCH = "H15_ADDRESSING_RUNTIME_MISMATCH";
 
     public static final String REASON_TEMPORAL_CONFIG_REQUIRED = "H16_TEMPORAL_CONFIG_REQUIRED";
     public static final String REASON_UNKNOWN_TEMPORAL_TRAIT = "H16_UNKNOWN_TEMPORAL_TRAIT";
@@ -96,6 +109,11 @@ public final class RouteCore implements RouterService {
     public static final String REASON_INVALID_MODEL_TIMEZONE = "H16_INVALID_MODEL_TIMEZONE";
     public static final String REASON_TEMPORAL_CONFIG_INCOMPATIBLE = "H16_TEMPORAL_CONFIG_INCOMPATIBLE";
     public static final String REASON_TEMPORAL_RESOLUTION_FAILURE = "H16_TEMPORAL_RESOLUTION_FAILURE";
+    public static final String REASON_TRANSITION_CONFIG_REQUIRED = "H17_TRANSITION_CONFIG_REQUIRED";
+    public static final String REASON_UNKNOWN_TRANSITION_TRAIT = "H17_UNKNOWN_TRANSITION_TRAIT";
+    public static final String REASON_UNKNOWN_TRANSITION_STRATEGY = "H17_UNKNOWN_TRANSITION_STRATEGY";
+    public static final String REASON_TRANSITION_CONFIG_INCOMPATIBLE = "H17_TRANSITION_CONFIG_INCOMPATIBLE";
+    public static final String REASON_TRANSITION_RESOLUTION_FAILURE = "H17_TRANSITION_RESOLUTION_FAILURE";
 
     private static final GoalBoundHeuristic ZERO_HEURISTIC = nodeId -> 0.0d;
 
@@ -114,9 +132,12 @@ public final class RouteCore implements RouterService {
     private final AddressingTraitCatalog addressingTraitCatalog;
     private final CoordinateStrategyRegistry coordinateStrategyRegistry;
     private final AddressingPolicy addressingPolicy;
+    private final AddressingRuntimeBinder.Binding addressingRuntimeBinding;
     private final TemporalContextResolver temporalContextResolver;
     private final ResolvedTemporalContext resolvedTemporalContext;
     private final TemporalTelemetry temporalTelemetry;
+    private final ResolvedTransitionContext resolvedTransitionContext;
+    private final TransitionTelemetry transitionTelemetry;
 
     private final ThreadLocal<MatrixExecutionStats> matrixExecutionStats =
             ThreadLocal.withInitial(() -> MatrixExecutionStats.empty(0));
@@ -133,7 +154,9 @@ public final class RouteCore implements RouterService {
      * @param nodeIdMapper external-to-internal node id mapper.
      * @param landmarkStore optional landmark runtime (required for LANDMARK heuristic).
      * @param matrixPlanner optional matrix planner override.
+     * @param addressingRuntimeConfig locked addressing runtime configuration (required).
      * @param temporalRuntimeConfig locked temporal runtime configuration (required).
+     * @param transitionRuntimeConfig locked transition runtime configuration (required).
      */
     @Builder
     public RouteCore(
@@ -149,19 +172,26 @@ public final class RouteCore implements RouterService {
             AddressingTraitCatalog addressingTraitCatalog,
             CoordinateStrategyRegistry coordinateStrategyRegistry,
             AddressingPolicy addressingPolicy,
+            AddressingRuntimeConfig addressingRuntimeConfig,
+            AddressingRuntimeBinder addressingRuntimeBinder,
             TemporalRuntimeConfig temporalRuntimeConfig,
             TemporalTraitCatalog temporalTraitCatalog,
             TemporalStrategyRegistry temporalStrategyRegistry,
             TemporalTimezonePolicyRegistry temporalTimezonePolicyRegistry,
             TemporalPolicy temporalPolicy,
-            TemporalRuntimeBinder temporalRuntimeBinder
+            TemporalRuntimeBinder temporalRuntimeBinder,
+            TransitionRuntimeConfig transitionRuntimeConfig,
+            TransitionTraitCatalog transitionTraitCatalog,
+            TransitionStrategyRegistry transitionStrategyRegistry,
+            TransitionPolicy transitionPolicy,
+            TransitionRuntimeBinder transitionRuntimeBinder
     ) {
         this.edgeGraph = Objects.requireNonNull(edgeGraph, "edgeGraph");
         this.profileStore = Objects.requireNonNull(profileStore, "profileStore");
         this.costEngine = Objects.requireNonNull(costEngine, "costEngine");
         this.nodeIdMapper = Objects.requireNonNull(nodeIdMapper, "nodeIdMapper");
         this.landmarkStore = landmarkStore;
-        this.matrixPlanner = matrixPlanner == null ? new OneToManyDijkstraMatrixPlanner() : matrixPlanner;
+        this.matrixPlanner = matrixPlanner == null ? new NativeOneToManyMatrixPlanner() : matrixPlanner;
         this.dijkstraPlanner = new EdgeBasedRoutePlanner(false);
 
         this.spatialRuntime = spatialRuntime;
@@ -216,6 +246,63 @@ public final class RouteCore implements RouterService {
         this.temporalTelemetry = Objects.requireNonNull(
                 temporalBinding.getTemporalTelemetry(),
                 "temporalBinding.temporalTelemetry"
+        );
+        TransitionRuntimeBinder bindingTransitionRuntimeBinder = transitionRuntimeBinder == null
+                ? new TransitionRuntimeBinder()
+                : transitionRuntimeBinder;
+        TransitionTraitCatalog resolvedTransitionTraitCatalog = transitionTraitCatalog == null
+                ? TransitionTraitCatalog.defaultCatalog()
+                : transitionTraitCatalog;
+        TransitionStrategyRegistry resolvedTransitionStrategyRegistry = transitionStrategyRegistry == null
+                ? TransitionStrategyRegistry.defaultRegistry()
+                : transitionStrategyRegistry;
+        TransitionPolicy resolvedTransitionPolicy = transitionPolicy == null ? TransitionPolicy.defaults() : transitionPolicy;
+        TransitionRuntimeBinder.Binding transitionBinding;
+        try {
+            transitionBinding = bindingTransitionRuntimeBinder.bind(
+                    transitionRuntimeConfig,
+                    resolvedTransitionTraitCatalog,
+                    resolvedTransitionStrategyRegistry,
+                    resolvedTransitionPolicy
+            );
+        } catch (RouteCoreException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new RouteCoreException(
+                    REASON_TRANSITION_CONFIG_INCOMPATIBLE,
+                    "failed to bind transition runtime config: " + ex.getMessage(),
+                    ex
+            );
+        }
+        this.resolvedTransitionContext = Objects.requireNonNull(
+                transitionBinding.getResolvedTransitionContext(),
+                "transitionBinding.resolvedTransitionContext"
+        );
+        this.transitionTelemetry = Objects.requireNonNull(
+                transitionBinding.getTransitionTelemetry(),
+                "transitionBinding.transitionTelemetry"
+        );
+        AddressingRuntimeBinder bindingAddressingRuntimeBinder = addressingRuntimeBinder == null
+                ? new AddressingRuntimeBinder()
+                : addressingRuntimeBinder;
+        AddressingRuntimeBinder.Binding addressingBinding;
+        try {
+            addressingBinding = bindingAddressingRuntimeBinder.bind(
+                    addressingRuntimeConfig,
+                    this.addressingTraitCatalog
+            );
+        } catch (RouteCoreException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new RouteCoreException(
+                    REASON_ADDRESSING_CONFIG_INCOMPATIBLE,
+                    "failed to bind addressing runtime config: " + ex.getMessage(),
+                    ex
+            );
+        }
+        this.addressingRuntimeBinding = Objects.requireNonNull(
+                addressingBinding,
+                "addressingBinding"
         );
 
         ensureCostEngineContracts();
@@ -273,6 +360,7 @@ public final class RouteCore implements RouterService {
      */
     @Override
     public MatrixResponse matrix(MatrixRequest request) {
+        matrixExecutionStats.set(MatrixExecutionStats.empty(0));
         addressingTelemetry.set(AddressingTelemetry.empty());
         NormalizedMatrixRequest normalized = normalizeMatrixRequest(request);
         addressingTelemetry.set(normalized.addressingTelemetry());
@@ -284,9 +372,9 @@ public final class RouteCore implements RouterService {
             return MatrixResponse.builder()
                     .sourceExternalIds(normalized.sourceExternalIds())
                     .targetExternalIds(normalized.targetExternalIds())
-                    .reachable(copy(matrixPlan.reachable()))
-                    .totalCosts(copy(matrixPlan.totalCosts()))
-                    .arrivalTicks(copy(matrixPlan.arrivalTicks()))
+                    .reachable(matrixPlan.reachable())
+                    .totalCosts(matrixPlan.totalCosts())
+                    .arrivalTicks(matrixPlan.arrivalTicks())
                     .algorithm(internalRequest.algorithm())
                     .heuristicType(internalRequest.heuristicType())
                     .implementationNote(matrixPlan.implementationNote())
@@ -294,6 +382,12 @@ public final class RouteCore implements RouterService {
         } catch (TemporalContextResolver.TemporalResolutionException ex) {
             throw new RouteCoreException(
                     REASON_TEMPORAL_RESOLUTION_FAILURE,
+                    ex.reasonCode() + ": " + ex.getMessage(),
+                    ex
+            );
+        } catch (TransitionCostStrategy.TransitionComputationException ex) {
+            throw new RouteCoreException(
+                    REASON_TRANSITION_RESOLUTION_FAILURE,
                     ex.reasonCode() + ": " + ex.getMessage(),
                     ex
             );
@@ -309,7 +403,27 @@ public final class RouteCore implements RouterService {
                     ex.reasonCode() + ": " + ex.getMessage(),
                     ex
             );
+        } catch (RouteCoreException ex) {
+            throw remapMatrixCompatibilityException(ex);
         }
+    }
+
+    private RouteCoreException remapMatrixCompatibilityException(RouteCoreException ex) {
+        if (REASON_SEARCH_BUDGET_EXCEEDED.equals(ex.getReasonCode())) {
+            return new RouteCoreException(
+                    REASON_MATRIX_SEARCH_BUDGET_EXCEEDED,
+                    ex.getMessage(),
+                    ex
+            );
+        }
+        if (REASON_NUMERIC_SAFETY_BREACH.equals(ex.getReasonCode())) {
+            return new RouteCoreException(
+                    REASON_MATRIX_NUMERIC_SAFETY_BREACH,
+                    ex.getMessage(),
+                    ex
+            );
+        }
+        return ex;
     }
 
     /**
@@ -334,6 +448,13 @@ public final class RouteCore implements RouterService {
     }
 
     /**
+     * Returns startup-bound transition telemetry.
+     */
+    TransitionTelemetry transitionTelemetryContract() {
+        return transitionTelemetry;
+    }
+
+    /**
      * Computes one normalized internal request using the algorithm selected in the request.
      *
      * <p>All planner-specific guardrail exceptions are normalized to route-core reason codes
@@ -350,6 +471,12 @@ public final class RouteCore implements RouterService {
         } catch (TemporalContextResolver.TemporalResolutionException ex) {
             throw new RouteCoreException(
                     REASON_TEMPORAL_RESOLUTION_FAILURE,
+                    ex.reasonCode() + ": " + ex.getMessage(),
+                    ex
+            );
+        } catch (TransitionCostStrategy.TransitionComputationException ex) {
+            throw new RouteCoreException(
+                    REASON_TRANSITION_RESOLUTION_FAILURE,
                     ex.reasonCode() + ": " + ex.getMessage(),
                     ex
             );
@@ -395,13 +522,23 @@ public final class RouteCore implements RouterService {
         if (request.algorithm() == RoutingAlgorithm.DIJKSTRA) {
             return ZERO_HEURISTIC;
         }
-        HeuristicProvider provider = heuristicProviders.computeIfAbsent(request.heuristicType(), this::buildHeuristicProvider);
+        return bindGoalHeuristicContract(request.heuristicType(), request.targetNodeId());
+    }
+
+    /**
+     * Binds one goal-specific heuristic estimator for internal planner use.
+     */
+    GoalBoundHeuristic bindGoalHeuristicContract(HeuristicType heuristicType, int targetNodeId) {
+        if (heuristicType == HeuristicType.NONE) {
+            return ZERO_HEURISTIC;
+        }
+        HeuristicProvider provider = heuristicProviders.computeIfAbsent(heuristicType, this::buildHeuristicProvider);
         try {
-            return provider.bindGoal(request.targetNodeId());
+            return provider.bindGoal(targetNodeId);
         } catch (RuntimeException ex) {
             throw new RouteCoreException(
                     REASON_HEURISTIC_BIND_FAILED,
-                    "failed to bind heuristic " + request.heuristicType() + " to goal node " + request.targetNodeId(),
+                    "failed to bind heuristic " + heuristicType + " to goal node " + targetNodeId,
                     ex
             );
         }
@@ -441,7 +578,8 @@ public final class RouteCore implements RouterService {
                 request.getDepartureTicks(),
                 algorithm,
                 heuristicType,
-                resolvedTemporalContext
+                resolvedTemporalContext,
+                resolvedTransitionContext
         );
 
         return new NormalizedRouteRequest(
@@ -471,7 +609,8 @@ public final class RouteCore implements RouterService {
                 request.getDepartureTicks(),
                 algorithm,
                 heuristicType,
-                resolvedTemporalContext
+                resolvedTemporalContext,
+                resolvedTransitionContext
         );
 
         return new NormalizedMatrixRequest(
@@ -489,7 +628,8 @@ public final class RouteCore implements RouterService {
                 spatialRuntime,
                 addressingTraitCatalog,
                 coordinateStrategyRegistry,
-                addressingPolicy
+                addressingPolicy,
+                addressingRuntimeBinding
         );
     }
 
@@ -564,39 +704,6 @@ public final class RouteCore implements RouterService {
                     "costEngine.profileStore does not match route core profileStore"
             );
         }
-    }
-
-    /**
-     * Deep-copies a boolean matrix.
-     */
-    private static boolean[][] copy(boolean[][] source) {
-        boolean[][] copy = new boolean[source.length][];
-        for (int i = 0; i < source.length; i++) {
-            copy[i] = source[i].clone();
-        }
-        return copy;
-    }
-
-    /**
-     * Deep-copies a float matrix.
-     */
-    private static float[][] copy(float[][] source) {
-        float[][] copy = new float[source.length][];
-        for (int i = 0; i < source.length; i++) {
-            copy[i] = source[i].clone();
-        }
-        return copy;
-    }
-
-    /**
-     * Deep-copies a long matrix.
-     */
-    private static long[][] copy(long[][] source) {
-        long[][] copy = new long[source.length][];
-        for (int i = 0; i < source.length; i++) {
-            copy[i] = source[i].clone();
-        }
-        return copy;
     }
 
     private record NormalizedRouteRequest(

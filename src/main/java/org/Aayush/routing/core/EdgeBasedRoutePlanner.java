@@ -26,12 +26,24 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
     private static final int NO_LABEL = -1;
 
     private final boolean useHeuristic;
+    private final SearchBudget searchBudget;
+    private final TerminationPolicy terminationPolicy;
 
     /**
      * Creates an edge-based planner in Dijkstra or A* priority mode.
      */
     EdgeBasedRoutePlanner(boolean useHeuristic) {
+        this(useHeuristic, SearchBudget.defaults(), TerminationPolicy.defaults());
+    }
+
+    EdgeBasedRoutePlanner(
+            boolean useHeuristic,
+            SearchBudget searchBudget,
+            TerminationPolicy terminationPolicy
+    ) {
         this.useHeuristic = useHeuristic;
+        this.searchBudget = searchBudget;
+        this.terminationPolicy = terminationPolicy;
     }
 
     /**
@@ -51,6 +63,7 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         int targetNodeId = request.targetNodeId();
         long departureTicks = request.departureTicks();
         var temporalContext = request.temporalContext();
+        var transitionContext = request.transitionContext();
 
         if (sourceNodeId == targetNodeId) {
             return new InternalRoutePlan(true, 0.0f, departureTicks, 0, new int[]{sourceNodeId});
@@ -68,7 +81,8 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
                     edgeId,
                     CostEngine.NO_PREDECESSOR,
                     departureTicks,
-                    temporalContext
+                    temporalContext,
+                    transitionContext
             );
             if (!Float.isFinite(transitionCost)) {
                 continue;
@@ -83,8 +97,11 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
                     labelStore
             );
             if (labelId != NO_LABEL) {
+                searchBudget.checkLabelCount(labelStore.size());
                 double priority = computePriority(edgeGraph, heuristic, edgeId, transitionCost);
+                ensureValidPriority(priority);
                 frontier.add(new FrontierState(labelId, edgeId, transitionCost, arrivalTicks, priority));
+                searchBudget.checkFrontierSize(frontier.size());
             }
         }
 
@@ -100,8 +117,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
                 continue;
             }
             settledStates++;
+            searchBudget.checkSettledStates(settledStates);
 
-            if (bestGoalLabelId != NO_LABEL && Double.compare(state.priority(), bestGoalCost) > 0) {
+            if (terminationPolicy.shouldTerminate(bestGoalCost, state.priority())) {
                 break;
             }
 
@@ -121,7 +139,13 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
             iterator.reset(edgeId);
             while (iterator.hasNext()) {
                 int nextEdgeId = iterator.next();
-                float transitionCost = costEngine.computeEdgeCost(nextEdgeId, edgeId, bestArrival, temporalContext);
+                float transitionCost = costEngine.computeEdgeCost(
+                        nextEdgeId,
+                        edgeId,
+                        bestArrival,
+                        temporalContext,
+                        transitionContext
+                );
                 if (!Float.isFinite(transitionCost)) {
                     continue;
                 }
@@ -142,9 +166,12 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
                 if (nextLabelId == NO_LABEL) {
                     continue;
                 }
+                searchBudget.checkLabelCount(labelStore.size());
 
                 double priority = computePriority(edgeGraph, heuristic, nextEdgeId, nextG);
+                ensureValidPriority(priority);
                 frontier.add(new FrontierState(nextLabelId, nextEdgeId, nextG, nextArrival, priority));
+                searchBudget.checkFrontierSize(frontier.size());
             }
         }
 
@@ -232,6 +259,13 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         return gScore + estimate;
     }
 
+    /**
+     * Applies shared numeric guardrails to frontier priorities.
+     */
+    private void ensureValidPriority(double priority) {
+        terminationPolicy.shouldTerminate(Float.POSITIVE_INFINITY, priority);
+    }
+
     private static int[] buildNodePath(
             EdgeGraph edgeGraph,
             LabelStore labelStore,
@@ -305,6 +339,10 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
             predecessorLabelByLabel.add(predecessorLabelId);
             activeByLabel.add(true);
             return labelId;
+        }
+
+        int size() {
+            return edgeIdByLabel.size();
         }
 
         /**

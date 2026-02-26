@@ -46,6 +46,13 @@ final class MatrixTargetIndex {
     }
 
     /**
+     * Returns internal node id for one deduplicated target index.
+     */
+    int uniqueTargetNodeId(int uniqueIndex) {
+        return uniqueTargetNodeIds[uniqueIndex];
+    }
+
+    /**
      * Number of columns in original request target list.
      */
     int columnCount() {

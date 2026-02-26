@@ -10,10 +10,12 @@ import org.Aayush.routing.spatial.SpatialMatch;
 import org.Aayush.routing.spatial.SpatialRuntime;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Stage 15 addressing normalization engine.
@@ -23,6 +25,21 @@ import java.util.Objects;
  * endpoint metadata for response wiring.</p>
  */
 public final class AddressingTraitEngine {
+    private static final int COORDINATE_CACHE_MAX_ENTRIES = 16_384;
+    private static final int COORDINATE_CACHE_SEGMENT_COUNT = 16;
+
+    private final SegmentedCoordinateResolutionCache coordinateResolutionCache;
+
+    public AddressingTraitEngine() {
+        this(COORDINATE_CACHE_MAX_ENTRIES, COORDINATE_CACHE_SEGMENT_COUNT);
+    }
+
+    AddressingTraitEngine(int coordinateCacheMaxEntries, int coordinateCacheSegmentCount) {
+        this.coordinateResolutionCache = new SegmentedCoordinateResolutionCache(
+                coordinateCacheMaxEntries,
+                coordinateCacheSegmentCount
+        );
+    }
 
     /**
      * Resolves and validates one route request addressing payload.
@@ -55,8 +72,12 @@ public final class AddressingTraitEngine {
             );
         }
 
-        boolean typedRequest = sourceSlot.typedField() || targetSlot.typedField();
-        AddressingTrait trait = resolveTrait(request.getAddressingTraitId(), typedRequest, nonNullContext.traitCatalog());
+        AddressingTrait trait = nonNullContext.runtimeBinding().getAddressingTrait();
+        validateRequestTraitHint(
+                request.getAddressingTraitId(),
+                trait,
+                nonNullContext.traitCatalog()
+        );
         StrategySelection strategySelection = resolveCoordinateStrategy(
                 request.getCoordinateDistanceStrategyId(),
                 request.getMaxSnapDistance(),
@@ -113,14 +134,12 @@ public final class AddressingTraitEngine {
 
         boolean hasExternal = false;
         boolean hasCoordinates = false;
-        boolean typedRequest = false;
         for (AddressSlot slot : sourceSlots) {
             if (slot.input().getType() == AddressType.EXTERNAL_ID) {
                 hasExternal = true;
             } else {
                 hasCoordinates = true;
             }
-            typedRequest |= slot.typedField();
         }
         for (AddressSlot slot : targetSlots) {
             if (slot.input().getType() == AddressType.EXTERNAL_ID) {
@@ -128,18 +147,22 @@ public final class AddressingTraitEngine {
             } else {
                 hasCoordinates = true;
             }
-            typedRequest |= slot.typedField();
         }
 
         boolean mixedMode = hasExternal && hasCoordinates;
         if (mixedMode && !Boolean.TRUE.equals(request.getAllowMixedAddressing())) {
             throw new RouteCoreException(
-                    RouteCore.REASON_MIXED_MODE_DISABLED,
-                    "mixed address types require allowMixedAddressing=true"
+                RouteCore.REASON_MIXED_MODE_DISABLED,
+                "mixed address types require allowMixedAddressing=true"
             );
         }
 
-        AddressingTrait trait = resolveTrait(request.getAddressingTraitId(), typedRequest, nonNullContext.traitCatalog());
+        AddressingTrait trait = nonNullContext.runtimeBinding().getAddressingTrait();
+        validateRequestTraitHint(
+                request.getAddressingTraitId(),
+                trait,
+                nonNullContext.traitCatalog()
+        );
         List<AddressInput> coordinateInputs = collectCoordinateInputs(sourceSlots, targetSlots);
         StrategySelection strategySelection = resolveCoordinateStrategy(
                 request.getCoordinateDistanceStrategyId(),
@@ -285,26 +308,29 @@ public final class AddressingTraitEngine {
         return List.copyOf(coordinates);
     }
 
-    private AddressingTrait resolveTrait(String requestedTraitId, boolean typedRequest, AddressingTraitCatalog catalog) {
+    private void validateRequestTraitHint(
+            String requestedTraitId,
+            AddressingTrait runtimeTrait,
+            AddressingTraitCatalog catalog
+    ) {
         String traitId = normalizeOptionalId(requestedTraitId);
         if (traitId == null) {
-            if (typedRequest) {
-                throw new RouteCoreException(
-                        RouteCore.REASON_ADDRESSING_TRAIT_REQUIRED,
-                        "addressingTraitId must be provided for typed addressing"
-                );
-            }
-            return catalog.defaultTrait();
+            return;
         }
-
-        AddressingTrait trait = catalog.trait(traitId);
-        if (trait == null) {
+        AddressingTrait requestedTrait = catalog.trait(traitId);
+        if (requestedTrait == null) {
             throw new RouteCoreException(
                     RouteCore.REASON_UNKNOWN_ADDRESSING_TRAIT,
                     "unknown addressing trait id: " + traitId
             );
         }
-        return trait;
+        if (!traitId.equals(runtimeTrait.id())) {
+            throw new RouteCoreException(
+                    RouteCore.REASON_ADDRESSING_RUNTIME_MISMATCH,
+                    "request addressingTraitId " + traitId
+                            + " does not match startup trait " + runtimeTrait.id()
+            );
+        }
     }
 
     private StrategySelection resolveCoordinateStrategy(
@@ -510,6 +536,21 @@ public final class AddressingTraitEngine {
             );
         }
 
+        CoordinateResolutionCacheKey cacheKey = CoordinateResolutionCacheKey.of(
+                context.edgeGraph(),
+                context.nodeIdMapper(),
+                runtime,
+                trait.id(),
+                strategySelection.strategyId(),
+                strategySelection.maxSnapDistance(),
+                first,
+                second
+        );
+        ResolvedAddress cached = coordinateResolutionCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
         final SpatialMatch match;
         try {
             match = runtime.nearest(first, second);
@@ -551,6 +592,14 @@ public final class AddressingTraitEngine {
                     "computed snap distance is non-finite"
             );
         }
+        if (snapDistance < 0.0d) {
+            throw new RouteCoreException(
+                    RouteCore.REASON_COORDINATE_STRATEGY_FAILURE,
+                    "coordinate strategy distance failed for "
+                            + strategySelection.strategyId()
+                            + ": computed snap distance must be >= 0, got " + snapDistance
+            );
+        }
 
         if (snapDistance > strategySelection.maxSnapDistance()) {
             counters.snapThresholdRejectCount++;
@@ -570,7 +619,7 @@ public final class AddressingTraitEngine {
         }
         String resolvedExternalId = mapInternalToExternal(internalNodeId, context.nodeIdMapper());
 
-        return ResolvedAddress.builder()
+        ResolvedAddress resolved = ResolvedAddress.builder()
                 .inputType(AddressType.COORDINATES)
                 .addressingTraitId(trait.id())
                 .internalNodeId(internalNodeId)
@@ -580,6 +629,14 @@ public final class AddressingTraitEngine {
                 .coordinateDistanceStrategyId(strategySelection.strategyId())
                 .snapDistance(snapDistance)
                 .build();
+        return cacheCoordinateResolution(cacheKey, resolved);
+    }
+
+    private ResolvedAddress cacheCoordinateResolution(
+            CoordinateResolutionCacheKey cacheKey,
+            ResolvedAddress resolved
+    ) {
+        return coordinateResolutionCache.putIfAbsent(cacheKey, resolved);
     }
 
     private int mapExternalToInternal(String externalId, ResolveContext context, String unknownExternalReasonCode) {
@@ -677,7 +734,8 @@ public final class AddressingTraitEngine {
             SpatialRuntime spatialRuntime,
             AddressingTraitCatalog traitCatalog,
             CoordinateStrategyRegistry coordinateStrategyRegistry,
-            AddressingPolicy addressingPolicy
+            AddressingPolicy addressingPolicy,
+            AddressingRuntimeBinder.Binding runtimeBinding
     ) {
         public ResolveContext {
             Objects.requireNonNull(edgeGraph, "edgeGraph");
@@ -685,6 +743,7 @@ public final class AddressingTraitEngine {
             Objects.requireNonNull(traitCatalog, "traitCatalog");
             Objects.requireNonNull(coordinateStrategyRegistry, "coordinateStrategyRegistry");
             Objects.requireNonNull(addressingPolicy, "addressingPolicy");
+            Objects.requireNonNull(runtimeBinding, "runtimeBinding");
         }
     }
 
@@ -736,6 +795,133 @@ public final class AddressingTraitEngine {
                 return Double.doubleToLongBits(0.0d);
             }
             return Double.doubleToLongBits(value);
+        }
+    }
+
+    private record CoordinateResolutionCacheKey(
+            EdgeGraph edgeGraph,
+            IDMapper nodeIdMapper,
+            SpatialRuntime spatialRuntime,
+            String addressingTraitId,
+            String coordinateStrategyId,
+            long maxSnapDistanceBits,
+            long coordinateFirstBits,
+            long coordinateSecondBits
+    ) {
+        static CoordinateResolutionCacheKey of(
+                EdgeGraph edgeGraph,
+                IDMapper nodeIdMapper,
+                SpatialRuntime spatialRuntime,
+                String addressingTraitId,
+                String coordinateStrategyId,
+                double maxSnapDistance,
+                double coordinateFirst,
+                double coordinateSecond
+        ) {
+            return new CoordinateResolutionCacheKey(
+                    edgeGraph,
+                    nodeIdMapper,
+                    spatialRuntime,
+                    addressingTraitId,
+                    coordinateStrategyId,
+                    Double.doubleToLongBits(maxSnapDistance),
+                    canonicalCoordinateBits(coordinateFirst),
+                    canonicalCoordinateBits(coordinateSecond)
+            );
+        }
+    }
+
+    private static long canonicalCoordinateBits(double value) {
+        if (value == 0.0d) {
+            return Double.doubleToLongBits(0.0d);
+        }
+        return Double.doubleToLongBits(value);
+    }
+
+    /**
+     * Fixed-capacity segmented LRU cache for coordinate snap resolutions.
+     */
+    private static final class SegmentedCoordinateResolutionCache {
+        private final CoordinateCacheSegment[] segments;
+        private final int segmentMask;
+
+        SegmentedCoordinateResolutionCache(int maxEntries, int requestedSegmentCount) {
+            int normalizedMaxEntries = Math.max(1, maxEntries);
+            int segmentCount = normalizeSegmentCount(requestedSegmentCount, normalizedMaxEntries);
+            this.segments = new CoordinateCacheSegment[segmentCount];
+            this.segmentMask = segmentCount - 1;
+
+            int entriesPerSegment = normalizedMaxEntries / segmentCount;
+            int extraEntries = normalizedMaxEntries % segmentCount;
+            for (int i = 0; i < segmentCount; i++) {
+                int segmentEntries = entriesPerSegment + (i < extraEntries ? 1 : 0);
+                segments[i] = new CoordinateCacheSegment(Math.max(1, segmentEntries));
+            }
+        }
+
+        ResolvedAddress get(CoordinateResolutionCacheKey key) {
+            return segmentFor(key).get(key);
+        }
+
+        ResolvedAddress putIfAbsent(CoordinateResolutionCacheKey key, ResolvedAddress value) {
+            return segmentFor(key).putIfAbsent(key, value);
+        }
+
+        private CoordinateCacheSegment segmentFor(CoordinateResolutionCacheKey key) {
+            int hash = key.hashCode();
+            hash ^= (hash >>> 16);
+            return segments[hash & segmentMask];
+        }
+
+        private static int normalizeSegmentCount(int requestedSegmentCount, int maxEntries) {
+            int desired = Math.max(1, Math.min(requestedSegmentCount, maxEntries));
+            int powerOfTwo = 1;
+            while (powerOfTwo < desired) {
+                powerOfTwo <<= 1;
+            }
+            return powerOfTwo;
+        }
+
+        private static final class CoordinateCacheSegment {
+            private final int maxEntries;
+            private final ReentrantLock lock = new ReentrantLock();
+            private final LinkedHashMap<CoordinateResolutionCacheKey, ResolvedAddress> entries =
+                    new LinkedHashMap<>(16, 0.75f, true);
+
+            CoordinateCacheSegment(int maxEntries) {
+                this.maxEntries = Math.max(1, maxEntries);
+            }
+
+            ResolvedAddress get(CoordinateResolutionCacheKey key) {
+                lock.lock();
+                try {
+                    return entries.get(key);
+                } finally {
+                    lock.unlock();
+                }
+            }
+
+            ResolvedAddress putIfAbsent(CoordinateResolutionCacheKey key, ResolvedAddress value) {
+                lock.lock();
+                try {
+                    ResolvedAddress existing = entries.get(key);
+                    if (existing != null) {
+                        return existing;
+                    }
+                    entries.put(key, value);
+                    if (entries.size() > maxEntries) {
+                        Iterator<Map.Entry<CoordinateResolutionCacheKey, ResolvedAddress>> iterator =
+                                entries.entrySet().iterator();
+                        if (iterator.hasNext()) {
+                            iterator.next();
+                            iterator.remove();
+                        }
+                    }
+                    return value;
+                } finally {
+                    lock.unlock();
+                }
+            }
         }
     }
 

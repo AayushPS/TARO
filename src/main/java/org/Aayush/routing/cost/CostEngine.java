@@ -9,6 +9,8 @@ import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.profile.ProfileStore;
 import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
 import org.Aayush.routing.traits.temporal.TemporalContextResolver;
+import org.Aayush.routing.traits.transition.ResolvedTransitionContext;
+import org.Aayush.routing.traits.transition.TransitionCostStrategy;
 
 import java.util.Objects;
 
@@ -29,9 +31,6 @@ import java.util.Objects;
  */
 @Accessors(fluent = true)
 public final class CostEngine {
-    private static final ResolvedTemporalContext DEFAULT_TEMPORAL_CONTEXT =
-            ResolvedTemporalContext.defaultCalendarUtc();
-
     /**
      * Sentinel predecessor when no turn transition is available.
      */
@@ -107,22 +106,16 @@ public final class CostEngine {
     }
 
     /**
-     * Fast-path scalar cost computation without breakdown object allocation.
-     */
-    public float computeEdgeCost(int edgeId, int fromEdgeId, long entryTicks) {
-        return computeEdgeCost(edgeId, fromEdgeId, entryTicks, DEFAULT_TEMPORAL_CONTEXT);
-    }
-
-    /**
      * Fast-path scalar cost computation with explicit temporal context.
      */
     public float computeEdgeCost(
             int edgeId,
             int fromEdgeId,
             long entryTicks,
-            ResolvedTemporalContext temporalContext
+            ResolvedTemporalContext temporalContext,
+            ResolvedTransitionContext transitionContext
     ) {
-        return computeInternal(edgeId, fromEdgeId, entryTicks, temporalContext, null);
+        return computeInternal(edgeId, fromEdgeId, entryTicks, temporalContext, transitionContext, null);
     }
 
     /**
@@ -140,24 +133,15 @@ public final class CostEngine {
     }
 
     /**
-     * Convenience overload for requests without predecessor transition.
-     */
-    public float computeEdgeCost(int edgeId, long entryTicks) {
-        return computeEdgeCost(edgeId, NO_PREDECESSOR, entryTicks);
-    }
-
-    /**
      * Convenience overload with explicit temporal context and no predecessor transition.
      */
-    public float computeEdgeCost(int edgeId, long entryTicks, ResolvedTemporalContext temporalContext) {
-        return computeEdgeCost(edgeId, NO_PREDECESSOR, entryTicks, temporalContext);
-    }
-
-    /**
-     * Explainable cost computation. Intended for debugging/telemetry paths.
-     */
-    public CostBreakdown explainEdgeCost(int edgeId, int fromEdgeId, long entryTicks) {
-        return explainEdgeCost(edgeId, fromEdgeId, entryTicks, DEFAULT_TEMPORAL_CONTEXT);
+    public float computeEdgeCost(
+            int edgeId,
+            long entryTicks,
+            ResolvedTemporalContext temporalContext,
+            ResolvedTransitionContext transitionContext
+    ) {
+        return computeEdgeCost(edgeId, NO_PREDECESSOR, entryTicks, temporalContext, transitionContext);
     }
 
     /**
@@ -167,32 +151,24 @@ public final class CostEngine {
             int edgeId,
             int fromEdgeId,
             long entryTicks,
-            ResolvedTemporalContext temporalContext
+            ResolvedTemporalContext temporalContext,
+            ResolvedTransitionContext transitionContext
     ) {
         MutableCostBreakdown breakdown = new MutableCostBreakdown();
-        computeInternal(edgeId, fromEdgeId, entryTicks, temporalContext, breakdown);
+        computeInternal(edgeId, fromEdgeId, entryTicks, temporalContext, transitionContext, breakdown);
         return breakdown.toImmutable();
-    }
-
-    /**
-     * Convenience overload for requests without predecessor transition.
-     */
-    public CostBreakdown explainEdgeCost(int edgeId, long entryTicks) {
-        return explainEdgeCost(edgeId, NO_PREDECESSOR, entryTicks);
     }
 
     /**
      * Convenience overload with explicit temporal context and no predecessor transition.
      */
-    public CostBreakdown explainEdgeCost(int edgeId, long entryTicks, ResolvedTemporalContext temporalContext) {
-        return explainEdgeCost(edgeId, NO_PREDECESSOR, entryTicks, temporalContext);
-    }
-
-    /**
-     * Allocation-free explain path for callers that reuse breakdown container.
-     */
-    public void explainEdgeCost(int edgeId, int fromEdgeId, long entryTicks, MutableCostBreakdown out) {
-        explainEdgeCost(edgeId, fromEdgeId, entryTicks, DEFAULT_TEMPORAL_CONTEXT, out);
+    public CostBreakdown explainEdgeCost(
+            int edgeId,
+            long entryTicks,
+            ResolvedTemporalContext temporalContext,
+            ResolvedTransitionContext transitionContext
+    ) {
+        return explainEdgeCost(edgeId, NO_PREDECESSOR, entryTicks, temporalContext, transitionContext);
     }
 
     /**
@@ -203,10 +179,11 @@ public final class CostEngine {
             int fromEdgeId,
             long entryTicks,
             ResolvedTemporalContext temporalContext,
+            ResolvedTransitionContext transitionContext,
             MutableCostBreakdown out
     ) {
         Objects.requireNonNull(out, "out");
-        computeInternal(edgeId, fromEdgeId, entryTicks, temporalContext, out);
+        computeInternal(edgeId, fromEdgeId, entryTicks, temporalContext, transitionContext, out);
     }
 
     /**
@@ -217,14 +194,20 @@ public final class CostEngine {
             int fromEdgeId,
             long entryTicks,
             ResolvedTemporalContext temporalContext,
+            ResolvedTransitionContext transitionContext,
             MutableCostBreakdown out
     ) {
         validateEdgeId(edgeId);
         validatePredecessor(fromEdgeId);
         ResolvedTemporalContext resolvedTemporalContext = Objects.requireNonNull(temporalContext, "temporalContext");
+        ResolvedTransitionContext resolvedTransitionContext = Objects.requireNonNull(transitionContext, "transitionContext");
         TemporalContextResolver temporalResolver = Objects.requireNonNull(
                 resolvedTemporalContext.getResolver(),
                 "temporalContext.resolver"
+        );
+        TransitionCostStrategy transitionStrategy = Objects.requireNonNull(
+                resolvedTransitionContext.getStrategy(),
+                "transitionContext.strategy"
         );
 
         float baseWeight = edgeGraph.getBaseWeight(edgeId);
@@ -257,16 +240,52 @@ public final class CostEngine {
         float livePenalty = live.livePenaltyMultiplier();
         ensureValidLivePenalty(livePenalty);
 
-        float turnPenalty = 0.0f;
-        boolean turnApplied = false;
-        if (turnCostMap != null && fromEdgeId != NO_PREDECESSOR) {
-            turnPenalty = turnCostMap.getCost(fromEdgeId, edgeId);
-            turnApplied = true;
+        long packedTurnDecision;
+        try {
+            packedTurnDecision = transitionStrategy.evaluatePacked(
+                    turnCostMap,
+                    fromEdgeId,
+                    edgeId,
+                    fromEdgeId != NO_PREDECESSOR
+            );
+        } catch (TransitionCostStrategy.TransitionComputationException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new TransitionCostStrategy.TransitionComputationException(
+                    "H17_TRANSITION_RESOLUTION_FAILURE",
+                    "transition strategy " + transitionStrategy.id()
+                            + " failed for transition " + fromEdgeId + " -> " + edgeId,
+                    ex
+            );
         }
-        ensureValidTurnPenalty(turnPenalty);
+        final float turnPenalty;
+        final boolean turnApplied;
+        final float effectiveTurnPenalty;
+        try {
+            turnPenalty = TransitionCostStrategy.TurnCostDecision.unpackTurnPenalty(packedTurnDecision);
+            boolean packedTurnApplied = TransitionCostStrategy.TurnCostDecision.unpackTurnPenaltyApplied(packedTurnDecision);
+            turnApplied = packedTurnApplied || turnPenalty == TurnCostMap.FORBIDDEN_TURN;
+            ensureValidTurnPenalty(turnPenalty);
+            if (!turnApplied && Float.compare(turnPenalty, 0.0f) != 0) {
+                throw new IllegalStateException(
+                        "turnPenalty must be 0.0 when turnPenaltyApplied=false, got " + turnPenalty
+                );
+            }
+            effectiveTurnPenalty = turnApplied ? turnPenalty : 0.0f;
+        } catch (TransitionCostStrategy.TransitionComputationException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new TransitionCostStrategy.TransitionComputationException(
+                    "H17_TRANSITION_RESOLUTION_FAILURE",
+                    "transition strategy " + transitionStrategy.id()
+                            + " produced invalid turn decision for transition " + fromEdgeId + " -> " + edgeId
+                            + " (packed=0x" + Long.toHexString(packedTurnDecision) + ")",
+                    ex
+            );
+        }
 
         float edgeTravelCost = computeEdgeTravelCost(baseWeight, temporalMultiplier, livePenalty);
-        float effectiveCost = combineWithTurn(edgeTravelCost, turnPenalty);
+        float effectiveCost = combineWithTurn(edgeTravelCost, effectiveTurnPenalty);
 
         if (out != null) {
             out.edgeId = edgeId;

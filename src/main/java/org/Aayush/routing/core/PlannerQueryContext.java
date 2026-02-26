@@ -36,10 +36,7 @@ final class PlannerQueryContext {
 
         for (int i = 0; i < touchedEdges.size(); i++) {
             int edgeId = touchedEdges.getInt(i);
-            IntArrayList labels = activeLabelsByEdge.get(edgeId);
-            if (labels != null) {
-                labels.clear();
-            }
+            activeLabelsByEdge.remove(edgeId);
         }
         touchedEdges.clear();
 

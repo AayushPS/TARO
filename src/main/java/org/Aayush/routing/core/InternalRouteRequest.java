@@ -2,6 +2,7 @@ package org.Aayush.routing.core;
 
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
+import org.Aayush.routing.traits.transition.ResolvedTransitionContext;
 
 import java.util.Objects;
 
@@ -17,6 +18,7 @@ import java.util.Objects;
  * @param algorithm selected routing algorithm.
  * @param heuristicType selected heuristic type compatible with algorithm.
  * @param temporalContext locked Stage 16 temporal context.
+ * @param transitionContext locked Stage 17 transition context.
  */
 record InternalRouteRequest(
         int sourceNodeId,
@@ -24,22 +26,11 @@ record InternalRouteRequest(
         long departureTicks,
         RoutingAlgorithm algorithm,
         HeuristicType heuristicType,
-        ResolvedTemporalContext temporalContext
+        ResolvedTemporalContext temporalContext,
+        ResolvedTransitionContext transitionContext
 ) {
-    /**
-     * Backward-compatible constructor that defaults to calendar-UTC temporal context.
-     */
-    InternalRouteRequest(
-            int sourceNodeId,
-            int targetNodeId,
-            long departureTicks,
-            RoutingAlgorithm algorithm,
-            HeuristicType heuristicType
-    ) {
-        this(sourceNodeId, targetNodeId, departureTicks, algorithm, heuristicType, ResolvedTemporalContext.defaultCalendarUtc());
-    }
-
     InternalRouteRequest {
-        temporalContext = Objects.requireNonNullElseGet(temporalContext, ResolvedTemporalContext::defaultCalendarUtc);
+        Objects.requireNonNull(temporalContext, "temporalContext");
+        Objects.requireNonNull(transitionContext, "transitionContext");
     }
 }

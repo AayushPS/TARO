@@ -92,6 +92,7 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
         int targetNodeId = request.targetNodeId();
         long departureTicks = request.departureTicks();
         var temporalContext = request.temporalContext();
+        var transitionContext = request.transitionContext();
 
         if (sourceNodeId == targetNodeId) {
             return new InternalRoutePlan(true, 0.0f, departureTicks, 0, new int[]{sourceNodeId});
@@ -115,7 +116,8 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
                     edgeId,
                     CostEngine.NO_PREDECESSOR,
                     departureTicks,
-                    temporalContext
+                    temporalContext,
+                    transitionContext
             );
             if (!Float.isFinite(transitionCost)) {
                 continue;
@@ -182,7 +184,8 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
                         nextEdgeId,
                         settledEdgeId,
                         settledArrival,
-                        temporalContext
+                        temporalContext,
+                        transitionContext
                 );
                 if (!Float.isFinite(transitionCost)) {
                     continue;
@@ -230,7 +233,8 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
                 costEngine,
                 edgePath,
                 departureTicks,
-                temporalContext
+                temporalContext,
+                transitionContext
         );
         int[] nodePath = pathEvaluator.toNodePath(edgeGraph, sourceNodeId, edgePath);
         return new InternalRoutePlan(true, evaluation.totalCost(), evaluation.arrivalTicks(), settledStates, nodePath);

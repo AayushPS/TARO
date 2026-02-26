@@ -5,6 +5,7 @@ import lombok.experimental.Accessors;
 import org.Aayush.routing.cost.CostEngine;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
+import org.Aayush.routing.traits.transition.ResolvedTransitionContext;
 
 /**
  * Replays edge paths with exact forward cost semantics.
@@ -21,27 +22,27 @@ final class PathEvaluator {
     }
 
     /**
-     * Replays one edge path through the configured cost engine.
-     */
-    Evaluation evaluateEdgePath(CostEngine costEngine, int[] edgePath, long departureTicks) {
-        return evaluateEdgePath(costEngine, edgePath, departureTicks, ResolvedTemporalContext.defaultCalendarUtc());
-    }
-
-    /**
      * Replays one edge path through the configured cost engine with explicit temporal context.
      */
     Evaluation evaluateEdgePath(
             CostEngine costEngine,
             int[] edgePath,
             long departureTicks,
-            ResolvedTemporalContext temporalContext
+            ResolvedTemporalContext temporalContext,
+            ResolvedTransitionContext transitionContext
     ) {
         float totalCost = 0.0f;
         long arrivalTicks = departureTicks;
         int predecessorEdgeId = CostEngine.NO_PREDECESSOR;
 
         for (int edgeId : edgePath) {
-            float transitionCost = costEngine.computeEdgeCost(edgeId, predecessorEdgeId, arrivalTicks, temporalContext);
+            float transitionCost = costEngine.computeEdgeCost(
+                    edgeId,
+                    predecessorEdgeId,
+                    arrivalTicks,
+                    temporalContext,
+                    transitionContext
+            );
             if (!Float.isFinite(transitionCost)) {
                 throw new PathEvaluationException(
                         REASON_NON_FINITE_EDGE_COST,

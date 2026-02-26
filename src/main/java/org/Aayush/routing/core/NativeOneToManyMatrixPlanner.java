@@ -3,47 +3,84 @@ package org.Aayush.routing.core;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.Aayush.routing.cost.CostEngine;
 import org.Aayush.routing.graph.EdgeGraph;
+import org.Aayush.routing.heuristic.GoalBoundHeuristic;
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
+import org.Aayush.routing.traits.transition.ResolvedTransitionContext;
 
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.PriorityQueue;
 
 /**
- * Native one-to-many matrix planner for DIJKSTRA requests.
+ * Native one-to-many matrix planner.
  *
- * <p>For each source row, the planner runs one edge-based Dijkstra expansion and writes
- * results for all requested targets. Non-DIJKSTRA or heuristic-enabled requests are
- * delegated to the compatibility planner.</p>
+ * <p>For each source row, the planner runs one edge-based expansion and writes
+ * results for all requested targets. It supports:
+ * <ul>
+ * <li>native one-to-many Dijkstra for {@code DIJKSTRA + NONE},</li>
+ * <li>native one-to-many A* for bounded-target {@code A_STAR},</li>
+ * <li>bounded batched compatibility fallback for oversized A* target sets.</li>
+ * </ul></p>
  */
-final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
+final class NativeOneToManyMatrixPlanner implements MatrixPlanner {
     static final String NATIVE_IMPLEMENTATION_NOTE =
             "Native one-to-many Dijkstra matrix planner.";
+    static final String NATIVE_A_STAR_IMPLEMENTATION_NOTE =
+            "Native one-to-many A* matrix planner.";
+    static final String BATCHED_A_STAR_COMPATIBILITY_NOTE =
+            "Compatibility mode: bounded batched pairwise A* matrix expansion via RouteCore.computeInternal.";
 
     private static final int NO_LABEL = -1;
+    private static final String PROP_MAX_NATIVE_A_STAR_TARGETS = "taro.routing.stage14.maxNativeAStarTargets";
+    private static final String PROP_A_STAR_BATCH_TARGETS = "taro.routing.stage14.aStarFallbackBatchTargets";
+    private static final int DEFAULT_MAX_NATIVE_A_STAR_TARGETS = 96;
+    private static final int DEFAULT_A_STAR_BATCH_TARGETS = 32;
 
     private final MatrixPlanner compatibilityPlanner;
     private final MatrixSearchBudget searchBudget;
     private final TerminationPolicy terminationPolicy;
+    private final int maxNativeAStarTargets;
+    private final int aStarFallbackBatchTargets;
     private final ThreadLocal<MatrixQueryContext> queryContext =
             ThreadLocal.withInitial(MatrixQueryContext::new);
 
-    OneToManyDijkstraMatrixPlanner() {
+    NativeOneToManyMatrixPlanner() {
         this(
                 new TemporaryMatrixPlanner(),
                 MatrixSearchBudget.defaults(),
-                TerminationPolicy.defaults()
+                TerminationPolicy.defaults(),
+                readBoundedInt(PROP_MAX_NATIVE_A_STAR_TARGETS, DEFAULT_MAX_NATIVE_A_STAR_TARGETS),
+                readBoundedInt(PROP_A_STAR_BATCH_TARGETS, DEFAULT_A_STAR_BATCH_TARGETS)
         );
     }
 
-    OneToManyDijkstraMatrixPlanner(
+    NativeOneToManyMatrixPlanner(
             MatrixPlanner compatibilityPlanner,
             MatrixSearchBudget searchBudget,
             TerminationPolicy terminationPolicy
     ) {
+        this(
+                compatibilityPlanner,
+                searchBudget,
+                terminationPolicy,
+                DEFAULT_MAX_NATIVE_A_STAR_TARGETS,
+                DEFAULT_A_STAR_BATCH_TARGETS
+        );
+    }
+
+    NativeOneToManyMatrixPlanner(
+            MatrixPlanner compatibilityPlanner,
+            MatrixSearchBudget searchBudget,
+            TerminationPolicy terminationPolicy,
+            int maxNativeAStarTargets,
+            int aStarFallbackBatchTargets
+    ) {
         this.compatibilityPlanner = Objects.requireNonNull(compatibilityPlanner, "compatibilityPlanner");
         this.searchBudget = Objects.requireNonNull(searchBudget, "searchBudget");
         this.terminationPolicy = Objects.requireNonNull(terminationPolicy, "terminationPolicy");
+        this.maxNativeAStarTargets = maxNativeAStarTargets <= 0 ? Integer.MAX_VALUE : maxNativeAStarTargets;
+        this.aStarFallbackBatchTargets = Math.max(1, aStarFallbackBatchTargets);
     }
 
     /**
@@ -54,14 +91,39 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         Objects.requireNonNull(routeCore, "routeCore");
         Objects.requireNonNull(request, "request");
 
-        if (request.algorithm() != RoutingAlgorithm.DIJKSTRA || request.heuristicType() != HeuristicType.NONE) {
+        if (request.algorithm() == RoutingAlgorithm.DIJKSTRA) {
+            if (request.heuristicType() != HeuristicType.NONE) {
+                return compatibilityPlanner.compute(routeCore, request);
+            }
+            return computeNative(
+                    routeCore.edgeGraphContract(),
+                    routeCore.costEngineContract(),
+                    request,
+                    null,
+                    NATIVE_IMPLEMENTATION_NOTE
+            );
+        }
+
+        if (request.algorithm() != RoutingAlgorithm.A_STAR) {
             return compatibilityPlanner.compute(routeCore, request);
         }
 
+        MatrixTargetIndex targetIndex = new MatrixTargetIndex(request.targetNodeIds());
+        if (targetIndex.uniqueTargetCount() > maxNativeAStarTargets) {
+            return computeBatchedAStarCompatibility(routeCore, request);
+        }
+
+        GoalBoundHeuristic[] targetHeuristics = bindTargetHeuristics(
+                routeCore,
+                request.heuristicType(),
+                targetIndex
+        );
         return computeNative(
                 routeCore.edgeGraphContract(),
                 routeCore.costEngineContract(),
-                request
+                request,
+                targetHeuristics,
+                NATIVE_A_STAR_IMPLEMENTATION_NOTE
         );
     }
 
@@ -71,7 +133,9 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
     private MatrixPlan computeNative(
             EdgeGraph edgeGraph,
             CostEngine costEngine,
-            InternalMatrixRequest request
+            InternalMatrixRequest request,
+            GoalBoundHeuristic[] targetHeuristics,
+            String implementationNote
     ) {
         int sourceCount = request.sourceNodeIds().length;
         int targetCount = request.targetNodeIds().length;
@@ -85,12 +149,16 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         int[] rowFrontierPeaks = new int[sourceCount];
 
         MatrixTargetIndex targetIndex = new MatrixTargetIndex(request.targetNodeIds());
+        if (targetHeuristics != null && targetHeuristics.length != targetIndex.uniqueTargetCount()) {
+            throw new IllegalArgumentException("targetHeuristics length must match uniqueTargetCount");
+        }
         MatrixQueryContext context = queryContext.get();
         long[] requestWorkStates = new long[]{0L};
         long requestSettledStates = 0L;
         int requestLabelPeak = 0;
         int requestFrontierPeak = 0;
         var temporalContext = request.temporalContext();
+        var transitionContext = request.transitionContext();
 
         for (int row = 0; row < sourceCount; row++) {
             computeRow(
@@ -99,7 +167,9 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
                     request.sourceNodeIds()[row],
                     request.departureTicks(),
                     temporalContext,
+                    transitionContext,
                     targetIndex,
+                    targetHeuristics,
                     context,
                     requestWorkStates
             );
@@ -134,7 +204,80 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
                 reachable,
                 totalCosts,
                 arrivalTicks,
-                NATIVE_IMPLEMENTATION_NOTE,
+                implementationNote,
+                executionStats
+        );
+    }
+
+    /**
+     * Executes A* compatibility planner in bounded target batches.
+     */
+    private MatrixPlan computeBatchedAStarCompatibility(RouteCore routeCore, InternalMatrixRequest request) {
+        int sourceCount = request.sourceNodeIds().length;
+        int targetCount = request.targetNodeIds().length;
+
+        boolean[][] reachable = new boolean[sourceCount][targetCount];
+        float[][] totalCosts = new float[sourceCount][targetCount];
+        long[][] arrivalTicks = new long[sourceCount][targetCount];
+        int[] rowWorkStates = new int[sourceCount];
+        int[] rowSettledStates = new int[sourceCount];
+        int[] rowLabelPeaks = new int[sourceCount];
+        int[] rowFrontierPeaks = new int[sourceCount];
+
+        long requestWorkStates = 0L;
+        long requestSettledStates = 0L;
+        int requestLabelPeak = 0;
+        int requestFrontierPeak = 0;
+
+        for (int start = 0; start < targetCount; start += aStarFallbackBatchTargets) {
+            int end = Math.min(targetCount, start + aStarFallbackBatchTargets);
+            int[] batchTargets = Arrays.copyOfRange(request.targetNodeIds(), start, end);
+            InternalMatrixRequest batchRequest = new InternalMatrixRequest(
+                    request.sourceNodeIds(),
+                    batchTargets,
+                    request.departureTicks(),
+                    request.algorithm(),
+                    request.heuristicType(),
+                    request.temporalContext(),
+                    request.transitionContext()
+            );
+
+            MatrixPlan batchPlan = compatibilityPlanner.compute(routeCore, batchRequest);
+            copyBatchColumns(batchPlan, start, reachable, totalCosts, arrivalTicks);
+
+            MatrixExecutionStats batchStats = batchPlan.executionStats();
+            requestWorkStates += batchStats.requestWorkStates();
+            requestSettledStates += batchStats.requestSettledStates();
+            requestLabelPeak = Math.max(requestLabelPeak, batchStats.requestLabelPeak());
+            requestFrontierPeak = Math.max(requestFrontierPeak, batchStats.requestFrontierPeak());
+
+            int[] batchRowWork = batchStats.rowWorkStates();
+            int[] batchRowSettled = batchStats.rowSettledStates();
+            int[] batchRowLabelPeaks = batchStats.rowLabelPeaks();
+            int[] batchRowFrontierPeaks = batchStats.rowFrontierPeaks();
+            for (int row = 0; row < sourceCount; row++) {
+                rowWorkStates[row] = saturatingAddInt(rowWorkStates[row], batchRowWork[row]);
+                rowSettledStates[row] = saturatingAddInt(rowSettledStates[row], batchRowSettled[row]);
+                rowLabelPeaks[row] = Math.max(rowLabelPeaks[row], batchRowLabelPeaks[row]);
+                rowFrontierPeaks[row] = Math.max(rowFrontierPeaks[row], batchRowFrontierPeaks[row]);
+            }
+        }
+
+        MatrixExecutionStats executionStats = MatrixExecutionStats.of(
+                requestWorkStates,
+                requestSettledStates,
+                requestLabelPeak,
+                requestFrontierPeak,
+                rowWorkStates,
+                rowSettledStates,
+                rowLabelPeaks,
+                rowFrontierPeaks
+        );
+        return new MatrixPlan(
+                reachable,
+                totalCosts,
+                arrivalTicks,
+                BATCHED_A_STAR_COMPATIBILITY_NOTE,
                 executionStats
         );
     }
@@ -148,7 +291,9 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
             int sourceNodeId,
             long departureTicks,
             ResolvedTemporalContext temporalContext,
+            ResolvedTransitionContext transitionContext,
             MatrixTargetIndex targetIndex,
+            GoalBoundHeuristic[] targetHeuristics,
             MatrixQueryContext context,
             long[] requestWorkStates
     ) {
@@ -172,7 +317,8 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
                     edgeId,
                     CostEngine.NO_PREDECESSOR,
                     departureTicks,
-                    temporalContext
+                    temporalContext,
+                    transitionContext
             );
             if (!Float.isFinite(transitionCost)) {
                 continue;
@@ -192,7 +338,8 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
             context.observeLabelCount();
             searchBudget.checkRowLabelCount(labelStore.size());
 
-            double priority = transitionCost;
+            int settledNode = edgeGraph.getEdgeDestination(edgeId);
+            double priority = computePriority(targetHeuristics, context, settledNode, transitionCost);
             ensureValidPriority(priority);
             frontier.add(new ForwardFrontierState(labelId, edgeId, arrival, priority));
             context.observeFrontierSize();
@@ -233,7 +380,8 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
                         nextEdgeId,
                         settledEdgeId,
                         settledArrival,
-                        temporalContext
+                        temporalContext,
+                        transitionContext
                 );
                 if (!Float.isFinite(transitionCost)) {
                     continue;
@@ -258,7 +406,8 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
                 context.observeLabelCount();
                 searchBudget.checkRowLabelCount(labelStore.size());
 
-                double priority = nextCost;
+                int nextNode = edgeGraph.getEdgeDestination(nextEdgeId);
+                double priority = computePriority(targetHeuristics, context, nextNode, nextCost);
                 ensureValidPriority(priority);
                 frontier.add(new ForwardFrontierState(nextLabelId, nextEdgeId, nextArrival, priority));
                 context.observeFrontierSize();
@@ -329,6 +478,48 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         return lhsCost <= rhsCost && lhsArrival <= rhsArrival;
     }
 
+    private double computePriority(
+            GoalBoundHeuristic[] targetHeuristics,
+            MatrixQueryContext context,
+            int nextNodeId,
+            float gScore
+    ) {
+        if (targetHeuristics == null) {
+            return gScore;
+        }
+        double heuristicFloor = minRemainingTargetHeuristic(targetHeuristics, context, nextNodeId);
+        return gScore + heuristicFloor;
+    }
+
+    private static double minRemainingTargetHeuristic(
+            GoalBoundHeuristic[] targetHeuristics,
+            MatrixQueryContext context,
+            int nodeId
+    ) {
+        if (context.unresolvedTargets() == 0) {
+            return 0.0d;
+        }
+
+        double best = Double.POSITIVE_INFINITY;
+        for (int i = 0; i < targetHeuristics.length; i++) {
+            if (context.isTargetReached(i)) {
+                continue;
+            }
+            double estimate = targetHeuristics[i].estimateFromNode(nodeId);
+            if (!Double.isFinite(estimate) || estimate < 0.0d) {
+                estimate = 0.0d;
+            }
+            if (estimate < best) {
+                best = estimate;
+            }
+        }
+
+        if (!Double.isFinite(best)) {
+            return 0.0d;
+        }
+        return best;
+    }
+
     private static long toArrivalTicks(float transitionCost) {
         if (!Float.isFinite(transitionCost) || transitionCost <= 0.0f) {
             return 0L;
@@ -347,12 +538,64 @@ final class OneToManyDijkstraMatrixPlanner implements MatrixPlanner {
         return a + b;
     }
 
+    private static int saturatingAddInt(int a, int b) {
+        if (b <= 0) {
+            return a;
+        }
+        if (a >= Integer.MAX_VALUE - b) {
+            return Integer.MAX_VALUE;
+        }
+        return a + b;
+    }
+
     /**
      * Applies shared numeric guardrails to frontier priorities.
      */
     private void ensureValidPriority(double priority) {
         // Uses TerminationPolicy numeric guardrails without changing stop behavior.
         terminationPolicy.shouldTerminate(Float.POSITIVE_INFINITY, priority);
+    }
+
+    private GoalBoundHeuristic[] bindTargetHeuristics(
+            RouteCore routeCore,
+            HeuristicType heuristicType,
+            MatrixTargetIndex targetIndex
+    ) {
+        GoalBoundHeuristic[] heuristics = new GoalBoundHeuristic[targetIndex.uniqueTargetCount()];
+        for (int i = 0; i < heuristics.length; i++) {
+            heuristics[i] = routeCore.bindGoalHeuristicContract(heuristicType, targetIndex.uniqueTargetNodeId(i));
+        }
+        return heuristics;
+    }
+
+    private static void copyBatchColumns(
+            MatrixPlan batchPlan,
+            int targetColumnOffset,
+            boolean[][] reachable,
+            float[][] totalCosts,
+            long[][] arrivalTicks
+    ) {
+        boolean[][] batchReachable = batchPlan.reachable();
+        float[][] batchCosts = batchPlan.totalCosts();
+        long[][] batchArrivals = batchPlan.arrivalTicks();
+        for (int row = 0; row < reachable.length; row++) {
+            int batchWidth = batchReachable[row].length;
+            System.arraycopy(batchReachable[row], 0, reachable[row], targetColumnOffset, batchWidth);
+            System.arraycopy(batchCosts[row], 0, totalCosts[row], targetColumnOffset, batchWidth);
+            System.arraycopy(batchArrivals[row], 0, arrivalTicks[row], targetColumnOffset, batchWidth);
+        }
+    }
+
+    private static int readBoundedInt(String property, int defaultValue) {
+        String raw = System.getProperty(property);
+        if (raw == null || raw.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
     }
 
     /**
