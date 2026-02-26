@@ -7,13 +7,11 @@ import org.Aayush.routing.graph.TurnCostMap;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.overlay.LiveUpdate;
 import org.Aayush.routing.profile.ProfileStore;
+import org.Aayush.routing.testutil.TemporalTestContexts;
+import org.Aayush.routing.testutil.TransitionTestContexts;
 import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
-import org.Aayush.routing.traits.temporal.TemporalPolicy;
-import org.Aayush.routing.traits.temporal.TemporalRuntimeBinder;
-import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
-import org.Aayush.routing.traits.temporal.TemporalStrategyRegistry;
-import org.Aayush.routing.traits.temporal.TemporalTimezonePolicyRegistry;
-import org.Aayush.routing.traits.temporal.TemporalTraitCatalog;
+import org.Aayush.routing.traits.transition.ResolvedTransitionContext;
+import org.Aayush.routing.traits.transition.TransitionCostStrategy;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
@@ -40,6 +38,8 @@ class CostEngineTest {
     // Jan 5, 1970 Monday 00:00:00 UTC
     private static final long MONDAY_00_00 = 345_600L;
     private static final long MONDAY_00_30 = MONDAY_00_00 + 1_800L;
+    private static final ResolvedTemporalContext CALENDAR_UTC_CONTEXT = TemporalTestContexts.calendarUtc();
+    private static final ResolvedTransitionContext EDGE_BASED_CONTEXT = TransitionTestContexts.edgeBased();
 
     private record ProfileSpec(int profileId, int dayMask, float[] buckets, float multiplier) {}
 
@@ -61,7 +61,12 @@ class CostEngineTest {
 
         assertEquals(CostEngine.TemporalSamplingPolicy.INTERPOLATED, engine.temporalSamplingPolicy());
 
-        CostEngine.CostBreakdown breakdown = engine.explainEdgeCost(0, CostEngine.NO_PREDECESSOR, MONDAY_00_30);
+        CostEngine.CostBreakdown breakdown = engine.explainEdgeCost(
+                0,
+                CostEngine.NO_PREDECESSOR,
+                MONDAY_00_30,
+                CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT
+        );
         assertEquals(0, breakdown.edgeId());
         assertEquals(CostEngine.NO_PREDECESSOR, breakdown.fromEdgeId());
         assertEquals(0, breakdown.bucketIndex());
@@ -85,7 +90,7 @@ class CostEngineTest {
                 CostEngine.TemporalSamplingPolicy.DISCRETE
         );
 
-        float cost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, MONDAY_00_30);
+        float cost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, MONDAY_00_30, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
         assertEquals(10.0f, cost, 1e-6f); // bucket 0 multiplier = 1.0
     }
 
@@ -103,7 +108,10 @@ class CostEngineTest {
                 BUCKET_SIZE_SECONDS
         );
 
-        assertEquals(Float.POSITIVE_INFINITY, engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, MONDAY_00_00));
+        assertEquals(
+                Float.POSITIVE_INFINITY,
+                engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT)
+        );
     }
 
     @Test
@@ -122,7 +130,7 @@ class CostEngineTest {
                 CostEngine.TemporalSamplingPolicy.DISCRETE
         );
 
-        float cost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, MONDAY_00_00);
+        float cost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
         assertEquals(20.0f, cost, 1e-6f); // 10 * 1.0 * (1/0.5)
     }
 
@@ -142,7 +150,7 @@ class CostEngineTest {
                 CostEngine.TemporalSamplingPolicy.DISCRETE
         );
 
-        float cost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, 10L);
+        float cost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, 10L, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
         assertEquals(10.0f, cost, 1e-6f); // expired -> penalty 1.0
     }
 
@@ -161,7 +169,7 @@ class CostEngineTest {
                 CostEngine.TemporalSamplingPolicy.DISCRETE
         );
 
-        float cost = engineWithoutTurns.computeEdgeCost(0, 1, MONDAY_00_00);
+        float cost = engineWithoutTurns.computeEdgeCost(0, 1, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
         assertEquals(10.0f, cost, 1e-6f); // no turn map => no turn penalty applied
     }
 
@@ -180,7 +188,7 @@ class CostEngineTest {
                 CostEngine.TemporalSamplingPolicy.DISCRETE
         );
 
-        float cost = engine.computeEdgeCost(0, 1, MONDAY_00_00);
+        float cost = engine.computeEdgeCost(0, 1, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
         assertEquals(15.0f, cost, 1e-6f); // edge(10) + turn(5)
     }
 
@@ -199,7 +207,7 @@ class CostEngineTest {
                 CostEngine.TemporalSamplingPolicy.DISCRETE
         );
 
-        float cost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, MONDAY_00_00);
+        float cost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
         assertEquals(10.0f, cost, 1e-6f);
     }
 
@@ -218,10 +226,114 @@ class CostEngineTest {
                 CostEngine.TemporalSamplingPolicy.DISCRETE
         );
 
-        CostEngine.CostBreakdown breakdown = engine.explainEdgeCost(0, 1, MONDAY_00_00);
+        CostEngine.CostBreakdown breakdown = engine.explainEdgeCost(0, 1, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
         assertEquals(Float.POSITIVE_INFINITY, breakdown.effectiveCost());
         assertTrue(breakdown.turnPenaltyApplied());
         assertTrue(breakdown.forbiddenTurn());
+    }
+
+    @Test
+    @DisplayName("Invalid packed transition decision is wrapped with deterministic Stage 17 reason code")
+    void testInvalidPackedTransitionDecisionWrapped() {
+        Fixture fixture = createFixture();
+        CostEngine engine = new CostEngine(
+                fixture.graph(),
+                fixture.profiles(),
+                fixture.overlay(),
+                fixture.turns(),
+                TimeUtils.EngineTimeUnit.SECONDS,
+                BUCKET_SIZE_SECONDS,
+                CostEngine.TemporalSamplingPolicy.DISCRETE
+        );
+
+        TransitionCostStrategy badStrategy = new TransitionCostStrategy() {
+            @Override
+            public String id() {
+                return "BAD_STRATEGY";
+            }
+
+            @Override
+            public boolean appliesFiniteTurnPenalties() {
+                return true;
+            }
+
+            @Override
+            public TurnCostDecision evaluate(TurnCostMap turnCostMap, int fromEdgeId, int toEdgeId, boolean hasPredecessor) {
+                return TurnCostDecision.neutral();
+            }
+
+            @Override
+            public long evaluatePacked(TurnCostMap turnCostMap, int fromEdgeId, int toEdgeId, boolean hasPredecessor) {
+                return TurnCostDecision.pack(Float.NaN, true);
+            }
+        };
+        ResolvedTransitionContext badContext = ResolvedTransitionContext.builder()
+                .transitionTraitId("EDGE_BASED")
+                .transitionStrategyId("BAD_STRATEGY")
+                .finiteTurnPenaltiesEnabled(true)
+                .strategy(badStrategy)
+                .build();
+
+        TransitionCostStrategy.TransitionComputationException ex = assertThrows(
+                TransitionCostStrategy.TransitionComputationException.class,
+                () -> engine.computeEdgeCost(0, 1, MONDAY_00_00, CALENDAR_UTC_CONTEXT, badContext)
+        );
+        assertEquals("H17_TRANSITION_RESOLUTION_FAILURE", ex.reasonCode());
+        assertTrue(ex.getMessage().contains("BAD_STRATEGY"));
+        assertTrue(ex.getMessage().contains("invalid turn decision"));
+        assertTrue(ex.getCause() instanceof IllegalStateException);
+    }
+
+    @Test
+    @DisplayName("Non-zero turn penalty with turnPenaltyApplied false is rejected deterministically")
+    void testInvalidPackedTurnDecisionWithPenaltyButNotAppliedRejected() {
+        Fixture fixture = createFixture();
+        CostEngine engine = new CostEngine(
+                fixture.graph(),
+                fixture.profiles(),
+                fixture.overlay(),
+                fixture.turns(),
+                TimeUtils.EngineTimeUnit.SECONDS,
+                BUCKET_SIZE_SECONDS,
+                CostEngine.TemporalSamplingPolicy.DISCRETE
+        );
+
+        TransitionCostStrategy badStrategy = new TransitionCostStrategy() {
+            @Override
+            public String id() {
+                return "BAD_FLAG_STRATEGY";
+            }
+
+            @Override
+            public boolean appliesFiniteTurnPenalties() {
+                return true;
+            }
+
+            @Override
+            public TurnCostDecision evaluate(TurnCostMap turnCostMap, int fromEdgeId, int toEdgeId, boolean hasPredecessor) {
+                return TurnCostDecision.neutral();
+            }
+
+            @Override
+            public long evaluatePacked(TurnCostMap turnCostMap, int fromEdgeId, int toEdgeId, boolean hasPredecessor) {
+                return TurnCostDecision.pack(2.5f, false);
+            }
+        };
+        ResolvedTransitionContext badContext = ResolvedTransitionContext.builder()
+                .transitionTraitId("EDGE_BASED")
+                .transitionStrategyId("BAD_FLAG_STRATEGY")
+                .finiteTurnPenaltiesEnabled(true)
+                .strategy(badStrategy)
+                .build();
+
+        TransitionCostStrategy.TransitionComputationException ex = assertThrows(
+                TransitionCostStrategy.TransitionComputationException.class,
+                () -> engine.computeEdgeCost(0, 1, MONDAY_00_00, CALENDAR_UTC_CONTEXT, badContext)
+        );
+        assertEquals("H17_TRANSITION_RESOLUTION_FAILURE", ex.reasonCode());
+        assertTrue(ex.getMessage().contains("BAD_FLAG_STRATEGY"));
+        assertTrue(ex.getMessage().contains("invalid turn decision"));
+        assertTrue(ex.getCause() instanceof IllegalStateException);
     }
 
     @Test
@@ -243,10 +355,22 @@ class CostEngineTest {
                 TimeUtils.EngineTimeUnit.SECONDS,
                 BUCKET_SIZE_SECONDS
         );
-        assertThrows(IllegalArgumentException.class, () -> engine.computeEdgeCost(-1, MONDAY_00_00));
-        assertThrows(IllegalArgumentException.class, () -> engine.computeEdgeCost(99, MONDAY_00_00));
-        assertThrows(IllegalArgumentException.class, () -> engine.computeEdgeCost(0, -2, MONDAY_00_00));
-        assertThrows(IllegalArgumentException.class, () -> engine.computeEdgeCost(0, 99, MONDAY_00_00));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> engine.computeEdgeCost(-1, CostEngine.NO_PREDECESSOR, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> engine.computeEdgeCost(99, CostEngine.NO_PREDECESSOR, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> engine.computeEdgeCost(0, -2, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> engine.computeEdgeCost(0, 99, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT)
+        );
     }
 
     @Test
@@ -263,10 +387,51 @@ class CostEngineTest {
                 BUCKET_SIZE_SECONDS
         );
 
-        CostEngine.CostBreakdown breakdown = engine.explainEdgeCost(0, MONDAY_00_00);
+        CostEngine.CostBreakdown breakdown = engine.explainEdgeCost(0, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
         assertEquals(Float.POSITIVE_INFINITY, breakdown.effectiveCost());
         assertTrue(breakdown.blockedByLive());
         assertFalse(breakdown.forbiddenTurn());
+    }
+
+    @Test
+    @DisplayName("Strict API: temporal context is mandatory in low-level overloads")
+    void testStrictTemporalContextMandatoryInApiSurface() {
+        assertThrows(
+                NoSuchMethodException.class,
+                () -> CostEngine.class.getDeclaredMethod(
+                        "computeEdgeCost",
+                        int.class,
+                        long.class
+                )
+        );
+        assertThrows(
+                NoSuchMethodException.class,
+                () -> CostEngine.class.getDeclaredMethod(
+                        "computeEdgeCost",
+                        int.class,
+                        int.class,
+                        long.class
+                )
+        );
+        assertThrows(
+                NoSuchMethodException.class,
+                () -> CostEngine.class.getDeclaredMethod(
+                        "explainEdgeCost",
+                        int.class,
+                        int.class,
+                        long.class
+                )
+        );
+        assertThrows(
+                NoSuchMethodException.class,
+                () -> CostEngine.class.getDeclaredMethod(
+                        "explainEdgeCost",
+                        int.class,
+                        int.class,
+                        long.class,
+                        CostEngine.MutableCostBreakdown.class
+                )
+        );
     }
 
     @Test
@@ -286,8 +451,8 @@ class CostEngineTest {
         );
 
         CostEngine.MutableCostBreakdown mutable = new CostEngine.MutableCostBreakdown();
-        engine.explainEdgeCost(0, 1, MONDAY_00_00, mutable);
-        CostEngine.CostBreakdown immutable = engine.explainEdgeCost(0, 1, MONDAY_00_00);
+        engine.explainEdgeCost(0, 1, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT, mutable);
+        CostEngine.CostBreakdown immutable = engine.explainEdgeCost(0, 1, MONDAY_00_00, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
 
         assertEquals(immutable.edgeId(), mutable.edgeId);
         assertEquals(immutable.fromEdgeId(), mutable.fromEdgeId);
@@ -322,12 +487,12 @@ class CostEngineTest {
                 BUCKET_SIZE_SECONDS
         );
 
-        float expectedEdge0 = engine.computeEdgeCost(0, MONDAY_00_30);
-        float expectedEdge1 = engine.computeEdgeCost(1, MONDAY_00_30);
+        float expectedEdge0 = engine.computeEdgeCost(0, MONDAY_00_30, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
+        float expectedEdge1 = engine.computeEdgeCost(1, MONDAY_00_30, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
 
         for (int i = 0; i < 10_000; i++) {
-            assertEquals(expectedEdge0, engine.computeEdgeCost(0, MONDAY_00_30), 1e-6f);
-            assertEquals(expectedEdge1, engine.computeEdgeCost(1, MONDAY_00_30), 1e-6f);
+            assertEquals(expectedEdge0, engine.computeEdgeCost(0, MONDAY_00_30, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT), 1e-6f);
+            assertEquals(expectedEdge1, engine.computeEdgeCost(1, MONDAY_00_30, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT), 1e-6f);
         }
 
         int threads = 8;
@@ -340,8 +505,8 @@ class CostEngineTest {
             executor.execute(() -> {
                 try {
                     for (int i = 0; i < loopsPerThread; i++) {
-                        float edge0 = engine.computeEdgeCost(0, MONDAY_00_30);
-                        float edge1 = engine.computeEdgeCost(1, MONDAY_00_30);
+                        float edge0 = engine.computeEdgeCost(0, MONDAY_00_30, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
+                        float edge1 = engine.computeEdgeCost(1, MONDAY_00_30, CALENDAR_UTC_CONTEXT, EDGE_BASED_CONTEXT);
                         if (Math.abs(edge0 - expectedEdge0) > 1e-6f || Math.abs(edge1 - expectedEdge1) > 1e-6f) {
                             failed.set(true);
                             break;
@@ -381,25 +546,12 @@ class CostEngineTest {
                 CostEngine.TemporalSamplingPolicy.DISCRETE
         );
 
-        TemporalRuntimeBinder binder = new TemporalRuntimeBinder();
-        ResolvedTemporalContext calendarContext = binder.bind(
-                TemporalRuntimeConfig.calendarUtc(),
-                TemporalTraitCatalog.defaultCatalog(),
-                TemporalStrategyRegistry.defaultRegistry(),
-                TemporalTimezonePolicyRegistry.defaultRegistry(),
-                TemporalPolicy.defaults()
-        ).getResolvedTemporalContext();
-        ResolvedTemporalContext linearContext = binder.bind(
-                TemporalRuntimeConfig.linear(),
-                TemporalTraitCatalog.defaultCatalog(),
-                TemporalStrategyRegistry.defaultRegistry(),
-                TemporalTimezonePolicyRegistry.defaultRegistry(),
-                TemporalPolicy.defaults()
-        ).getResolvedTemporalContext();
+        ResolvedTemporalContext calendarContext = CALENDAR_UTC_CONTEXT;
+        ResolvedTemporalContext linearContext = TemporalTestContexts.linear();
 
         long sundayUtc = 259_200L; // 1970-01-04 Sunday
-        float calendarCost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, sundayUtc, calendarContext);
-        float linearCost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, sundayUtc, linearContext);
+        float calendarCost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, sundayUtc, calendarContext, EDGE_BASED_CONTEXT);
+        float linearCost = engine.computeEdgeCost(0, CostEngine.NO_PREDECESSOR, sundayUtc, linearContext, EDGE_BASED_CONTEXT);
 
         assertEquals(10.0f, calendarCost, 1e-6f); // day mask inactive -> DEFAULT_MULTIPLIER = 1.0
         assertEquals(20.0f, linearCost, 1e-6f);   // day mask ignored -> profile multiplier = 2.0
@@ -489,4 +641,5 @@ class CostEngineTest {
         Metadata.addTickDurationNs(builder, 1_000_000_000L);
         return Metadata.endMetadata(builder);
     }
+
 }

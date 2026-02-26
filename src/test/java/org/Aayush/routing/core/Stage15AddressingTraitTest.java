@@ -6,6 +6,7 @@ import org.Aayush.routing.spatial.SpatialRuntime;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.addressing.AddressInput;
 import org.Aayush.routing.traits.addressing.AddressType;
+import org.Aayush.routing.traits.addressing.AddressingRuntimeConfig;
 import org.Aayush.routing.traits.addressing.AddressingTelemetry;
 import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
 import org.Aayush.routing.traits.addressing.CoordinateDistanceStrategy;
@@ -55,6 +56,24 @@ class Stage15AddressingTraitTest {
         assertEquals(AddressType.EXTERNAL_ID, response.getSourceResolvedAddress().getInputType());
         assertEquals("N0", response.getSourceResolvedAddress().getResolvedExternalId());
         assertEquals("N4", response.getTargetResolvedAddress().getResolvedExternalId());
+    }
+
+    @Test
+    @DisplayName("Typed route succeeds without request addressingTraitId when runtime trait is pre-bound")
+    void testTypedRouteUsesStartupTraitWithoutRequestOverride() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
+        RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()));
+
+        RouteResponse response = core.route(RouteRequest.builder()
+                .sourceAddress(AddressInput.ofExternalId("N0"))
+                .targetAddress(AddressInput.ofExternalId("N4"))
+                .departureTicks(0L)
+                .algorithm(RoutingAlgorithm.A_STAR)
+                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
+                .build());
+
+        assertTrue(response.isReachable());
+        assertEquals(4.0f, response.getTotalCost(), 1e-6f);
     }
 
     @Test
@@ -233,14 +252,19 @@ class Stage15AddressingTraitTest {
     @DisplayName("Unsupported address type for selected trait is rejected")
     void testUnsupportedAddressTypeForTrait() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
-        RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()));
+        RouteCore core = createCore(
+                fixture,
+                buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()),
+                fixture.nodeIdMapper(),
+                null,
+                AddressingRuntimeConfig.externalIdOnlyRuntime()
+        );
 
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_EXTERNAL_ID_ONLY)
                         .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
@@ -611,8 +635,33 @@ class Stage15AddressingTraitTest {
     }
 
     @Test
-    @DisplayName("Typed addressing requires non-blank addressing trait id")
-    void testTypedAddressingRequiresNonBlankTraitId() {
+    @DisplayName("Negative snap distances from custom strategies are rejected deterministically")
+    void testNegativeComputedSnapDistanceRejected() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
+        SpatialRuntime spatialRuntime = buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates());
+        CoordinateStrategyRegistry customRegistry =
+                new CoordinateStrategyRegistry(List.of(new NegativeDistanceStrategy("NEGATIVE_DISTANCE")));
+        RouteCore core = createCore(fixture, spatialRuntime, fixture.nodeIdMapper(), customRegistry);
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.route(RouteRequest.builder()
+                        .sourceAddress(AddressInput.ofCoordinates(0.0d, 0.0d, null))
+                        .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, null))
+                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
+                        .coordinateDistanceStrategyId("NEGATIVE_DISTANCE")
+                        .maxSnapDistance(10.0d)
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.A_STAR)
+                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_COORDINATE_STRATEGY_FAILURE, ex.getReasonCode());
+    }
+
+    @Test
+    @DisplayName("Request addressing-trait hint must match startup trait")
+    void testRequestTraitHintMustMatchStartupTrait() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
         RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()));
 
@@ -621,13 +670,13 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofExternalId("N0"))
                         .targetAddress(AddressInput.ofExternalId("N4"))
-                        .addressingTraitId("   ")
+                        .addressingTraitId(AddressingTraitCatalog.TRAIT_EXTERNAL_ID_ONLY)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
-        assertEquals(RouteCore.REASON_ADDRESSING_TRAIT_REQUIRED, ex.getReasonCode());
+        assertEquals(RouteCore.REASON_ADDRESSING_RUNTIME_MISMATCH, ex.getReasonCode());
     }
 
     @Test
@@ -663,7 +712,7 @@ class Stage15AddressingTraitTest {
             SpatialRuntime spatialRuntime,
             IDMapper mapper
     ) {
-        return createCore(fixture, spatialRuntime, mapper, null);
+        return createCore(fixture, spatialRuntime, mapper, null, AddressingRuntimeConfig.defaultRuntime());
     }
 
     private RouteCore createCore(
@@ -671,6 +720,22 @@ class Stage15AddressingTraitTest {
             SpatialRuntime spatialRuntime,
             IDMapper mapper,
             CoordinateStrategyRegistry coordinateStrategyRegistry
+    ) {
+        return createCore(
+                fixture,
+                spatialRuntime,
+                mapper,
+                coordinateStrategyRegistry,
+                AddressingRuntimeConfig.defaultRuntime()
+        );
+    }
+
+    private RouteCore createCore(
+            RoutingFixtureFactory.Fixture fixture,
+            SpatialRuntime spatialRuntime,
+            IDMapper mapper,
+            CoordinateStrategyRegistry coordinateStrategyRegistry,
+            AddressingRuntimeConfig addressingRuntimeConfig
     ) {
         return RouteCore.builder()
                 .edgeGraph(fixture.edgeGraph())
@@ -680,6 +745,8 @@ class Stage15AddressingTraitTest {
                 .spatialRuntime(spatialRuntime)
                 .coordinateStrategyRegistry(coordinateStrategyRegistry)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(addressingRuntimeConfig)
                 .build();
     }
 
@@ -845,6 +912,20 @@ class Stage15AddressingTraitTest {
         @Override
         public double distance(double requestFirst, double requestSecond, double nodeFirst, double nodeSecond) {
             throw new IllegalStateException("forced distance failure");
+        }
+    }
+
+    private record NegativeDistanceStrategy(String id) implements CoordinateDistanceStrategy {
+        @Override
+        public void validate(double first, double second) {
+            if (!Double.isFinite(first) || !Double.isFinite(second)) {
+                throw new CoordinateValidationException("NEGATIVE_NON_FINITE", "coordinates must be finite");
+            }
+        }
+
+        @Override
+        public double distance(double requestFirst, double requestSecond, double nodeFirst, double nodeSecond) {
+            return -1.0d;
         }
     }
 

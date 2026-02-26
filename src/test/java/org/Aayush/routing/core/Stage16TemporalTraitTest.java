@@ -5,8 +5,10 @@ import org.Aayush.routing.cost.CostEngine;
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
+import org.Aayush.routing.testutil.TransitionTestContexts;
 import org.Aayush.routing.traits.temporal.TemporalOffsetCache;
 import org.Aayush.routing.traits.temporal.TemporalResolutionStrategy;
+import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
 import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.Aayush.routing.traits.temporal.TemporalStrategyRegistry;
 import org.Aayush.routing.traits.temporal.TemporalTimezonePolicyRegistry;
@@ -164,6 +166,49 @@ class Stage16TemporalTraitTest {
         assertEquals(2.0f, fallAfterA.getTotalCost(), 1e-6f);    // local 01:30 (EST)
     }
 
+    @Test
+    @DisplayName("InternalRouteRequest requires explicit temporal context (no implicit default)")
+    void testInternalRouteRequestRequiresExplicitTemporalContext() {
+        assertThrows(
+                NullPointerException.class,
+                () -> new InternalRouteRequest(
+                        0,
+                        1,
+                        0L,
+                        RoutingAlgorithm.DIJKSTRA,
+                        HeuristicType.NONE,
+                        null,
+                        TransitionTestContexts.edgeBased()
+                )
+        );
+    }
+
+    @Test
+    @DisplayName("InternalMatrixRequest requires explicit temporal context (no implicit default)")
+    void testInternalMatrixRequestRequiresExplicitTemporalContext() {
+        assertThrows(
+                NullPointerException.class,
+                () -> new InternalMatrixRequest(
+                        new int[]{0},
+                        new int[]{1},
+                        0L,
+                        RoutingAlgorithm.DIJKSTRA,
+                        HeuristicType.NONE,
+                        null,
+                        TransitionTestContexts.edgeBased()
+                )
+        );
+    }
+
+    @Test
+    @DisplayName("ResolvedTemporalContext exposes no global default fallback helper")
+    void testResolvedTemporalContextHasNoGlobalDefaultFallbackMethod() {
+        assertThrows(
+                NoSuchMethodException.class,
+                () -> ResolvedTemporalContext.class.getDeclaredMethod("defaultCalendarUtc")
+        );
+    }
+
     private RouteCore createCore(
             RoutingFixtureFactory.Fixture fixture,
             CostEngine costEngine,
@@ -175,6 +220,8 @@ class Stage16TemporalTraitTest {
                 .costEngine(costEngine)
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .temporalRuntimeConfig(temporalRuntimeConfig)
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
     }
 
@@ -253,6 +300,8 @@ class Stage16TemporalTraitTest {
                 .costEngine(createDiscreteEngine(fixture))
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .temporalTraitCatalog(new TemporalTraitCatalog(List.of(failingCalendarTrait)))
                 .temporalStrategyRegistry(new TemporalStrategyRegistry(List.of(failingStrategy)))
                 .temporalTimezonePolicyRegistry(TemporalTimezonePolicyRegistry.defaultRegistry())

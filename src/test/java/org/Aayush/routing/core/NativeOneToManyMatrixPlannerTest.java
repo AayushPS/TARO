@@ -2,17 +2,21 @@ package org.Aayush.routing.core;
 
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
+import org.Aayush.routing.testutil.TemporalTestContexts;
+import org.Aayush.routing.testutil.TransitionTestContexts;
 import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Field;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@DisplayName("Stage 14 OneToManyDijkstraMatrixPlanner Tests")
-class OneToManyDijkstraMatrixPlannerTest {
+@DisplayName("Stage 14 NativeOneToManyMatrixPlanner Tests")
+class NativeOneToManyMatrixPlannerTest {
 
     @Test
     @DisplayName("Single-target matrix cell equals route query for Dijkstra")
@@ -38,7 +42,7 @@ class OneToManyDijkstraMatrixPlannerTest {
         assertTrue(matrix.getReachable()[0][0]);
         assertEquals(route.getTotalCost(), matrix.getTotalCosts()[0][0], 1e-6f);
         assertEquals(route.getArrivalTicks(), matrix.getArrivalTicks()[0][0]);
-        assertEquals(OneToManyDijkstraMatrixPlanner.NATIVE_IMPLEMENTATION_NOTE, matrix.getImplementationNote());
+        assertEquals(NativeOneToManyMatrixPlanner.NATIVE_IMPLEMENTATION_NOTE, matrix.getImplementationNote());
     }
 
     @Test
@@ -91,8 +95,8 @@ class OneToManyDijkstraMatrixPlannerTest {
     }
 
     @Test
-    @DisplayName("A* matrix requests keep Stage 14 compatibility pairwise mode")
-    void testAStarCompatibilityFallback() {
+    @DisplayName("A* matrix requests use native one-to-many path for bounded target sets")
+    void testAStarNativePath() {
         RouteCore core = createCore(createLinearFixture());
         MatrixResponse response = core.matrix(MatrixRequest.builder()
                 .sourceExternalId("N0")
@@ -105,7 +109,39 @@ class OneToManyDijkstraMatrixPlannerTest {
         assertTrue(response.getReachable()[0][0]);
         assertEquals(4.0f, response.getTotalCosts()[0][0], 1e-6f);
         assertEquals(4L, response.getArrivalTicks()[0][0]);
-        assertEquals(TemporaryMatrixPlanner.PAIRWISE_COMPATIBILITY_NOTE, response.getImplementationNote());
+        assertEquals(NativeOneToManyMatrixPlanner.NATIVE_A_STAR_IMPLEMENTATION_NOTE, response.getImplementationNote());
+    }
+
+    @Test
+    @DisplayName("A* oversized target set falls back to bounded batched compatibility mode")
+    void testAStarBatchedFallbackForLargeTargetSet() {
+        RouteCore core = createCore(createLinearFixture());
+        NativeOneToManyMatrixPlanner planner = new NativeOneToManyMatrixPlanner(
+                new TemporaryMatrixPlanner(),
+                MatrixSearchBudget.of(0, 0, 0, 0),
+                TerminationPolicy.defaults(),
+                1,
+                1
+        );
+
+        MatrixPlan plan = planner.compute(
+                core,
+                new InternalMatrixRequest(
+                        new int[]{0},
+                        new int[]{3, 4},
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
+        );
+
+        assertEquals(NativeOneToManyMatrixPlanner.BATCHED_A_STAR_COMPATIBILITY_NOTE, plan.implementationNote());
+        assertTrue(plan.reachable()[0][0]);
+        assertTrue(plan.reachable()[0][1]);
+        assertEquals(3.0f, plan.totalCosts()[0][0], 1e-6f);
+        assertEquals(4.0f, plan.totalCosts()[0][1], 1e-6f);
     }
 
     @Test
@@ -113,7 +149,7 @@ class OneToManyDijkstraMatrixPlannerTest {
     void testSourceTargetEarlyTerminationWithTightBudget() {
         RoutingFixtureFactory.Fixture fixture = createTwoBranchFixture();
         RouteCore core = createCore(fixture);
-        OneToManyDijkstraMatrixPlanner planner = new OneToManyDijkstraMatrixPlanner(
+        NativeOneToManyMatrixPlanner planner = new NativeOneToManyMatrixPlanner(
                 new TemporaryMatrixPlanner(),
                 MatrixSearchBudget.of(1, 1, 1, 1),
                 TerminationPolicy.defaults()
@@ -126,13 +162,61 @@ class OneToManyDijkstraMatrixPlannerTest {
                         new int[]{0},
                         5L,
                         RoutingAlgorithm.DIJKSTRA,
-                        HeuristicType.NONE
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
                 )
         );
 
         assertTrue(plan.reachable()[0][0]);
         assertEquals(0.0f, plan.totalCosts()[0][0], 1e-6f);
         assertEquals(5L, plan.arrivalTicks()[0][0]);
+    }
+
+    @Test
+    @DisplayName("Thread-local matrix query context does not retain graph-scale active edge containers across subsequent small requests")
+    void testThreadLocalMatrixContextReleasesActiveEdgeContainersAcrossRequests() {
+        RoutingFixtureFactory.Fixture fixture = createLongLinearFixture(200);
+        RouteCore core = createCore(fixture);
+        NativeOneToManyMatrixPlanner planner = new NativeOneToManyMatrixPlanner(
+                new TemporaryMatrixPlanner(),
+                MatrixSearchBudget.of(0, 0, 0, 0),
+                TerminationPolicy.defaults(),
+                512,
+                32
+        );
+
+        planner.compute(
+                core,
+                new InternalMatrixRequest(
+                        new int[]{0},
+                        new int[]{199},
+                        0L,
+                        RoutingAlgorithm.DIJKSTRA,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
+        );
+
+        planner.compute(
+                core,
+                new InternalMatrixRequest(
+                        new int[]{0},
+                        new int[]{1},
+                        0L,
+                        RoutingAlgorithm.DIJKSTRA,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
+        );
+
+        MatrixQueryContext context = queryContextOf(planner);
+        assertTrue(
+                activeEdgeContainerCount(context) <= 8,
+                "active edge containers should shrink after reset for small follow-up matrix requests"
+        );
     }
 
     private RouteCore createCore(RoutingFixtureFactory.Fixture fixture) {
@@ -142,6 +226,8 @@ class OneToManyDijkstraMatrixPlannerTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
     }
 
@@ -236,5 +322,66 @@ class OneToManyDijkstraMatrixPlannerTest {
                         1.0f
                 )
         );
+    }
+
+    private RoutingFixtureFactory.Fixture createLongLinearFixture(int nodes) {
+        int edgeCount = nodes - 1;
+        int[] firstEdge = new int[nodes + 1];
+        int[] edgeTarget = new int[edgeCount];
+        int[] edgeOrigin = new int[edgeCount];
+        float[] baseWeights = new float[edgeCount];
+        int[] edgeProfiles = new int[edgeCount];
+        double[] coordinates = new double[nodes * 2];
+        for (int node = 0; node < nodes; node++) {
+            firstEdge[node] = Math.min(node, edgeCount);
+            coordinates[node * 2] = node;
+            coordinates[node * 2 + 1] = 0.0d;
+            if (node < edgeCount) {
+                edgeTarget[node] = node + 1;
+                edgeOrigin[node] = node;
+                baseWeights[node] = 1.0f;
+                edgeProfiles[node] = 1;
+            }
+        }
+        firstEdge[nodes] = edgeCount;
+
+        return RoutingFixtureFactory.createFixture(
+                nodes,
+                firstEdge,
+                edgeTarget,
+                edgeOrigin,
+                baseWeights,
+                edgeProfiles,
+                coordinates,
+                new RoutingFixtureFactory.ProfileSpec(
+                        1,
+                        RoutingFixtureFactory.ALL_DAYS_MASK,
+                        new float[]{1.0f},
+                        1.0f
+                )
+        );
+    }
+
+    private MatrixQueryContext queryContextOf(NativeOneToManyMatrixPlanner planner) {
+        try {
+            Field field = NativeOneToManyMatrixPlanner.class.getDeclaredField("queryContext");
+            field.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            ThreadLocal<MatrixQueryContext> threadLocal = (ThreadLocal<MatrixQueryContext>) field.get(planner);
+            return threadLocal.get();
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("failed to inspect native matrix planner queryContext", ex);
+        }
+    }
+
+    private int activeEdgeContainerCount(MatrixQueryContext context) {
+        try {
+            Field field = MatrixQueryContext.class.getDeclaredField("activeLabelsByEdge");
+            field.setAccessible(true);
+            Object map = field.get(context);
+            return (Integer) map.getClass().getMethod("size").invoke(map);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("failed to inspect MatrixQueryContext activeLabelsByEdge", ex);
+        }
     }
 }

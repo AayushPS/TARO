@@ -6,6 +6,10 @@ import org.Aayush.routing.cost.CostEngine;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.profile.ProfileStore;
+import org.Aayush.routing.testutil.TemporalTestContexts;
+import org.Aayush.routing.testutil.TransitionTestContexts;
+import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
+import org.Aayush.routing.traits.transition.ResolvedTransitionContext;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
 import org.Aayush.serialization.flatbuffers.taro.model.Model;
@@ -33,6 +37,8 @@ class HeuristicAdmissibilityTest {
     private static final long MONDAY_00_00 = 345_600L;
     // Jan 4, 1970 Sunday 00:00:00 UTC
     private static final long SUNDAY_00_00 = 259_200L;
+    private static final ResolvedTemporalContext CALENDAR_UTC_CONTEXT = TemporalTestContexts.calendarUtc();
+    private static final ResolvedTransitionContext EDGE_BASED_CONTEXT = TransitionTestContexts.edgeBased();
 
     private record ProfileSpec(int profileId, int dayMask, float[] buckets, float multiplier) {
     }
@@ -347,7 +353,13 @@ class HeuristicAdmissibilityTest {
             iterator.resetForNode(state.nodeId());
             while (iterator.hasNext()) {
                 int edgeId = iterator.next();
-                float edgeCost = costEngine.computeEdgeCost(edgeId, departureTicks);
+                float edgeCost = costEngine.computeEdgeCost(
+                        edgeId,
+                        CostEngine.NO_PREDECESSOR,
+                        departureTicks,
+                        CALENDAR_UTC_CONTEXT,
+                        EDGE_BASED_CONTEXT
+                );
                 if (edgeCost == Float.POSITIVE_INFINITY) {
                     continue;
                 }
@@ -495,4 +507,5 @@ class HeuristicAdmissibilityTest {
         }
         return normalized;
     }
+
 }

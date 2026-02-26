@@ -18,6 +18,9 @@ class Stage14PrimitiveGuardrailTest {
     private static final String PROP_MAX_ROW_LABELS = "taro.routing.stage14.maxRowLabels";
     private static final String PROP_MAX_ROW_FRONTIER = "taro.routing.stage14.maxRowFrontierSize";
     private static final String PROP_MAX_REQUEST_WORK = "taro.routing.stage14.maxRequestWorkStates";
+    private static final String PROP_MAX_STAGE13_SETTLED = "taro.routing.stage13.maxSettledStates";
+    private static final String PROP_MAX_NATIVE_A_STAR_TARGETS = "taro.routing.stage14.maxNativeAStarTargets";
+    private static final String PROP_A_STAR_BATCH_TARGETS = "taro.routing.stage14.aStarFallbackBatchTargets";
 
     @AfterEach
     void restoreBudgetProperties() {
@@ -25,6 +28,9 @@ class Stage14PrimitiveGuardrailTest {
         System.clearProperty(PROP_MAX_ROW_LABELS);
         System.clearProperty(PROP_MAX_ROW_FRONTIER);
         System.clearProperty(PROP_MAX_REQUEST_WORK);
+        System.clearProperty(PROP_MAX_STAGE13_SETTLED);
+        System.clearProperty(PROP_MAX_NATIVE_A_STAR_TARGETS);
+        System.clearProperty(PROP_A_STAR_BATCH_TARGETS);
     }
 
     @Test
@@ -123,13 +129,63 @@ class Stage14PrimitiveGuardrailTest {
         assertTrue(ex.getMessage().contains(MatrixSearchBudget.REASON_REQUEST_WORK_EXCEEDED));
     }
 
+    @Test
+    @DisplayName("Matrix compatibility planner remaps route-level Stage-13 budget errors to Stage-14 matrix contract")
+    void testMatrixCompatibilityPlannerRemapsRouteBudgetReasonCode() {
+        System.setProperty(PROP_MAX_STAGE13_SETTLED, "1");
+        RouteCore core = createCore(createLinearFixture(), new TemporaryMatrixPlanner());
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.matrix(MatrixRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.A_STAR)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_MATRIX_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
+        assertTrue(ex.getMessage().contains(SearchBudget.REASON_SETTLED_EXCEEDED));
+    }
+
+    @Test
+    @DisplayName("Matrix A* fallback compatibility path remaps route-level Stage-13 budget errors to Stage-14 matrix contract")
+    void testMatrixAStarFallbackRemapsRouteBudgetReasonCode() {
+        System.setProperty(PROP_MAX_STAGE13_SETTLED, "1");
+        System.setProperty(PROP_MAX_NATIVE_A_STAR_TARGETS, "1");
+        System.setProperty(PROP_A_STAR_BATCH_TARGETS, "1");
+        RouteCore core = createCore(createLinearFixture());
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.matrix(MatrixRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N3")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.A_STAR)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_MATRIX_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
+        assertTrue(ex.getMessage().contains(SearchBudget.REASON_SETTLED_EXCEEDED));
+    }
+
     private RouteCore createCore(RoutingFixtureFactory.Fixture fixture) {
+        return createCore(fixture, null);
+    }
+
+    private RouteCore createCore(RoutingFixtureFactory.Fixture fixture, MatrixPlanner matrixPlanner) {
         return RouteCore.builder()
                 .edgeGraph(fixture.edgeGraph())
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .matrixPlanner(matrixPlanner)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
     }
 

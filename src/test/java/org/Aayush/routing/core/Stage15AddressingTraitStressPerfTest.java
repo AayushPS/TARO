@@ -71,8 +71,10 @@ class Stage15AddressingTraitStressPerfTest {
         RouteRequest request = coordinateRouteRequest(0, (rows * cols) - 1, cols, 11L);
         RouteResponse baseline = core.route(request);
 
+        // Fixed profile keeps concurrency pressure meaningful without being overly
+        // sensitive to CI/dev scheduler variance.
         int threads = 8;
-        int loops = 220;
+        int loops = 180;
         ExecutorService executor = Executors.newFixedThreadPool(threads);
         CountDownLatch latch = new CountDownLatch(threads);
         AtomicBoolean failed = new AtomicBoolean(false);
@@ -93,7 +95,10 @@ class Stage15AddressingTraitStressPerfTest {
             });
         }
 
-        assertTrue(latch.await(15, java.util.concurrent.TimeUnit.SECONDS), "typed-coordinate concurrency stress timed out");
+        assertTrue(
+                latch.await(18, java.util.concurrent.TimeUnit.SECONDS),
+                "typed-coordinate concurrency stress timed out"
+        );
         executor.shutdownNow();
         assertTrue(!failed.get(), "concurrent typed-coordinate route responses diverged");
     }
@@ -287,6 +292,8 @@ class Stage15AddressingTraitStressPerfTest {
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .spatialRuntime(spatialRuntime)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
     }
 

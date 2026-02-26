@@ -12,10 +12,16 @@ import org.Aayush.routing.heuristic.LandmarkPreprocessorConfig;
 import org.Aayush.routing.heuristic.LandmarkStore;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
+import org.Aayush.routing.traits.addressing.AddressingRuntimeConfig;
 import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
+import org.Aayush.routing.traits.transition.TransitionCostStrategy;
+import org.Aayush.routing.traits.transition.TransitionStrategyRegistry;
+import org.Aayush.routing.traits.transition.TransitionTrait;
+import org.Aayush.routing.traits.transition.TransitionTraitCatalog;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +30,7 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -204,6 +211,45 @@ class RouteCoreTest {
     }
 
     @Test
+    @DisplayName("Constructor validation: addressing runtime config is required")
+    void testAddressingRuntimeConfigRequiredInConstructor() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> RouteCore.builder()
+                        .edgeGraph(fixture.edgeGraph())
+                        .profileStore(fixture.profileStore())
+                        .costEngine(fixture.costEngine())
+                        .nodeIdMapper(fixture.nodeIdMapper())
+                        .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                        .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                        .build()
+        );
+        assertEquals(RouteCore.REASON_ADDRESSING_CONFIG_REQUIRED, ex.getReasonCode());
+    }
+
+    @Test
+    @DisplayName("Constructor validation: unknown startup addressing trait is rejected")
+    void testUnknownAddressingRuntimeTraitInConstructor() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> RouteCore.builder()
+                        .edgeGraph(fixture.edgeGraph())
+                        .profileStore(fixture.profileStore())
+                        .costEngine(fixture.costEngine())
+                        .nodeIdMapper(fixture.nodeIdMapper())
+                        .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                        .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                        .addressingRuntimeConfig(AddressingRuntimeConfig.builder()
+                                .addressingTraitId("UNKNOWN_TRAIT")
+                                .build())
+                        .build()
+        );
+        assertEquals(RouteCore.REASON_UNKNOWN_ADDRESSING_TRAIT, ex.getReasonCode());
+    }
+
+    @Test
     @DisplayName("Constructor validation: costEngine graph mismatch is rejected")
     void testCostEngineGraphMismatchInConstructor() {
         RoutingFixtureFactory.Fixture fixtureA = createLinearFixture();
@@ -217,6 +263,8 @@ class RouteCoreTest {
                         .costEngine(fixtureB.costEngine())
                         .nodeIdMapper(fixtureA.nodeIdMapper())
                         .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                        .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                         .build()
         );
         assertEquals(RouteCore.REASON_COST_ENGINE_GRAPH_MISMATCH, ex.getReasonCode());
@@ -263,6 +311,8 @@ class RouteCoreTest {
                         .costEngine(mismatchedCostEngine)
                         .nodeIdMapper(fixtureA.nodeIdMapper())
                         .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                        .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                         .build()
         );
         assertEquals(RouteCore.REASON_COST_ENGINE_PROFILE_MISMATCH, ex.getReasonCode());
@@ -398,6 +448,8 @@ class RouteCoreTest {
                 .costEngine(discreteCostEngine)
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
 
         RouteResponse dijkstraResponse = core.route(RouteRequest.builder()
@@ -529,7 +581,7 @@ class RouteCoreTest {
 
         assertEquals(List.of("N0", "N1"), response.getSourceExternalIds());
         assertEquals(List.of("N3", "N4"), response.getTargetExternalIds());
-        assertEquals(OneToManyDijkstraMatrixPlanner.NATIVE_IMPLEMENTATION_NOTE, response.getImplementationNote());
+        assertEquals(NativeOneToManyMatrixPlanner.NATIVE_IMPLEMENTATION_NOTE, response.getImplementationNote());
         assertEquals(2, response.getReachable().length);
         assertEquals(2, response.getReachable()[0].length);
         assertTrue(response.getReachable()[0][0]);
@@ -540,8 +592,43 @@ class RouteCoreTest {
     }
 
     @Test
-    @DisplayName("Matrix A* request uses Stage 14 compatibility pairwise execution")
-    void testMatrixAStarCompatibilityMode() {
+    @DisplayName("Matrix execution stats are cleared before validation failures")
+    void testMatrixExecutionStatsResetOnValidationFailure() {
+        RouteCore core = createCore(createLinearFixture(), null);
+
+        core.matrix(MatrixRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .algorithm(RoutingAlgorithm.DIJKSTRA)
+                .heuristicType(HeuristicType.NONE)
+                .build());
+        MatrixExecutionStats baselineStats = core.matrixExecutionStatsContract();
+        assertTrue(baselineStats.requestWorkStates() > 0L);
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.matrix(MatrixRequest.builder()
+                        .sourceExternalId("UNKNOWN")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.DIJKSTRA)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_UNKNOWN_EXTERNAL_NODE, ex.getReasonCode());
+
+        MatrixExecutionStats afterFailureStats = core.matrixExecutionStatsContract();
+        assertEquals(0L, afterFailureStats.requestWorkStates());
+        assertEquals(0L, afterFailureStats.requestSettledStates());
+        assertEquals(0, afterFailureStats.requestLabelPeak());
+        assertEquals(0, afterFailureStats.requestFrontierPeak());
+        assertEquals(0, afterFailureStats.rowWorkStates().length);
+    }
+
+    @Test
+    @DisplayName("Matrix A* request uses native one-to-many execution")
+    void testMatrixAStarNativeMode() {
         RouteCore core = createCore(createLinearFixture(), null);
         MatrixResponse response = core.matrix(MatrixRequest.builder()
                 .sourceExternalId("N0")
@@ -551,7 +638,7 @@ class RouteCoreTest {
                 .heuristicType(HeuristicType.NONE)
                 .build());
 
-        assertEquals(TemporaryMatrixPlanner.PAIRWISE_COMPATIBILITY_NOTE, response.getImplementationNote());
+        assertEquals(NativeOneToManyMatrixPlanner.NATIVE_A_STAR_IMPLEMENTATION_NOTE, response.getImplementationNote());
         assertTrue(response.getReachable()[0][0]);
         assertEquals(4.0f, response.getTotalCosts()[0][0], 1e-6f);
         assertEquals(4L, response.getArrivalTicks()[0][0]);
@@ -699,6 +786,35 @@ class RouteCoreTest {
     }
 
     @Test
+    @DisplayName("RouteCore matrix response avoids pre-builder deep copy and relies on MatrixResponse defensive getters")
+    void testMatrixResponseAvoidsPreBuilderDeepCopy() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        boolean[][] rawReachable = new boolean[][]{{true, false}};
+        float[][] rawCosts = new float[][]{{1.5f, Float.POSITIVE_INFINITY}};
+        long[][] rawArrivals = new long[][]{{11L, 0L}};
+        MatrixPlanner planner = (routeCore, request) -> new MatrixPlan(
+                rawReachable,
+                rawCosts,
+                rawArrivals,
+                "raw-matrix-plan"
+        );
+        RouteCore core = createCore(fixture, null, fixture.nodeIdMapper(), fixture.costEngine(), planner);
+
+        MatrixResponse response = core.matrix(MatrixRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N1")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .algorithm(RoutingAlgorithm.A_STAR)
+                .heuristicType(HeuristicType.NONE)
+                .build());
+
+        assertSame(rawReachable, getMatrixResponseField(response, "reachable"));
+        assertSame(rawCosts, getMatrixResponseField(response, "totalCosts"));
+        assertSame(rawArrivals, getMatrixResponseField(response, "arrivalTicks"));
+    }
+
+    @Test
     @DisplayName("Stage 14 matrix budget failures are wrapped with deterministic reason code")
     void testMatrixBudgetExceptionIsWrapped() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixture();
@@ -749,6 +865,50 @@ class RouteCoreTest {
     }
 
     @Test
+    @DisplayName("Stage 17 transition resolution failures are wrapped for route requests")
+    void testRouteTransitionResolutionFailureIsWrapped() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        TransitionCostStrategy invalidPackedStrategy = invalidPackedTransitionStrategy("BAD_PACKED_ROUTE");
+        RouteCore core = createCoreWithTransitionStrategy(fixture, invalidPackedStrategy);
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.route(RouteRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.A_STAR)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_TRANSITION_RESOLUTION_FAILURE, ex.getReasonCode());
+        assertTrue(ex.getMessage().contains("H17_TRANSITION_RESOLUTION_FAILURE"));
+        assertTrue(ex.getMessage().contains("BAD_PACKED_ROUTE"));
+    }
+
+    @Test
+    @DisplayName("Stage 17 transition resolution failures are wrapped for matrix requests")
+    void testMatrixTransitionResolutionFailureIsWrapped() {
+        RoutingFixtureFactory.Fixture fixture = createLinearFixture();
+        TransitionCostStrategy invalidPackedStrategy = invalidPackedTransitionStrategy("BAD_PACKED_MATRIX");
+        RouteCore core = createCoreWithTransitionStrategy(fixture, invalidPackedStrategy);
+
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> core.matrix(MatrixRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .algorithm(RoutingAlgorithm.DIJKSTRA)
+                        .heuristicType(HeuristicType.NONE)
+                        .build())
+        );
+        assertEquals(RouteCore.REASON_TRANSITION_RESOLUTION_FAILURE, ex.getReasonCode());
+        assertTrue(ex.getMessage().contains("H17_TRANSITION_RESOLUTION_FAILURE"));
+        assertTrue(ex.getMessage().contains("BAD_PACKED_MATRIX"));
+    }
+
+    @Test
     @DisplayName("Custom A* planner is used when provided and Dijkstra remains unchanged")
     void testCustomAStarPlannerInjection() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixture();
@@ -768,6 +928,8 @@ class RouteCoreTest {
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(customAStarPlanner)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
 
         RouteResponse aStarResponse = core.route(RouteRequest.builder()
@@ -813,6 +975,8 @@ class RouteCoreTest {
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(failingPlanner)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
 
         RouteCoreException ex = assertThrows(
@@ -846,6 +1010,8 @@ class RouteCoreTest {
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(failingPlanner)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
 
         RouteCoreException ex = assertThrows(
@@ -879,6 +1045,8 @@ class RouteCoreTest {
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(failingPlanner)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
 
         RouteCoreException ex = assertThrows(
@@ -1062,6 +1230,71 @@ class RouteCoreTest {
         return createCore(fixture, landmarkStore, fixture.nodeIdMapper(), fixture.costEngine(), null);
     }
 
+    private RouteCore createCoreWithTransitionStrategy(
+            RoutingFixtureFactory.Fixture fixture,
+            TransitionCostStrategy transitionStrategy
+    ) {
+        TransitionTrait edgeTrait = new TransitionTrait() {
+            @Override
+            public String id() {
+                return TransitionTraitCatalog.TRAIT_EDGE_BASED;
+            }
+
+            @Override
+            public String strategyId() {
+                return transitionStrategy.id();
+            }
+        };
+        TransitionTraitCatalog transitionTraitCatalog = new TransitionTraitCatalog(List.of(edgeTrait));
+        TransitionStrategyRegistry transitionStrategyRegistry = new TransitionStrategyRegistry(List.of(transitionStrategy));
+
+        return RouteCore.builder()
+                .edgeGraph(fixture.edgeGraph())
+                .profileStore(fixture.profileStore())
+                .costEngine(fixture.costEngine())
+                .nodeIdMapper(fixture.nodeIdMapper())
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.edgeBased())
+                .transitionTraitCatalog(transitionTraitCatalog)
+                .transitionStrategyRegistry(transitionStrategyRegistry)
+                .addressingRuntimeConfig(AddressingRuntimeConfig.defaultRuntime())
+                .build();
+    }
+
+    private static TransitionCostStrategy invalidPackedTransitionStrategy(String strategyId) {
+        return new TransitionCostStrategy() {
+            @Override
+            public String id() {
+                return strategyId;
+            }
+
+            @Override
+            public boolean appliesFiniteTurnPenalties() {
+                return true;
+            }
+
+            @Override
+            public TurnCostDecision evaluate(
+                    org.Aayush.routing.graph.TurnCostMap turnCostMap,
+                    int fromEdgeId,
+                    int toEdgeId,
+                    boolean hasPredecessor
+            ) {
+                return TurnCostDecision.neutral();
+            }
+
+            @Override
+            public long evaluatePacked(
+                    org.Aayush.routing.graph.TurnCostMap turnCostMap,
+                    int fromEdgeId,
+                    int toEdgeId,
+                    boolean hasPredecessor
+            ) {
+                return TurnCostDecision.pack(Float.NaN, true);
+            }
+        };
+    }
+
     private RouteCore createCore(
             RoutingFixtureFactory.Fixture fixture,
             LandmarkStore landmarkStore,
@@ -1075,7 +1308,9 @@ class RouteCoreTest {
                 .costEngine(costEngine)
                 .nodeIdMapper(mapper)
                 .landmarkStore(landmarkStore)
-                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc());
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(AddressingRuntimeConfig.defaultRuntime());
         if (matrixPlanner != null) {
             builder.matrixPlanner(matrixPlanner);
         }
@@ -1227,6 +1462,16 @@ class RouteCoreTest {
     }
 
     private record RandomQuery(int sourceNodeId, int targetNodeId, long departureTicks) {
+    }
+
+    private Object getMatrixResponseField(MatrixResponse response, String fieldName) {
+        try {
+            Field field = MatrixResponse.class.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(response);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("failed to inspect MatrixResponse internal field: " + fieldName, ex);
+        }
     }
 
     private static final class FixedIdMapper implements IDMapper {

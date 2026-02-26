@@ -8,10 +8,13 @@ import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.overlay.LiveUpdate;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
+import org.Aayush.routing.testutil.TemporalTestContexts;
+import org.Aayush.routing.testutil.TransitionTestContexts;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
@@ -41,7 +44,9 @@ class BidirectionalTdAStarPlannerTest {
                 4,
                 10L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         InternalRoutePlan dijkstraPlan = dijkstraPlanner.compute(
@@ -63,6 +68,55 @@ class BidirectionalTdAStarPlannerTest {
     }
 
     @Test
+    @DisplayName("Thread-local query context does not retain graph-scale active edge containers across subsequent small queries")
+    void testThreadLocalQueryContextReleasesActiveEdgeContainersAcrossQueries() {
+        RoutingFixtureFactory.Fixture fixture = createLongLinearFixture(200);
+        BidirectionalTdAStarPlanner planner = new BidirectionalTdAStarPlanner(
+                fixture.edgeGraph(),
+                fixture.costEngine(),
+                SearchBudget.of(10_000, 10_000, 10_000),
+                TerminationPolicy.defaults(),
+                new PathEvaluator()
+        );
+
+        planner.compute(
+                fixture.edgeGraph(),
+                fixture.costEngine(),
+                ZERO_HEURISTIC,
+                new InternalRouteRequest(
+                        0,
+                        199,
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
+        );
+
+        planner.compute(
+                fixture.edgeGraph(),
+                fixture.costEngine(),
+                ZERO_HEURISTIC,
+                new InternalRouteRequest(
+                        0,
+                        1,
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
+        );
+
+        PlannerQueryContext context = queryContextOf(planner);
+        assertTrue(
+                activeEdgeContainerCount(context) <= 8,
+                "active edge containers should shrink after reset for small follow-up queries"
+        );
+    }
+
+    @Test
     @DisplayName("Budget fail-fast is deterministic for frontier overrun")
     void testFrontierBudgetExceeded() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixture();
@@ -79,7 +133,9 @@ class BidirectionalTdAStarPlannerTest {
                 4,
                 0L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         SearchBudget.BudgetExceededException ex = assertThrows(
@@ -107,7 +163,9 @@ class BidirectionalTdAStarPlannerTest {
                 4,
                 3_590L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         SearchBudget.BudgetExceededException ex = assertThrows(
@@ -134,7 +192,9 @@ class BidirectionalTdAStarPlannerTest {
                 4,
                 0L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         SearchBudget.BudgetExceededException ex = assertThrows(
@@ -163,7 +223,9 @@ class BidirectionalTdAStarPlannerTest {
                 4,
                 0L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         IllegalArgumentException ex = assertThrows(
@@ -218,7 +280,9 @@ class BidirectionalTdAStarPlannerTest {
                 4,
                 0L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         IllegalArgumentException ex = assertThrows(
@@ -246,7 +310,9 @@ class BidirectionalTdAStarPlannerTest {
                 4,
                 0L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         InternalRoutePlan dijkstraPlan = dijkstraPlanner.compute(
@@ -296,7 +362,9 @@ class BidirectionalTdAStarPlannerTest {
                 3,
                 0L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         InternalRoutePlan plan = planner.compute(fixture.edgeGraph(), turnAwareCostEngine, ZERO_HEURISTIC, request);
@@ -329,14 +397,18 @@ class BidirectionalTdAStarPlannerTest {
                 3,
                 0L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
         InternalRouteRequest requestAfterExpiry = new InternalRouteRequest(
                 0,
                 3,
                 11L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         InternalRoutePlan baseline = planner.compute(fixture.edgeGraph(), costEngine, ZERO_HEURISTIC, requestAtZero);
@@ -370,7 +442,9 @@ class BidirectionalTdAStarPlannerTest {
                 4,
                 Long.MAX_VALUE - 2L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         InternalRoutePlan plan = planner.compute(fixture.edgeGraph(), fixture.costEngine(), ZERO_HEURISTIC, request);
@@ -395,7 +469,9 @@ class BidirectionalTdAStarPlannerTest {
                 4,
                 0L,
                 RoutingAlgorithm.A_STAR,
-                HeuristicType.NONE
+                HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
         );
 
         InternalRoutePlan baseline = planner.compute(fixture.edgeGraph(), fixture.costEngine(), ZERO_HEURISTIC, request);
@@ -440,7 +516,15 @@ class BidirectionalTdAStarPlannerTest {
                 fixture.edgeGraph(),
                 costEngine,
                 ZERO_HEURISTIC,
-                new InternalRouteRequest(0, 3, 0L, RoutingAlgorithm.A_STAR, HeuristicType.NONE)
+                new InternalRouteRequest(
+                        0,
+                        3,
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
         );
 
         assertTrue(plan.reachable());
@@ -463,7 +547,15 @@ class BidirectionalTdAStarPlannerTest {
                 fixture.edgeGraph(),
                 fixture.costEngine(),
                 ZERO_HEURISTIC,
-                new InternalRouteRequest(0, 4, 0L, RoutingAlgorithm.A_STAR, HeuristicType.NONE)
+                new InternalRouteRequest(
+                        0,
+                        4,
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
         );
 
         assertTrue(plan.reachable());
@@ -488,7 +580,15 @@ class BidirectionalTdAStarPlannerTest {
                 fixture.edgeGraph(),
                 fixture.costEngine(),
                 biasedHeuristic,
-                new InternalRouteRequest(0, 3, 0L, RoutingAlgorithm.A_STAR, HeuristicType.NONE)
+                new InternalRouteRequest(
+                        0,
+                        3,
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
         );
 
         assertTrue(plan.reachable());
@@ -513,7 +613,15 @@ class BidirectionalTdAStarPlannerTest {
                 fixture.edgeGraph(),
                 fixture.costEngine(),
                 heuristic,
-                new InternalRouteRequest(0, 3, 0L, RoutingAlgorithm.A_STAR, HeuristicType.NONE)
+                new InternalRouteRequest(
+                        0,
+                        3,
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
         );
 
         assertTrue(plan.reachable());
@@ -538,7 +646,15 @@ class BidirectionalTdAStarPlannerTest {
                 fixture.edgeGraph(),
                 fixture.costEngine(),
                 heuristic,
-                new InternalRouteRequest(0, 4, 0L, RoutingAlgorithm.A_STAR, HeuristicType.NONE)
+                new InternalRouteRequest(
+                        0,
+                        4,
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
         );
 
         assertTrue(plan.reachable());
@@ -591,7 +707,15 @@ class BidirectionalTdAStarPlannerTest {
                 fixture.edgeGraph(),
                 fixture.costEngine(),
                 heuristic,
-                new InternalRouteRequest(0, 4, 0L, RoutingAlgorithm.A_STAR, HeuristicType.NONE)
+                new InternalRouteRequest(
+                        0,
+                        4,
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
         ));
 
         assertTrue(plan.reachable());
@@ -645,7 +769,15 @@ class BidirectionalTdAStarPlannerTest {
                 fixture.edgeGraph(),
                 fixture.costEngine(),
                 ZERO_HEURISTIC,
-                new InternalRouteRequest(0, 3, 0L, RoutingAlgorithm.A_STAR, HeuristicType.NONE)
+                new InternalRouteRequest(
+                        0,
+                        3,
+                        0L,
+                        RoutingAlgorithm.A_STAR,
+                        HeuristicType.NONE,
+                        TemporalTestContexts.calendarUtc(),
+                        TransitionTestContexts.edgeBased()
+                )
         );
 
         assertFalse(plan.reachable());
@@ -936,6 +1068,44 @@ class BidirectionalTdAStarPlannerTest {
         );
     }
 
+    private RoutingFixtureFactory.Fixture createLongLinearFixture(int nodes) {
+        int edgeCount = nodes - 1;
+        int[] firstEdge = new int[nodes + 1];
+        int[] edgeTarget = new int[edgeCount];
+        int[] edgeOrigin = new int[edgeCount];
+        float[] baseWeights = new float[edgeCount];
+        int[] edgeProfiles = new int[edgeCount];
+        double[] coordinates = new double[nodes * 2];
+        for (int node = 0; node < nodes; node++) {
+            firstEdge[node] = Math.min(node, edgeCount);
+            coordinates[node * 2] = node;
+            coordinates[node * 2 + 1] = 0.0d;
+            if (node < edgeCount) {
+                edgeTarget[node] = node + 1;
+                edgeOrigin[node] = node;
+                baseWeights[node] = 1.0f;
+                edgeProfiles[node] = 1;
+            }
+        }
+        firstEdge[nodes] = edgeCount;
+
+        return RoutingFixtureFactory.createFixture(
+                nodes,
+                firstEdge,
+                edgeTarget,
+                edgeOrigin,
+                baseWeights,
+                edgeProfiles,
+                coordinates,
+                new RoutingFixtureFactory.ProfileSpec(
+                        1,
+                        RoutingFixtureFactory.ALL_DAYS_MASK,
+                        new float[]{1.0f},
+                        1.0f
+                )
+        );
+    }
+
     private RoutingFixtureFactory.Fixture createReverseOverflowFixture() {
         return RoutingFixtureFactory.createFixture(
                 4,
@@ -1070,5 +1240,28 @@ class BidirectionalTdAStarPlannerTest {
     }
 
     private record TurnCostSpec(int fromEdgeId, int toEdgeId, float penaltySeconds) {
+    }
+
+    private PlannerQueryContext queryContextOf(BidirectionalTdAStarPlanner planner) {
+        try {
+            Field field = BidirectionalTdAStarPlanner.class.getDeclaredField("queryContext");
+            field.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            ThreadLocal<PlannerQueryContext> threadLocal = (ThreadLocal<PlannerQueryContext>) field.get(planner);
+            return threadLocal.get();
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("failed to inspect bidirectional planner queryContext", ex);
+        }
+    }
+
+    private int activeEdgeContainerCount(PlannerQueryContext context) {
+        try {
+            Field field = PlannerQueryContext.class.getDeclaredField("activeLabelsByEdge");
+            field.setAccessible(true);
+            Object map = field.get(context);
+            return (Integer) map.getClass().getMethod("size").invoke(map);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("failed to inspect PlannerQueryContext activeLabelsByEdge", ex);
+        }
     }
 }

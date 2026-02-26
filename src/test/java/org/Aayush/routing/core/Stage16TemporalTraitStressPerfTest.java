@@ -32,6 +32,8 @@ class Stage16TemporalTraitStressPerfTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarModelTimezone("America/New_York"))
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
 
         long departureTicks = 1_778_313_600L; // 2026-05-10T00:00:00Z
@@ -86,6 +88,8 @@ class Stage16TemporalTraitStressPerfTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarModelTimezone("America/New_York"))
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
 
         MatrixRequest request = MatrixRequest.builder()
@@ -288,6 +292,8 @@ class Stage16TemporalTraitStressPerfTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .temporalRuntimeConfig(temporalRuntimeConfig)
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
     }
 
