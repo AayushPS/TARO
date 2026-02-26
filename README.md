@@ -15,8 +15,14 @@ TARO is a time-dependent routing engine that treats travel cost as a function of
   startup-locked temporal mode selection (`LINEAR` or `CALENDAR`),
   explicit calendar timezone policies (`UTC` or `MODEL_TIMEZONE`) with deterministic `H16_*` validation contracts,
   and DST-safe temporal context resolution in the cost path.
+- Stage 17 transition trait is implemented:
+  startup-locked transition mode selection (`NODE_BASED` or `EDGE_BASED`),
+  deterministic `H17_*` transition validation/runtime failure mapping,
+  finite-turn penalty behavior split by trait semantics with forbidden-turn blocking in both modes,
+  parity/perf/concurrency + live-overlay churn stress gates in `Stage17TransitionTraitStressPerfTest`,
+  and mixed transition-mode integration stress coverage in `SystemIntegrationStressPerfTest`.
 - Stage 7 live overlay (`LiveOverlay`/`LiveUpdate`) is implemented and integrated into cost composition.
-- Matrix execution uses the native one-to-many planner for `DIJKSTRA + NONE`; `A_STAR` matrix requests remain on the pairwise compatibility path (`TemporaryMatrixPlanner`).
+- Matrix execution uses native one-to-many planners for `DIJKSTRA + NONE` and bounded-target `A_STAR`; oversized `A_STAR` target sets use bounded batched compatibility fallback.
 
 ## Architecture Summary
 TARO follows a dual-runtime pipeline:
@@ -103,6 +109,7 @@ RouteResponse typedRoute = router.route(
 - Canonical penalty mapping: missing/expired `1.0`, blocked `INF`, active `1 / speed_factor`
 - Hard capacity with configurable overflow policy and hybrid cleanup
 - Detailed implementation notes: `docs/stage7_live_overlay_impl.md`
+- Stage 17 closure report: `docs/stage17_delta_report.md`
 
 ## v11 Offline Learning Planning (Proposed)
 - Architecture plan: `docs/taro_v11_architecture_plan.md`
