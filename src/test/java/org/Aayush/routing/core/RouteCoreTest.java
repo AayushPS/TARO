@@ -868,8 +868,8 @@ class RouteCoreTest {
     @DisplayName("Stage 17 transition resolution failures are wrapped for route requests")
     void testRouteTransitionResolutionFailureIsWrapped() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixture();
-        TransitionCostStrategy invalidPackedStrategy = invalidPackedTransitionStrategy("BAD_PACKED_ROUTE");
-        RouteCore core = createCoreWithTransitionStrategy(fixture, invalidPackedStrategy);
+        TransitionCostStrategy driftingStrategy = probePassingSemanticDriftStrategy("BAD_PACKED_ROUTE");
+        RouteCore core = createCoreWithTransitionStrategy(fixture, driftingStrategy);
 
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
@@ -884,14 +884,15 @@ class RouteCoreTest {
         assertEquals(RouteCore.REASON_TRANSITION_RESOLUTION_FAILURE, ex.getReasonCode());
         assertTrue(ex.getMessage().contains("H17_TRANSITION_RESOLUTION_FAILURE"));
         assertTrue(ex.getMessage().contains("BAD_PACKED_ROUTE"));
+        assertTrue(ex.getMessage().contains("violated Stage 17 semantics"));
     }
 
     @Test
     @DisplayName("Stage 17 transition resolution failures are wrapped for matrix requests")
     void testMatrixTransitionResolutionFailureIsWrapped() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixture();
-        TransitionCostStrategy invalidPackedStrategy = invalidPackedTransitionStrategy("BAD_PACKED_MATRIX");
-        RouteCore core = createCoreWithTransitionStrategy(fixture, invalidPackedStrategy);
+        TransitionCostStrategy driftingStrategy = probePassingSemanticDriftStrategy("BAD_PACKED_MATRIX");
+        RouteCore core = createCoreWithTransitionStrategy(fixture, driftingStrategy);
 
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
@@ -906,6 +907,7 @@ class RouteCoreTest {
         assertEquals(RouteCore.REASON_TRANSITION_RESOLUTION_FAILURE, ex.getReasonCode());
         assertTrue(ex.getMessage().contains("H17_TRANSITION_RESOLUTION_FAILURE"));
         assertTrue(ex.getMessage().contains("BAD_PACKED_MATRIX"));
+        assertTrue(ex.getMessage().contains("violated Stage 17 semantics"));
     }
 
     @Test
@@ -1261,7 +1263,7 @@ class RouteCoreTest {
                 .build();
     }
 
-    private static TransitionCostStrategy invalidPackedTransitionStrategy(String strategyId) {
+    private static TransitionCostStrategy probePassingSemanticDriftStrategy(String strategyId) {
         return new TransitionCostStrategy() {
             @Override
             public String id() {
@@ -1290,7 +1292,22 @@ class RouteCoreTest {
                     int toEdgeId,
                     boolean hasPredecessor
             ) {
-                return TurnCostDecision.pack(Float.NaN, true);
+                if (!hasPredecessor) {
+                    return TurnCostDecision.neutral().packed();
+                }
+                if (turnCostMap == null) {
+                    if (fromEdgeId == 11 && toEdgeId == 12) {
+                        return TurnCostDecision.neutral().packed();
+                    }
+                    return TurnCostDecision.zeroApplied().packed();
+                }
+                if (fromEdgeId == 11 && toEdgeId == 13) {
+                    return TurnCostDecision.forbidden().packed();
+                }
+                if (fromEdgeId == 11 && toEdgeId == 12) {
+                    return TurnCostDecision.of(2.5f, true).packed();
+                }
+                return TurnCostDecision.zeroApplied().packed();
             }
         };
     }

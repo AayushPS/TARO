@@ -1,8 +1,16 @@
 package org.Aayush.routing.traits.transition;
 
+import com.google.flatbuffers.FlatBufferBuilder;
 import org.Aayush.routing.graph.TurnCostMap;
+import org.Aayush.serialization.flatbuffers.taro.model.Metadata;
+import org.Aayush.serialization.flatbuffers.taro.model.Model;
+import org.Aayush.serialization.flatbuffers.taro.model.TimeUnit;
+import org.Aayush.serialization.flatbuffers.taro.model.TurnCost;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -104,5 +112,55 @@ class TransitionCostStrategyTest {
         long edgePacked = edgeBased.evaluatePacked(null, 10, 11, false);
         assertEquals(edgeDecision.turnPenalty(), TransitionCostStrategy.TurnCostDecision.unpackTurnPenalty(edgePacked), 1e-6f);
         assertEquals(edgeDecision.turnPenaltyApplied(), TransitionCostStrategy.TurnCostDecision.unpackTurnPenaltyApplied(edgePacked));
+    }
+
+    @Test
+    @DisplayName("Built-in strategies enforce Stage 17 finite and forbidden semantics on explicit turn-map entries")
+    void testBuiltInStrategiesRespectFiniteAndForbiddenTurnContracts() {
+        TurnCostMap turnCostMap = buildTurnCostMap();
+        NodeBasedTransitionCostStrategy nodeBased = new NodeBasedTransitionCostStrategy();
+        EdgeBasedTransitionCostStrategy edgeBased = new EdgeBasedTransitionCostStrategy();
+
+        long nodeFinite = nodeBased.evaluatePacked(turnCostMap, 11, 12, true);
+        assertEquals(0.0f, TransitionCostStrategy.TurnCostDecision.unpackTurnPenalty(nodeFinite), 1e-6f);
+        assertFalse(TransitionCostStrategy.TurnCostDecision.unpackTurnPenaltyApplied(nodeFinite));
+
+        long edgeFinite = edgeBased.evaluatePacked(turnCostMap, 11, 12, true);
+        assertEquals(2.5f, TransitionCostStrategy.TurnCostDecision.unpackTurnPenalty(edgeFinite), 1e-6f);
+        assertTrue(TransitionCostStrategy.TurnCostDecision.unpackTurnPenaltyApplied(edgeFinite));
+
+        long nodeForbidden = nodeBased.evaluatePacked(turnCostMap, 11, 13, true);
+        assertEquals(TurnCostMap.FORBIDDEN_TURN, TransitionCostStrategy.TurnCostDecision.unpackTurnPenalty(nodeForbidden));
+        assertTrue(TransitionCostStrategy.TurnCostDecision.unpackTurnPenaltyApplied(nodeForbidden));
+
+        long edgeForbidden = edgeBased.evaluatePacked(turnCostMap, 11, 13, true);
+        assertEquals(TurnCostMap.FORBIDDEN_TURN, TransitionCostStrategy.TurnCostDecision.unpackTurnPenalty(edgeForbidden));
+        assertTrue(TransitionCostStrategy.TurnCostDecision.unpackTurnPenaltyApplied(edgeForbidden));
+    }
+
+    private static TurnCostMap buildTurnCostMap() {
+        FlatBufferBuilder builder = new FlatBufferBuilder(256);
+        int modelVersion = builder.createString("transition-strategy-test");
+        int[] turnOffsets = new int[]{
+                TurnCost.createTurnCost(builder, 11, 12, 2.5f),
+                TurnCost.createTurnCost(builder, 11, 13, TurnCostMap.FORBIDDEN_TURN)
+        };
+        int turnCosts = Model.createTurnCostsVector(builder, turnOffsets);
+
+        Metadata.startMetadata(builder);
+        Metadata.addSchemaVersion(builder, 1L);
+        Metadata.addModelVersion(builder, modelVersion);
+        Metadata.addTimeUnit(builder, TimeUnit.SECONDS);
+        Metadata.addTickDurationNs(builder, 1_000_000_000L);
+        int metadata = Metadata.endMetadata(builder);
+
+        Model.startModel(builder);
+        Model.addMetadata(builder, metadata);
+        Model.addTurnCosts(builder, turnCosts);
+        int root = Model.endModel(builder);
+        Model.finishModelBuffer(builder, root);
+        return TurnCostMap.fromFlatBuffer(
+                ByteBuffer.wrap(builder.sizedByteArray()).order(ByteOrder.LITTLE_ENDIAN)
+        );
     }
 }

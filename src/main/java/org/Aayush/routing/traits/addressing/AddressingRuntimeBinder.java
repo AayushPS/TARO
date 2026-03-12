@@ -23,6 +23,22 @@ public final class AddressingRuntimeBinder {
             AddressingRuntimeConfig runtimeConfig,
             AddressingTraitCatalog traitCatalog
     ) {
+        return bind(runtimeConfig, traitCatalog, CoordinateStrategyRegistry.defaultRegistry());
+    }
+
+    /**
+     * Resolves one runtime config into immutable addressing execution binding.
+     *
+     * @param runtimeConfig addressing runtime config selected at startup.
+     * @param traitCatalog addressing trait catalog.
+     * @param coordinateStrategyRegistry coordinate-strategy registry.
+     * @return immutable runtime binding.
+     */
+    public Binding bind(
+            AddressingRuntimeConfig runtimeConfig,
+            AddressingTraitCatalog traitCatalog,
+            CoordinateStrategyRegistry coordinateStrategyRegistry
+    ) {
         if (runtimeConfig == null) {
             throw new RouteCoreException(
                     RouteCore.REASON_ADDRESSING_CONFIG_REQUIRED,
@@ -30,6 +46,8 @@ public final class AddressingRuntimeBinder {
             );
         }
         AddressingTraitCatalog nonNullCatalog = Objects.requireNonNull(traitCatalog, "traitCatalog");
+        CoordinateStrategyRegistry nonNullCoordinateStrategyRegistry =
+                Objects.requireNonNull(coordinateStrategyRegistry, "coordinateStrategyRegistry");
         String traitId = normalizeRequiredId(
                 runtimeConfig.getAddressingTraitId(),
                 RouteCore.REASON_ADDRESSING_CONFIG_REQUIRED,
@@ -44,8 +62,35 @@ public final class AddressingRuntimeBinder {
             );
         }
 
+        String coordinateStrategyId = null;
+        CoordinateDistanceStrategy coordinateStrategy = null;
+        if (trait.supports(AddressType.COORDINATES)) {
+            coordinateStrategyId = normalizeRequiredId(
+                    runtimeConfig.getCoordinateDistanceStrategyId(),
+                    RouteCore.REASON_COORDINATE_STRATEGY_REQUIRED,
+                    "coordinateDistanceStrategyId must be provided at startup for addressing trait " + trait.id()
+            );
+            coordinateStrategy = nonNullCoordinateStrategyRegistry.strategy(coordinateStrategyId);
+            if (coordinateStrategy == null) {
+                throw new RouteCoreException(
+                        RouteCore.REASON_UNKNOWN_COORDINATE_STRATEGY,
+                        "unknown coordinateDistanceStrategyId: " + coordinateStrategyId
+                );
+            }
+        } else {
+            coordinateStrategyId = normalizeOptionalId(runtimeConfig.getCoordinateDistanceStrategyId());
+            if (coordinateStrategyId != null) {
+                throw new RouteCoreException(
+                        RouteCore.REASON_ADDRESSING_CONFIG_INCOMPATIBLE,
+                        "coordinateDistanceStrategyId is not allowed for addressing trait " + trait.id()
+                );
+            }
+        }
+
         return Binding.builder()
                 .addressingTrait(trait)
+                .coordinateStrategyId(coordinateStrategyId)
+                .coordinateStrategy(coordinateStrategy)
                 .build();
     }
 
@@ -75,5 +120,7 @@ public final class AddressingRuntimeBinder {
     @Builder
     public static class Binding {
         AddressingTrait addressingTrait;
+        String coordinateStrategyId;
+        CoordinateDistanceStrategy coordinateStrategy;
     }
 }

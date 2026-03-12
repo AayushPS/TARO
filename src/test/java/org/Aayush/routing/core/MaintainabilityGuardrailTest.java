@@ -1,13 +1,18 @@
 package org.Aayush.routing.core;
 
+import org.Aayush.routing.execution.ExecutionConfigAdminService;
+import org.Aayush.routing.execution.ExecutionRuntimeBinder;
+import org.Aayush.routing.heuristic.HeuristicProviderFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("Maintainability Guardrail Tests")
@@ -31,6 +36,22 @@ class MaintainabilityGuardrailTest {
         assertMaxLines(Path.of("src/main/java/org/Aayush/routing/core/NativeOneToManyMatrixPlanner.java"), 650);
     }
 
+    @Test
+    @DisplayName("RouteCore keeps direct extensibility seams as interface dependencies")
+    void testRouteCoreUsesInterfaceDependenciesForExtensionSeams() throws Exception {
+        assertFieldType(RouteCore.class, "requestNormalizer", RequestNormalizer.class);
+        assertFieldType(RouteCore.class, "heuristicProviderFactory", HeuristicProviderFactory.class);
+    }
+
+    @Test
+    @DisplayName("Execution management seams remain interface-based")
+    void testExecutionManagementSeamsRemainInterfaces() {
+        assertTrue(ExecutionRuntimeBinder.class.isInterface());
+        assertTrue(ExecutionConfigAdminService.class.isInterface());
+        assertTrue(RequestNormalizer.class.isInterface());
+        assertTrue(HeuristicProviderFactory.class.isInterface());
+    }
+
     private void assertMaxLines(Path sourcePath, int maxLines) {
         assertTrue(Files.exists(sourcePath), "missing source file: " + sourcePath);
         try (Stream<String> lines = Files.lines(sourcePath)) {
@@ -42,5 +63,10 @@ class MaintainabilityGuardrailTest {
         } catch (IOException ex) {
             throw new IllegalStateException("failed to read source file: " + sourcePath, ex);
         }
+    }
+
+    private void assertFieldType(Class<?> owner, String fieldName, Class<?> expectedType) throws Exception {
+        Field field = owner.getDeclaredField(fieldName);
+        assertEquals(expectedType, field.getType(), owner.getSimpleName() + "." + fieldName + " should use " + expectedType.getSimpleName());
     }
 }

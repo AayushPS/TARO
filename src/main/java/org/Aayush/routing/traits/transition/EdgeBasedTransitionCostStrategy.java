@@ -11,21 +11,33 @@ public final class EdgeBasedTransitionCostStrategy implements TransitionCostStra
     private static final long PACKED_ZERO_APPLIED = TurnCostDecision.zeroApplied().packed();
     private static final long PACKED_FORBIDDEN = TurnCostDecision.forbidden().packed();
 
+    /**
+     * Returns the stable edge-based strategy identifier.
+     */
     @Override
     public String id() {
         return TransitionStrategyRegistry.STRATEGY_EDGE_BASED;
     }
 
+    /**
+     * Returns {@code true} because edge-based mode applies finite turn penalties.
+     */
     @Override
     public boolean appliesFiniteTurnPenalties() {
         return true;
     }
 
+    /**
+     * Evaluates one transition and returns the canonical immutable decision.
+     */
     @Override
     public TurnCostDecision evaluate(TurnCostMap turnCostMap, int fromEdgeId, int toEdgeId, boolean hasPredecessor) {
         return TurnCostDecision.fromPacked(evaluatePacked(turnCostMap, fromEdgeId, toEdgeId, hasPredecessor));
     }
 
+    /**
+     * Evaluates one transition using packed representation for hot-path callers.
+     */
     @Override
     public long evaluatePacked(TurnCostMap turnCostMap, int fromEdgeId, int toEdgeId, boolean hasPredecessor) {
         if (!hasPredecessor || turnCostMap == null) {

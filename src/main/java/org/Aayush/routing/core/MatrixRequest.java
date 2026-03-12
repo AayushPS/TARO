@@ -26,9 +26,11 @@ public class MatrixRequest {
     /** Typed target addresses (matrix columns). */
     @Singular("targetAddress")
     List<AddressInput> targetAddresses;
-    /** Selected addressing trait id for typed addressing mode. */
+    /** Deprecated startup-lock hint for the addressing trait selected at startup. */
+    @Deprecated
     String addressingTraitId;
-    /** Selected coordinate strategy id for coordinate-based addressing. */
+    /** Deprecated startup-lock hint for the coordinate strategy selected at startup. */
+    @Deprecated
     String coordinateDistanceStrategyId;
     /** Explicit enable for mixed address-type requests. */
     Boolean allowMixedAddressing;
@@ -36,8 +38,10 @@ public class MatrixRequest {
     Double maxSnapDistance;
     /** Shared departure tick applied to each source/target pair. */
     long departureTicks;
-    /** Search algorithm to execute for each pair. */
+    /** Deprecated startup-lock hint for the execution algorithm selected at startup. */
+    @Deprecated
     RoutingAlgorithm algorithm;
-    /** Heuristic mode to use (must match algorithm constraints). */
+    /** Deprecated startup-lock hint for the heuristic selected at startup. */
+    @Deprecated
     HeuristicType heuristicType;
 }

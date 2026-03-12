@@ -160,7 +160,13 @@ class Stage15AddressingTraitTest {
     @DisplayName("Typed LAT_LON route validates range and threshold semantics")
     void testTypedLatLonRouteThresholdPassAndFail() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureLatLon();
-        RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearLatLonCoordinates()));
+        RouteCore core = createCore(
+                fixture,
+                buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearLatLonCoordinates()),
+                fixture.nodeIdMapper(),
+                null,
+                AddressingRuntimeConfig.latLonRuntime()
+        );
 
         RouteResponse pass = core.route(RouteRequest.builder()
                 .sourceAddress(AddressInput.ofLatLon(12.0001d, 77.0d))
@@ -214,7 +220,7 @@ class Stage15AddressingTraitTest {
     }
 
     @Test
-    @DisplayName("Unknown addressing trait and unknown coordinate strategy are rejected")
+    @DisplayName("Deprecated request selector hints mismatch startup bundle deterministically")
     void testUnknownTraitAndStrategyValidation() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
         RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()));
@@ -230,7 +236,7 @@ class Stage15AddressingTraitTest {
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
-        assertEquals(RouteCore.REASON_UNKNOWN_ADDRESSING_TRAIT, traitEx.getReasonCode());
+        assertEquals(RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH, traitEx.getReasonCode());
 
         RouteCoreException strategyEx = assertThrows(
                 RouteCoreException.class,
@@ -245,7 +251,7 @@ class Stage15AddressingTraitTest {
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
-        assertEquals(RouteCore.REASON_UNKNOWN_COORDINATE_STRATEGY, strategyEx.getReasonCode());
+        assertEquals(RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH, strategyEx.getReasonCode());
     }
 
     @Test
@@ -265,7 +271,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -327,12 +332,15 @@ class Stage15AddressingTraitTest {
     @Test
     @DisplayName("Coordinate payload validation rejects non-finite and invalid LAT_LON ranges")
     void testCoordinateValidationErrors() {
-        RoutingFixtureFactory.Fixture fixture = createLinearFixtureLatLon();
-        RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearLatLonCoordinates()));
+        RoutingFixtureFactory.Fixture xyFixture = createLinearFixtureXY();
+        RouteCore xyCore = createCore(
+                xyFixture,
+                buildSpatialRuntimeFromCoordinates(xyFixture.edgeGraph(), linearXyCoordinates())
+        );
 
         RouteCoreException nonFinite = assertThrows(
                 RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
+                () -> xyCore.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(Double.NaN, 0.0d))
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
                         .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
@@ -345,9 +353,17 @@ class Stage15AddressingTraitTest {
         );
         assertEquals(RouteCore.REASON_NON_FINITE_COORDINATES, nonFinite.getReasonCode());
 
+        RoutingFixtureFactory.Fixture latLonFixture = createLinearFixtureLatLon();
+        RouteCore latLonCore = createCore(
+                latLonFixture,
+                buildSpatialRuntimeFromCoordinates(latLonFixture.edgeGraph(), linearLatLonCoordinates()),
+                latLonFixture.nodeIdMapper(),
+                null,
+                AddressingRuntimeConfig.latLonRuntime()
+        );
         RouteCoreException latLonRange = assertThrows(
                 RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
+                () -> latLonCore.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofLatLon(95.0d, 77.0d))
                         .targetAddress(AddressInput.ofLatLon(12.0d, 77.0d))
                         .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
@@ -394,24 +410,25 @@ class Stage15AddressingTraitTest {
     }
 
     @Test
-    @DisplayName("Coordinate strategy id is required for coordinate typed requests")
+    @DisplayName("Coordinate-capable startup trait requires startup coordinate strategy binding")
     void testCoordinateStrategyIdRequiredForCoordinates() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
-        RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()));
-
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
-                        .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
-                        .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .maxSnapDistance(1.0d)
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
-                        .build())
+                () -> RouteCore.builder()
+                        .edgeGraph(fixture.edgeGraph())
+                        .profileStore(fixture.profileStore())
+                        .costEngine(fixture.costEngine())
+                        .nodeIdMapper(fixture.nodeIdMapper())
+                        .spatialRuntime(buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()))
+                        .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                        .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                        .addressingRuntimeConfig(AddressingRuntimeConfig.builder()
+                                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
+                                .build())
+                        .build()
         );
-        assertEquals(RouteCore.REASON_COORDINATE_STRATEGY_REQUIRED, ex.getReasonCode());
+        assertEquals(RouteCore.REASON_MISSING_TRAIT_DEPENDENCY, ex.getReasonCode());
     }
 
     @Test
@@ -551,7 +568,7 @@ class Stage15AddressingTraitTest {
     }
 
     @Test
-    @DisplayName("Coordinate strategy hint mismatch and blank request strategy are rejected")
+    @DisplayName("Coordinate strategy hint mismatch is rejected while blank request strategy is ignored")
     void testCoordinateStrategyHintMismatchAndBlankStrategyValidation() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
         RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()));
@@ -571,20 +588,17 @@ class Stage15AddressingTraitTest {
         );
         assertEquals(RouteCore.REASON_MALFORMED_TYPED_PAYLOAD, hintMismatch.getReasonCode());
 
-        RouteCoreException blankStrategy = assertThrows(
-                RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
-                        .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
-                        .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId("   ")
-                        .maxSnapDistance(10.0d)
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
-                        .build())
-        );
-        assertEquals(RouteCore.REASON_COORDINATE_STRATEGY_REQUIRED, blankStrategy.getReasonCode());
+        RouteResponse blankStrategy = core.route(RouteRequest.builder()
+                .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
+                .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
+                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
+                .coordinateDistanceStrategyId("   ")
+                .maxSnapDistance(10.0d)
+                .departureTicks(0L)
+                .algorithm(RoutingAlgorithm.A_STAR)
+                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
+                .build());
+        assertTrue(blankStrategy.isReachable());
     }
 
     @Test
@@ -616,7 +630,16 @@ class Stage15AddressingTraitTest {
         SpatialRuntime spatialRuntime = buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates());
         CoordinateStrategyRegistry customRegistry =
                 new CoordinateStrategyRegistry(List.of(new ThrowingDistanceStrategy("BROKEN_STRATEGY")));
-        RouteCore core = createCore(fixture, spatialRuntime, fixture.nodeIdMapper(), customRegistry);
+        RouteCore core = createCore(
+                fixture,
+                spatialRuntime,
+                fixture.nodeIdMapper(),
+                customRegistry,
+                AddressingRuntimeConfig.builder()
+                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
+                        .coordinateDistanceStrategyId("BROKEN_STRATEGY")
+                        .build()
+        );
 
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
@@ -641,7 +664,16 @@ class Stage15AddressingTraitTest {
         SpatialRuntime spatialRuntime = buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates());
         CoordinateStrategyRegistry customRegistry =
                 new CoordinateStrategyRegistry(List.of(new NegativeDistanceStrategy("NEGATIVE_DISTANCE")));
-        RouteCore core = createCore(fixture, spatialRuntime, fixture.nodeIdMapper(), customRegistry);
+        RouteCore core = createCore(
+                fixture,
+                spatialRuntime,
+                fixture.nodeIdMapper(),
+                customRegistry,
+                AddressingRuntimeConfig.builder()
+                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
+                        .coordinateDistanceStrategyId("NEGATIVE_DISTANCE")
+                        .build()
+        );
 
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
@@ -676,7 +708,7 @@ class Stage15AddressingTraitTest {
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
-        assertEquals(RouteCore.REASON_ADDRESSING_RUNTIME_MISMATCH, ex.getReasonCode());
+        assertEquals(RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH, ex.getReasonCode());
     }
 
     @Test

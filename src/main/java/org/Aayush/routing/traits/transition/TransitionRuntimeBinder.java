@@ -65,11 +65,13 @@ public final class TransitionRuntimeBinder {
             throw new RouteCoreException(ex.reasonCode(), ex.getMessage(), ex);
         }
 
+        TransitionCostStrategy boundStrategy = GuardedTransitionCostStrategy.guard(trait.id(), strategy);
+
         ResolvedTransitionContext context = ResolvedTransitionContext.builder()
                 .transitionTraitId(trait.id())
                 .transitionStrategyId(strategy.id())
                 .finiteTurnPenaltiesEnabled(strategy.appliesFiniteTurnPenalties())
-                .strategy(strategy)
+                .strategy(boundStrategy)
                 .build();
         TransitionTelemetry telemetry = TransitionTelemetry.builder()
                 .transitionTraitId(trait.id())

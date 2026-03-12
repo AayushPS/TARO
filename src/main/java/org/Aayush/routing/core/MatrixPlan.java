@@ -9,7 +9,7 @@ package org.Aayush.routing.core;
  * @param implementationNote implementation detail note propagated to callers.
  * @param executionStats deterministic planner telemetry for one matrix execution.
  */
-record MatrixPlan(
+public record MatrixPlan(
         boolean[][] reachable,
         float[][] totalCosts,
         long[][] arrivalTicks,
@@ -19,14 +19,14 @@ record MatrixPlan(
     /**
      * Creates plan with explicit implementation note and empty execution telemetry.
      */
-    MatrixPlan(boolean[][] reachable, float[][] totalCosts, long[][] arrivalTicks, String implementationNote) {
+    public MatrixPlan(boolean[][] reachable, float[][] totalCosts, long[][] arrivalTicks, String implementationNote) {
         this(reachable, totalCosts, arrivalTicks, implementationNote, MatrixExecutionStats.empty(reachable.length));
     }
 
     /**
      * Normalizes null telemetry to an empty stats object.
      */
-    MatrixPlan {
+    public MatrixPlan {
         if (executionStats == null) {
             executionStats = MatrixExecutionStats.empty(reachable.length);
         }

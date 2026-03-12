@@ -20,7 +20,7 @@ import java.util.Objects;
  * @param temporalContext locked Stage 16 temporal context.
  * @param transitionContext locked Stage 17 transition context.
  */
-record InternalRouteRequest(
+public record InternalRouteRequest(
         int sourceNodeId,
         int targetNodeId,
         long departureTicks,
@@ -29,7 +29,7 @@ record InternalRouteRequest(
         ResolvedTemporalContext temporalContext,
         ResolvedTransitionContext transitionContext
 ) {
-    InternalRouteRequest {
+    public InternalRouteRequest {
         Objects.requireNonNull(temporalContext, "temporalContext");
         Objects.requireNonNull(transitionContext, "transitionContext");
     }

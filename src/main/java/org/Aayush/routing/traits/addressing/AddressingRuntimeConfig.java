@@ -19,11 +19,34 @@ public class AddressingRuntimeConfig {
     String addressingTraitId;
 
     /**
-     * Returns convenience config for the default addressing trait.
+     * Selected coordinate strategy id locked at startup for coordinate-capable addressing traits.
+     */
+    String coordinateDistanceStrategyId;
+
+    /**
+     * Returns convenience config for the default addressing trait with XY coordinate strategy.
      */
     public static AddressingRuntimeConfig defaultRuntime() {
+        return xyRuntime();
+    }
+
+    /**
+     * Returns convenience config for the default addressing trait with XY coordinate strategy.
+     */
+    public static AddressingRuntimeConfig xyRuntime() {
         return AddressingRuntimeConfig.builder()
                 .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
+                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
+                .build();
+    }
+
+    /**
+     * Returns convenience config for the default addressing trait with LAT_LON coordinate strategy.
+     */
+    public static AddressingRuntimeConfig latLonRuntime() {
+        return AddressingRuntimeConfig.builder()
+                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
+                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_LAT_LON)
                 .build();
     }
 

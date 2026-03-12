@@ -10,21 +10,33 @@ public final class NodeBasedTransitionCostStrategy implements TransitionCostStra
     private static final long PACKED_NEUTRAL = TurnCostDecision.neutral().packed();
     private static final long PACKED_FORBIDDEN = TurnCostDecision.forbidden().packed();
 
+    /**
+     * Returns the stable node-based strategy identifier.
+     */
     @Override
     public String id() {
         return TransitionStrategyRegistry.STRATEGY_NODE_BASED;
     }
 
+    /**
+     * Returns {@code false} because node-based mode ignores finite turn penalties.
+     */
     @Override
     public boolean appliesFiniteTurnPenalties() {
         return false;
     }
 
+    /**
+     * Evaluates one transition and returns the canonical immutable decision.
+     */
     @Override
     public TurnCostDecision evaluate(TurnCostMap turnCostMap, int fromEdgeId, int toEdgeId, boolean hasPredecessor) {
         return TurnCostDecision.fromPacked(evaluatePacked(turnCostMap, fromEdgeId, toEdgeId, hasPredecessor));
     }
 
+    /**
+     * Evaluates one transition using packed representation for hot-path callers.
+     */
     @Override
     public long evaluatePacked(TurnCostMap turnCostMap, int fromEdgeId, int toEdgeId, boolean hasPredecessor) {
         if (!hasPredecessor || turnCostMap == null) {

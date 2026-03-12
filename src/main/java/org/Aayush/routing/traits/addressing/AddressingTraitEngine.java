@@ -72,17 +72,18 @@ public final class AddressingTraitEngine {
             );
         }
 
-        AddressingTrait trait = nonNullContext.runtimeBinding().getAddressingTrait();
-        validateRequestTraitHint(
+        AddressingRuntimeBinder.Binding runtimeBinding = nonNullContext.runtimeBinding();
+        AddressingTrait trait = runtimeBinding.getAddressingTrait();
+        validateRequestSelectors(
                 request.getAddressingTraitId(),
-                trait,
-                nonNullContext.traitCatalog()
+                request.getCoordinateDistanceStrategyId(),
+                runtimeBinding
         );
         StrategySelection strategySelection = resolveCoordinateStrategy(
-                request.getCoordinateDistanceStrategyId(),
                 request.getMaxSnapDistance(),
                 collectCoordinateInputs(List.of(sourceSlot, targetSlot)),
-                nonNullContext.coordinateStrategyRegistry(),
+                trait,
+                runtimeBinding,
                 nonNullContext.addressingPolicy()
         );
 
@@ -157,18 +158,19 @@ public final class AddressingTraitEngine {
             );
         }
 
-        AddressingTrait trait = nonNullContext.runtimeBinding().getAddressingTrait();
-        validateRequestTraitHint(
+        AddressingRuntimeBinder.Binding runtimeBinding = nonNullContext.runtimeBinding();
+        AddressingTrait trait = runtimeBinding.getAddressingTrait();
+        validateRequestSelectors(
                 request.getAddressingTraitId(),
-                trait,
-                nonNullContext.traitCatalog()
+                request.getCoordinateDistanceStrategyId(),
+                runtimeBinding
         );
         List<AddressInput> coordinateInputs = collectCoordinateInputs(sourceSlots, targetSlots);
         StrategySelection strategySelection = resolveCoordinateStrategy(
-                request.getCoordinateDistanceStrategyId(),
                 request.getMaxSnapDistance(),
                 coordinateInputs,
-                nonNullContext.coordinateStrategyRegistry(),
+                trait,
+                runtimeBinding,
                 nonNullContext.addressingPolicy()
         );
 
@@ -308,55 +310,54 @@ public final class AddressingTraitEngine {
         return List.copyOf(coordinates);
     }
 
-    private void validateRequestTraitHint(
+    private void validateRequestSelectors(
             String requestedTraitId,
-            AddressingTrait runtimeTrait,
-            AddressingTraitCatalog catalog
+            String requestedCoordinateStrategyId,
+            AddressingRuntimeBinder.Binding runtimeBinding
     ) {
-        String traitId = normalizeOptionalId(requestedTraitId);
-        if (traitId == null) {
+        validateRequestSelectorHint("addressingTraitId", requestedTraitId, runtimeBinding.getAddressingTrait().id());
+        validateRequestSelectorHint(
+                "coordinateDistanceStrategyId",
+                requestedCoordinateStrategyId,
+                runtimeBinding.getCoordinateStrategyId()
+        );
+    }
+
+    private void validateRequestSelectorHint(String fieldName, String requestedId, String runtimeId) {
+        String normalizedRequestedId = normalizeOptionalId(requestedId);
+        if (normalizedRequestedId == null) {
             return;
         }
-        AddressingTrait requestedTrait = catalog.trait(traitId);
-        if (requestedTrait == null) {
+        String normalizedRuntimeId = normalizeOptionalId(runtimeId);
+        if (!Objects.equals(normalizedRequestedId, normalizedRuntimeId)) {
             throw new RouteCoreException(
-                    RouteCore.REASON_UNKNOWN_ADDRESSING_TRAIT,
-                    "unknown addressing trait id: " + traitId
-            );
-        }
-        if (!traitId.equals(runtimeTrait.id())) {
-            throw new RouteCoreException(
-                    RouteCore.REASON_ADDRESSING_RUNTIME_MISMATCH,
-                    "request addressingTraitId " + traitId
-                            + " does not match startup trait " + runtimeTrait.id()
+                    RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH,
+                    "request " + fieldName + " " + normalizedRequestedId
+                            + " does not match startup bundle selection " + normalizedRuntimeId
             );
         }
     }
 
     private StrategySelection resolveCoordinateStrategy(
-            String requestedStrategyId,
             Double requestMaxSnapDistance,
             List<AddressInput> coordinateInputs,
-            CoordinateStrategyRegistry registry,
+            AddressingTrait trait,
+            AddressingRuntimeBinder.Binding runtimeBinding,
             AddressingPolicy policy
     ) {
         if (coordinateInputs.isEmpty()) {
             return null;
         }
-
-        String strategyId = normalizeOptionalId(requestedStrategyId);
-        if (strategyId == null) {
-            throw new RouteCoreException(
-                    RouteCore.REASON_COORDINATE_STRATEGY_REQUIRED,
-                    "coordinateDistanceStrategyId must be provided for coordinate inputs"
-            );
+        if (!trait.supports(AddressType.COORDINATES)) {
+            return null;
         }
 
-        CoordinateDistanceStrategy strategy = registry.strategy(strategyId);
-        if (strategy == null) {
+        String strategyId = normalizeOptionalId(runtimeBinding.getCoordinateStrategyId());
+        CoordinateDistanceStrategy strategy = runtimeBinding.getCoordinateStrategy();
+        if (strategyId == null || strategy == null) {
             throw new RouteCoreException(
-                    RouteCore.REASON_UNKNOWN_COORDINATE_STRATEGY,
-                    "unknown coordinateDistanceStrategyId: " + strategyId
+                    RouteCore.REASON_COORDINATE_STRATEGY_REQUIRED,
+                    "startup coordinateDistanceStrategyId must be provided for coordinate inputs"
             );
         }
 

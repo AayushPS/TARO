@@ -5,9 +5,9 @@ import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.heuristic.GoalBoundHeuristic;
 
 /**
- * Internal planner abstraction used by route orchestration.
+ * Planner strategy used by route orchestration.
  */
-interface RoutePlanner {
+public interface RoutePlanner {
     /**
      * Computes one point-to-point internal route plan.
      *

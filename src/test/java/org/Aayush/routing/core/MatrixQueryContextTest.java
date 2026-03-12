@@ -5,8 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 @DisplayName("MatrixQueryContext Tests")
 class MatrixQueryContextTest {
@@ -32,7 +31,7 @@ class MatrixQueryContextTest {
         assertTrue(context.updateTargetBest(0, 5.0f, 85L));
         assertEquals(7.0d, context.maxResolvedTargetCost(), 1e-9d);
 
-        assertTrue(!context.updateTargetBest(1, 7.0f, 95L));
+        assertFalse(context.updateTargetBest(1, 7.0f, 95L));
         assertEquals(7.0d, context.maxResolvedTargetCost(), 1e-9d);
     }
 

@@ -1,5 +1,7 @@
 package org.Aayush.routing.traits.transition;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
 import org.Aayush.routing.graph.TurnCostMap;
 
 /**
@@ -62,18 +64,30 @@ public interface TransitionCostStrategy {
         private static final long PACKED_ZERO_APPLIED = rawPack(0.0f, true);
         private static final long PACKED_FORBIDDEN = rawPack(TurnCostMap.FORBIDDEN_TURN, true);
 
+        /**
+         * Returns shared immutable instance for "no turn effect".
+         */
         public static TurnCostDecision neutral() {
             return NEUTRAL;
         }
 
+        /**
+         * Returns shared immutable instance for an applied zero-penalty turn.
+         */
         public static TurnCostDecision zeroApplied() {
             return ZERO_APPLIED;
         }
 
+        /**
+         * Returns shared immutable instance for forbidden turns.
+         */
         public static TurnCostDecision forbidden() {
             return FORBIDDEN;
         }
 
+        /**
+         * Creates (or reuses) a canonical immutable decision for one turn result.
+         */
         public static TurnCostDecision of(float turnPenalty, boolean turnPenaltyApplied) {
             if (turnPenalty == TurnCostMap.FORBIDDEN_TURN) {
                 return FORBIDDEN;
@@ -87,10 +101,16 @@ public interface TransitionCostStrategy {
             return new TurnCostDecision(turnPenalty, turnPenaltyApplied);
         }
 
+        /**
+         * Packs this decision for allocation-lean hot-path usage.
+         */
         public long packed() {
             return pack(turnPenalty, turnPenaltyApplied);
         }
 
+        /**
+         * Packs one turn decision into a compact long representation.
+         */
         public static long pack(float turnPenalty, boolean turnPenaltyApplied) {
             if (turnPenalty == TurnCostMap.FORBIDDEN_TURN) {
                 return PACKED_FORBIDDEN;
@@ -104,6 +124,9 @@ public interface TransitionCostStrategy {
             return rawPack(turnPenalty, turnPenaltyApplied);
         }
 
+        /**
+         * Restores a canonical decision from packed representation.
+         */
         public static TurnCostDecision fromPacked(long packed) {
             if (packed == PACKED_NEUTRAL) {
                 return NEUTRAL;
@@ -117,18 +140,30 @@ public interface TransitionCostStrategy {
             return of(unpackTurnPenalty(packed), unpackTurnPenaltyApplied(packed));
         }
 
+        /**
+         * Decodes turn-penalty component from packed representation.
+         */
         public static float unpackTurnPenalty(long packed) {
             return Float.intBitsToFloat((int) (packed >>> 1));
         }
 
+        /**
+         * Decodes turn-applied flag from packed representation.
+         */
         public static boolean unpackTurnPenaltyApplied(long packed) {
             return (packed & 1L) != 0L;
         }
 
+        /**
+         * Packs raw components without canonicalization checks.
+         */
         private static long rawPack(float turnPenalty, boolean turnPenaltyApplied) {
             return (Integer.toUnsignedLong(Float.floatToRawIntBits(turnPenalty)) << 1) | (turnPenaltyApplied ? 1L : 0L);
         }
 
+        /**
+         * Returns true when this decision encodes a forbidden turn.
+         */
         public boolean isForbidden() {
             return turnPenalty == TurnCostMap.FORBIDDEN_TURN;
         }
@@ -137,16 +172,17 @@ public interface TransitionCostStrategy {
     /**
      * Deterministic transition-evaluation failure used for RouteCore reason-code mapping.
      */
+    @Getter
+    @Accessors(fluent = true)
     final class TransitionComputationException extends RuntimeException {
         private final String reasonCode;
 
+        /**
+         * Creates a reason-coded transition evaluation failure.
+         */
         public TransitionComputationException(String reasonCode, String message, Throwable cause) {
             super(message, cause);
             this.reasonCode = reasonCode;
-        }
-
-        public String reasonCode() {
-            return reasonCode;
         }
     }
 }

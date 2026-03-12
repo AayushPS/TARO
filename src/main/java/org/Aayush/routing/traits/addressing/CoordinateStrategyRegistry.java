@@ -87,11 +87,17 @@ public final class CoordinateStrategyRegistry {
     }
 
     private static final class XYDistanceStrategy implements CoordinateDistanceStrategy {
+        /**
+         * Returns the stable identifier for planar XY coordinates.
+         */
         @Override
         public String id() {
             return STRATEGY_XY;
         }
 
+        /**
+         * Validates that both XY components are finite.
+         */
         @Override
         public void validate(double first, double second) {
             if (!Double.isFinite(first) || !Double.isFinite(second)) {
@@ -102,11 +108,17 @@ public final class CoordinateStrategyRegistry {
             }
         }
 
+        /**
+         * Computes Euclidean distance in the XY plane.
+         */
         @Override
         public double distance(double requestFirst, double requestSecond, double nodeFirst, double nodeSecond) {
             return GeometryDistance.euclideanDistance(requestFirst, requestSecond, nodeFirst, nodeSecond);
         }
 
+        /**
+         * Returns the built-in default snap threshold for XY coordinates.
+         */
         @Override
         public Double defaultMaxSnapDistance() {
             return 1_000.0d;
@@ -119,11 +131,17 @@ public final class CoordinateStrategyRegistry {
         private static final double MIN_LON = -180.0d;
         private static final double MAX_LON = 180.0d;
 
+        /**
+         * Returns the stable identifier for geographic latitude/longitude coordinates.
+         */
         @Override
         public String id() {
             return STRATEGY_LAT_LON;
         }
 
+        /**
+         * Validates that coordinates are finite and within latitude/longitude bounds.
+         */
         @Override
         public void validate(double first, double second) {
             if (!Double.isFinite(first) || !Double.isFinite(second)) {
@@ -140,11 +158,17 @@ public final class CoordinateStrategyRegistry {
             }
         }
 
+        /**
+         * Computes great-circle distance in meters between two latitude/longitude pairs.
+         */
         @Override
         public double distance(double requestFirst, double requestSecond, double nodeFirst, double nodeSecond) {
             return GeometryDistance.greatCircleDistanceMeters(requestFirst, requestSecond, nodeFirst, nodeSecond);
         }
 
+        /**
+         * Returns the built-in default snap threshold for latitude/longitude coordinates.
+         */
         @Override
         public Double defaultMaxSnapDistance() {
             return 250.0d;

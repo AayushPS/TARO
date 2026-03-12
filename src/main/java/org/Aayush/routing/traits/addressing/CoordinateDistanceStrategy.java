@@ -39,6 +39,9 @@ public interface CoordinateDistanceStrategy {
     final class CoordinateValidationException extends RuntimeException {
         private final String reasonCode;
 
+        /**
+         * Creates a reason-coded coordinate validation failure.
+         */
         public CoordinateValidationException(String reasonCode, String message) {
             super(message);
             this.reasonCode = reasonCode;

@@ -21,6 +21,10 @@ TARO is a time-dependent routing engine that treats travel cost as a function of
   finite-turn penalty behavior split by trait semantics with forbidden-turn blocking in both modes,
   parity/perf/concurrency + live-overlay churn stress gates in `Stage17TransitionTraitStressPerfTest`,
   and mixed transition-mode integration stress coverage in `SystemIntegrationStressPerfTest`.
+- Execution profile binding is implemented:
+  startup-locked routing algorithm + heuristic selection,
+  deprecated per-request algorithm/heuristic fields downgraded to compatibility hints,
+  and internal runtime-management interfaces for future profile swaps.
 - Stage 7 live overlay (`LiveOverlay`/`LiveUpdate`) is implemented and integrated into cost composition.
 - Matrix execution uses native one-to-many planners for `DIJKSTRA + NONE` and bounded-target `A_STAR`; oversized `A_STAR` target sets use bounded batched compatibility fallback.
 
@@ -67,8 +71,6 @@ RouteResponse route = router.route(
                 .sourceExternalId("N0")
                 .targetExternalId("N42")
                 .departureTicks(1_706_171_400L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.EUCLIDEAN)
                 .build()
 );
 
@@ -79,8 +81,6 @@ MatrixResponse matrix = router.matrix(
                 .targetExternalId("N10")
                 .targetExternalId("N11")
                 .departureTicks(1_706_171_400L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build()
 );
 
@@ -92,8 +92,6 @@ RouteResponse typedRoute = router.route(
                 .coordinateDistanceStrategyId("XY")
                 .maxSnapDistance(250.0)
                 .departureTicks(1_706_171_400L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build()
 );
 ```

@@ -20,7 +20,7 @@ import java.util.Objects;
  * @param temporalContext locked Stage 16 temporal context.
  * @param transitionContext locked Stage 17 transition context.
  */
-record InternalMatrixRequest(
+public record InternalMatrixRequest(
         int[] sourceNodeIds,
         int[] targetNodeIds,
         long departureTicks,
@@ -29,7 +29,7 @@ record InternalMatrixRequest(
         ResolvedTemporalContext temporalContext,
         ResolvedTransitionContext transitionContext
 ) {
-    InternalMatrixRequest {
+    public InternalMatrixRequest {
         Objects.requireNonNull(temporalContext, "temporalContext");
         Objects.requireNonNull(transitionContext, "transitionContext");
     }

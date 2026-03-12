@@ -112,11 +112,17 @@ public final class TemporalTimezonePolicyRegistry {
     }
 
     private static final class UtcTimezonePolicy implements TemporalTimezonePolicy {
+        /**
+         * Returns the stable UTC timezone-policy identifier.
+         */
         @Override
         public String id() {
             return POLICY_UTC;
         }
 
+        /**
+         * Resolves the UTC zone regardless of runtime configuration.
+         */
         @Override
         public ZoneId resolveZoneId(TemporalRuntimeConfig runtimeConfig) {
             return ZoneOffset.UTC;
@@ -124,11 +130,17 @@ public final class TemporalTimezonePolicyRegistry {
     }
 
     private static final class ModelTimezonePolicy implements TemporalTimezonePolicy {
+        /**
+         * Returns the stable model-timezone policy identifier.
+         */
         @Override
         public String id() {
             return POLICY_MODEL_TIMEZONE;
         }
 
+        /**
+         * Resolves the zone from {@code runtimeConfig.modelProfileTimezone}.
+         */
         @Override
         public ZoneId resolveZoneId(TemporalRuntimeConfig runtimeConfig) {
             Objects.requireNonNull(runtimeConfig, "runtimeConfig");

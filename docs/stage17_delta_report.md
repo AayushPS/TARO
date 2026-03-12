@@ -39,10 +39,11 @@ Passed gates:
 - Reduced transition hot-path allocation pressure by adding packed turn-decision evaluation (`evaluatePacked`) in strategy contracts.
 - Kept backward compatibility for custom strategies that only implement `evaluate(...)` via default packed fallback.
 - Added tests for packed fallback error handling and packed decision round-trip semantics.
+- Added a guarded runtime wrapper for non-built-in transition strategies so custom strategies must remain Stage 17-equivalent on every transition, not just during startup probes.
 - Rebalanced Stage 17 concurrency stress loop bounds to keep deterministic pressure while avoiding environment-specific timeout flakiness introduced by recent stability changes.
 - Fixed a clean-build blocker in `TurnCostDecision` by removing the duplicate static/instance `forbidden()` signature conflict.
 - Fixed a dark-path determinism gap: invalid packed turn decisions (for example `NaN`) are now wrapped as `H17_TRANSITION_RESOLUTION_FAILURE` instead of leaking raw `IllegalStateException`.
-- Added route/matrix RouteCore wrapper tests and low-level CostEngine regression tests for invalid packed transition decisions.
+- Added binder/runtime tests for custom strategies that pass startup probes and then drift at execution time, plus route/matrix RouteCore wrapper coverage for those failures.
 
 ## 5. Coverage Snapshot
 Command:
@@ -68,17 +69,21 @@ mvn clean test -DskipTests
 Result: Pass.
 
 ## 6. Residual Risks
-- Custom third-party strategies can still return unusual packed values; invalid values are now normalized to deterministic `H17_TRANSITION_RESOLUTION_FAILURE`, but integration owners should keep custom strategy contracts strict.
 - Performance thresholds are smoke/perf gates, not strict micro-benchmarks; cross-machine variance is expected.
 
 ## 7. Files Added/Updated for Stage 17 Closure
 - `src/main/java/org/Aayush/routing/traits/transition/TransitionCostStrategy.java`
 - `src/main/java/org/Aayush/routing/traits/transition/NodeBasedTransitionCostStrategy.java`
 - `src/main/java/org/Aayush/routing/traits/transition/EdgeBasedTransitionCostStrategy.java`
+- `src/main/java/org/Aayush/routing/traits/transition/GuardedTransitionCostStrategy.java`
+- `src/main/java/org/Aayush/routing/traits/transition/TransitionPolicy.java`
+- `src/main/java/org/Aayush/routing/traits/transition/TransitionRuntimeBinder.java`
 - `src/main/java/org/Aayush/routing/cost/CostEngine.java`
 - `src/test/java/org/Aayush/routing/core/Stage17TransitionTraitStressPerfTest.java`
 - `src/test/java/org/Aayush/routing/traits/transition/TransitionCostStrategyTest.java`
 - `src/test/java/org/Aayush/routing/traits/transition/TransitionStrategyRegistryTest.java`
+- `src/test/java/org/Aayush/routing/traits/transition/TransitionPolicyTest.java`
+- `src/test/java/org/Aayush/routing/traits/transition/TransitionRuntimeBinderTest.java`
 - `src/test/java/org/Aayush/routing/cost/CostEngineTest.java`
 - `src/test/java/org/Aayush/routing/core/RouteCoreTest.java`
 - `src/test/java/org/Aayush/routing/core/SystemIntegrationStressPerfTest.java`

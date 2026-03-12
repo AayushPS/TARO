@@ -9,7 +9,7 @@ package org.Aayush.routing.core;
  * @param settledStates count of settled states during search.
  * @param nodePath internal node path from source to target (empty when unreachable).
  */
-record InternalRoutePlan(
+public record InternalRoutePlan(
         boolean reachable,
         float totalCost,
         long arrivalTicks,
@@ -19,7 +19,7 @@ record InternalRoutePlan(
     /**
      * Creates a canonical unreachable plan result.
      */
-    static InternalRoutePlan unreachable(long departureTicks, int settledStates) {
+    public static InternalRoutePlan unreachable(long departureTicks, int settledStates) {
         return new InternalRoutePlan(false, Float.POSITIVE_INFINITY, departureTicks, settledStates, new int[0]);
     }
 }
