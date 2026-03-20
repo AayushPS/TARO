@@ -6,6 +6,8 @@ import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.spatial.SpatialRuntime;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.addressing.AddressInput;
+import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
+import org.Aayush.routing.traits.addressing.CoordinateStrategyRegistry;
 import org.Aayush.routing.traits.registry.TraitBundleRegistry;
 import org.Aayush.routing.traits.registry.TraitBundleRuntimeBinder;
 import org.Aayush.routing.traits.registry.TraitBundleRuntimeConfig;
