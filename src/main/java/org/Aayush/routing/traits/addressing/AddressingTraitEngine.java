@@ -74,11 +74,6 @@ public final class AddressingTraitEngine {
 
         AddressingRuntimeBinder.Binding runtimeBinding = nonNullContext.runtimeBinding();
         AddressingTrait trait = runtimeBinding.getAddressingTrait();
-        validateRequestSelectors(
-                request.getAddressingTraitId(),
-                request.getCoordinateDistanceStrategyId(),
-                runtimeBinding
-        );
         StrategySelection strategySelection = resolveCoordinateStrategy(
                 request.getMaxSnapDistance(),
                 collectCoordinateInputs(List.of(sourceSlot, targetSlot)),
@@ -160,11 +155,6 @@ public final class AddressingTraitEngine {
 
         AddressingRuntimeBinder.Binding runtimeBinding = nonNullContext.runtimeBinding();
         AddressingTrait trait = runtimeBinding.getAddressingTrait();
-        validateRequestSelectors(
-                request.getAddressingTraitId(),
-                request.getCoordinateDistanceStrategyId(),
-                runtimeBinding
-        );
         List<AddressInput> coordinateInputs = collectCoordinateInputs(sourceSlots, targetSlots);
         StrategySelection strategySelection = resolveCoordinateStrategy(
                 request.getMaxSnapDistance(),
@@ -308,34 +298,6 @@ public final class AddressingTraitEngine {
             }
         }
         return List.copyOf(coordinates);
-    }
-
-    private void validateRequestSelectors(
-            String requestedTraitId,
-            String requestedCoordinateStrategyId,
-            AddressingRuntimeBinder.Binding runtimeBinding
-    ) {
-        validateRequestSelectorHint("addressingTraitId", requestedTraitId, runtimeBinding.getAddressingTrait().id());
-        validateRequestSelectorHint(
-                "coordinateDistanceStrategyId",
-                requestedCoordinateStrategyId,
-                runtimeBinding.getCoordinateStrategyId()
-        );
-    }
-
-    private void validateRequestSelectorHint(String fieldName, String requestedId, String runtimeId) {
-        String normalizedRequestedId = normalizeOptionalId(requestedId);
-        if (normalizedRequestedId == null) {
-            return;
-        }
-        String normalizedRuntimeId = normalizeOptionalId(runtimeId);
-        if (!Objects.equals(normalizedRequestedId, normalizedRuntimeId)) {
-            throw new RouteCoreException(
-                    RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH,
-                    "request " + fieldName + " " + normalizedRequestedId
-                            + " does not match startup bundle selection " + normalizedRuntimeId
-            );
-        }
     }
 
     private StrategySelection resolveCoordinateStrategy(

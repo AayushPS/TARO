@@ -88,8 +88,6 @@ class AddressingTraitEngineCacheTest {
                 .sourceAddress(AddressInput.ofXY(sourceX, sourceY))
                 .targetExternalId("N4")
                 .allowMixedAddressing(true)
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.25d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.A_STAR)

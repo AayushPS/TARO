@@ -11,6 +11,7 @@ ResearchData/*
 !ResearchData/taro_v11_learning_pathway.md
 !ResearchData/taro_v11_learning_pathway.pdf
 .venv/
+.pytest_cache/
 *.taro
 __pycache__/
 *.pyc

@@ -3,6 +3,12 @@
 Date: 2026-02-23  
 Scope: Audit current implementation against the principle: "all trait axes must be decided before runtime serving; request path must not switch trait behavior."
 
+Update: 2026-03-20
+
+- Stage 15 request-time addressing selectors have been removed from `RouteRequest` and `MatrixRequest`.
+- `AddressingTraitEngine` no longer reads request selector hints and now resolves strictly from startup-bound runtime binding.
+- Stage 16 strictness findings from this audit are already reflected in current code: internal requests require explicit temporal context and core hot-path APIs do not expose implicit temporal fallback overloads.
+
 ## 1. Principle Under Audit
 
 Target principle:
@@ -15,13 +21,12 @@ Target principle:
 
 ### 2.1 Stage 15 Addressing Trait
 
-Status: Not aligned (major gap).
+Status: Aligned after migration on 2026-03-20.
 
-Evidence:
+Previous gap (now removed):
 
-- `AddressingTraitEngine` resolves trait from request field `addressingTraitId`.
-- Typed requests require per-request trait id (`H15_ADDRESSING_TRAIT_REQUIRED` path).
-- Coordinate strategy is also request-selected (`coordinateDistanceStrategyId`).
+- `AddressingTraitEngine` used request selector hints (`addressingTraitId`, `coordinateDistanceStrategyId`) as part of request validation.
+- Public request contracts exposed addressing selector fields even though startup runtime config already bound the actual mode.
 
 Code references:
 
@@ -31,40 +36,33 @@ Code references:
 
 Conclusion:
 
-- Stage 15 currently violates startup-lock principle by design.
+- Stage 15 now follows the startup-lock principle: requests only carry address data, while runtime trait and coordinate strategy are selected once at startup.
 
 ### 2.2 Stage 16 Temporal Trait
 
-Status: Mostly aligned, with fallback leakage in lower-level APIs.
+Status: Aligned after hardening already present in current code.
 
 Aligned behavior:
 
 - `RouteCore` requires startup `temporalRuntimeConfig` and binds one temporal context.
 - Runtime temporal mode is immutable per `RouteCore` instance.
+- `InternalRouteRequest` and `InternalMatrixRequest` require explicit `ResolvedTemporalContext`.
+- `CostEngine` and `PathEvaluator` use explicit temporal-context APIs.
+- `ResolvedTemporalContext` no longer exposes a global default fallback helper.
 
 Code references:
 
 - `src/main/java/org/Aayush/routing/core/RouteCore.java`
-- `src/main/java/org/Aayush/routing/traits/temporal/TemporalRuntimeBinder.java`
-
-Leakage (not aligned with strict principle):
-
-- `InternalRouteRequest` and `InternalMatrixRequest` have compatibility constructors/defaults to `defaultCalendarUtc`.
-- `CostEngine` has default temporal context overloads.
-- `PathEvaluator` has default temporal context overload.
-- `ResolvedTemporalContext.defaultCalendarUtc()` exists as globally available fallback.
-
-Code references:
-
 - `src/main/java/org/Aayush/routing/core/InternalRouteRequest.java`
 - `src/main/java/org/Aayush/routing/core/InternalMatrixRequest.java`
 - `src/main/java/org/Aayush/routing/cost/CostEngine.java`
 - `src/main/java/org/Aayush/routing/core/PathEvaluator.java`
 - `src/main/java/org/Aayush/routing/traits/temporal/ResolvedTemporalContext.java`
+- `src/main/java/org/Aayush/routing/traits/temporal/TemporalRuntimeBinder.java`
 
 Conclusion:
 
-- RouteCore request path is startup-locked, but internal compatibility APIs still allow bypassing strict lock semantics outside RouteCore flow.
+- Stage 16 now enforces strict startup-locked temporal behavior across request and internal execution flow.
 
 ### 2.3 Stage 17 Transition Trait (Planned)
 
@@ -84,23 +82,23 @@ Key locks:
 
 ## 3. Risk Summary
 
-1. Cross-axis inconsistency currently exists: Stage 15 is request-selected, Stage 16 is startup-selected.
-2. Stage 16 fallback APIs can reintroduce implicit behavior if used outside RouteCore path.
-3. Without cleanup, Stage 18 bundle-level startup lock may be partially undermined by compatibility overloads.
+1. Cross-axis inconsistency between Stage 15 and Stage 16 has been removed.
+2. Residual strictness risk is now mostly limited to ensuring future APIs do not reintroduce request-time trait selectors.
+3. Stage 18 bundle-level startup lock is now reinforced by the public request contract instead of merely validated at runtime.
 
 ## 4. Recommended Remediation Path
 
-### 4.1 Stage 15 (Required for full alignment)
+### 4.1 Stage 15 (Completed)
 
-1. Introduce `AddressingRuntimeConfig` and startup binder.
-2. Remove request-time `addressingTraitId` and `coordinateDistanceStrategyId` from public request contracts (or deprecate, then remove).
-3. Keep only address data in requests; resolve using startup-selected addressing mode.
+1. `AddressingRuntimeConfig` and startup binder are in place.
+2. Request-time `addressingTraitId` and `coordinateDistanceStrategyId` have been removed from public request contracts.
+3. Requests now carry only address data; resolution uses startup-selected addressing mode.
 
-### 4.2 Stage 16 (Hardening for strictness)
+### 4.2 Stage 16 (Completed Hardening)
 
-1. Deprecate/remove default temporal fallbacks in internal request constructors.
-2. Deprecate/remove no-context `CostEngine` and `PathEvaluator` overloads in strict mode.
-3. Keep strict mode tests proving no implicit temporal default path is reachable.
+1. Default temporal fallbacks in internal request constructors are removed.
+2. No-context `CostEngine` and `PathEvaluator` temporal shortcuts are not part of the strict request flow.
+3. Strict mode tests cover absence of implicit temporal default paths.
 
 ### 4.3 Stage 17 (Execute as locked)
 
@@ -110,5 +108,5 @@ Key locks:
 
 ## 5. Final Audit Verdict
 
-- The "all traits fixed before runtime" main idea is currently missing in Stage 15 and partially leaked in Stage 16 compatibility APIs.
-- Stage 17 planning is now aligned to that principle and can act as the template for bringing all trait axes under one startup-lock model in Stage 18.
+- The startup-lock principle is now enforced across Stage 15, Stage 16, Stage 17, and Stage 18 request flow.
+- Remaining maintenance work is hardening-by-regression-test rather than architectural migration.

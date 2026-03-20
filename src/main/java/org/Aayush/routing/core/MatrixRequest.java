@@ -26,12 +26,6 @@ public class MatrixRequest {
     /** Typed target addresses (matrix columns). */
     @Singular("targetAddress")
     List<AddressInput> targetAddresses;
-    /** Deprecated startup-lock hint for the addressing trait selected at startup. */
-    @Deprecated
-    String addressingTraitId;
-    /** Deprecated startup-lock hint for the coordinate strategy selected at startup. */
-    @Deprecated
-    String coordinateDistanceStrategyId;
     /** Explicit enable for mixed address-type requests. */
     Boolean allowMixedAddressing;
     /** Max coordinate snap distance (strategy-relative units). */

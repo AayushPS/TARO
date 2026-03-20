@@ -43,7 +43,6 @@ class Stage15AddressingTraitTest {
         RouteResponse response = core.route(RouteRequest.builder()
                 .sourceAddress(AddressInput.ofExternalId("N0"))
                 .targetAddress(AddressInput.ofExternalId("N4"))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.A_STAR)
                 .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
@@ -87,7 +86,6 @@ class Stage15AddressingTraitTest {
                 .sourceAddress(AddressInput.ofExternalId("N1"))
                 .targetAddress(AddressInput.ofExternalId("N3"))
                 .targetAddress(AddressInput.ofExternalId("N4"))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.DIJKSTRA)
                 .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
@@ -112,7 +110,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofExternalId("UNKNOWN"))
                         .targetAddress(AddressInput.ofExternalId("N4"))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
@@ -130,8 +127,6 @@ class Stage15AddressingTraitTest {
         RouteResponse pass = core.route(RouteRequest.builder()
                 .sourceAddress(AddressInput.ofXY(0.05d, 0.0d))
                 .targetAddress(AddressInput.ofXY(3.95d, 0.0d))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.10d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.A_STAR)
@@ -145,8 +140,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(0.05d, 0.0d))
                         .targetAddress(AddressInput.ofXY(3.95d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                         .maxSnapDistance(0.001d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -171,8 +164,6 @@ class Stage15AddressingTraitTest {
         RouteResponse pass = core.route(RouteRequest.builder()
                 .sourceAddress(AddressInput.ofLatLon(12.0001d, 77.0d))
                 .targetAddress(AddressInput.ofLatLon(12.0039d, 77.0d))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_LAT_LON)
                 .maxSnapDistance(50.0d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.A_STAR)
@@ -186,8 +177,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofLatLon(12.0001d, 77.0d))
                         .targetAddress(AddressInput.ofLatLon(12.0039d, 77.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_LAT_LON)
                         .maxSnapDistance(5.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -208,8 +197,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -220,38 +207,43 @@ class Stage15AddressingTraitTest {
     }
 
     @Test
-    @DisplayName("Deprecated request selector hints mismatch startup bundle deterministically")
-    void testUnknownTraitAndStrategyValidation() {
+    @DisplayName("Unknown startup trait and strategy bindings are rejected deterministically")
+    void testUnknownTraitAndStrategyBindingValidation() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
-        RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()));
-
         RouteCoreException traitEx = assertThrows(
                 RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
-                        .sourceAddress(AddressInput.ofExternalId("N0"))
-                        .targetAddress(AddressInput.ofExternalId("N4"))
-                        .addressingTraitId("UNKNOWN_TRAIT")
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
-                        .build())
+                () -> RouteCore.builder()
+                        .edgeGraph(fixture.edgeGraph())
+                        .profileStore(fixture.profileStore())
+                        .costEngine(fixture.costEngine())
+                        .nodeIdMapper(fixture.nodeIdMapper())
+                        .spatialRuntime(buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()))
+                        .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                        .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                        .addressingRuntimeConfig(AddressingRuntimeConfig.builder()
+                                .addressingTraitId("UNKNOWN_TRAIT")
+                                .build())
+                        .build()
         );
-        assertEquals(RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH, traitEx.getReasonCode());
+        assertEquals(RouteCore.REASON_UNKNOWN_ADDRESSING_TRAIT, traitEx.getReasonCode());
 
         RouteCoreException strategyEx = assertThrows(
                 RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
-                        .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
-                        .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId("UNKNOWN_STRATEGY")
-                        .maxSnapDistance(1.0d)
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
-                        .build())
+                () -> RouteCore.builder()
+                        .edgeGraph(fixture.edgeGraph())
+                        .profileStore(fixture.profileStore())
+                        .costEngine(fixture.costEngine())
+                        .nodeIdMapper(fixture.nodeIdMapper())
+                        .spatialRuntime(buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()))
+                        .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                        .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                        .addressingRuntimeConfig(AddressingRuntimeConfig.builder()
+                                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
+                                .coordinateDistanceStrategyId("UNKNOWN_STRATEGY")
+                                .build())
+                        .build()
         );
-        assertEquals(RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH, strategyEx.getReasonCode());
+        assertEquals(RouteCore.REASON_MISSING_TRAIT_DEPENDENCY, strategyEx.getReasonCode());
     }
 
     @Test
@@ -291,8 +283,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
                         .targetExternalId("N4")
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -305,8 +295,6 @@ class Stage15AddressingTraitTest {
                 .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
                 .targetExternalId("N4")
                 .allowMixedAddressing(true)
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(1.0d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.A_STAR)
@@ -320,7 +308,6 @@ class Stage15AddressingTraitTest {
                         .sourceExternalId("N0")
                         .sourceAddress(AddressInput.ofExternalId("N0"))
                         .targetAddress(AddressInput.ofExternalId("N4"))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
@@ -343,8 +330,6 @@ class Stage15AddressingTraitTest {
                 () -> xyCore.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(Double.NaN, 0.0d))
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                         .maxSnapDistance(10.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -366,8 +351,6 @@ class Stage15AddressingTraitTest {
                 () -> latLonCore.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofLatLon(95.0d, 77.0d))
                         .targetAddress(AddressInput.ofLatLon(12.0d, 77.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_LAT_LON)
                         .maxSnapDistance(500.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -388,8 +371,6 @@ class Stage15AddressingTraitTest {
                 .sourceAddress(AddressInput.ofXY(0.01d, 0.0d))
                 .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
                 .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.20d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.DIJKSTRA)
@@ -442,8 +423,6 @@ class Stage15AddressingTraitTest {
                 .sourceAddress(AddressInput.ofCoordinates(-0.0d, 0.0d, CoordinateStrategyRegistry.STRATEGY_XY))
                 .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, null))
                 .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, CoordinateStrategyRegistry.STRATEGY_XY))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.20d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.DIJKSTRA)
@@ -470,8 +449,6 @@ class Stage15AddressingTraitTest {
         RouteResponse response = core.route(RouteRequest.builder()
                 .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
                 .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.0d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.A_STAR)
@@ -501,7 +478,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(malformed)
                         .targetAddress(AddressInput.ofExternalId("N4"))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
@@ -558,7 +534,6 @@ class Stage15AddressingTraitTest {
                 () -> core.matrix(MatrixRequest.builder()
                         .sourceAddresses(Arrays.asList(AddressInput.ofExternalId("N0"), null))
                         .targetAddress(AddressInput.ofExternalId("N4"))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.DIJKSTRA)
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
@@ -568,8 +543,8 @@ class Stage15AddressingTraitTest {
     }
 
     @Test
-    @DisplayName("Coordinate strategy hint mismatch is rejected while blank request strategy is ignored")
-    void testCoordinateStrategyHintMismatchAndBlankStrategyValidation() {
+    @DisplayName("Coordinate strategy hint mismatch is rejected while runtime strategy stays request-agnostic")
+    void testCoordinateStrategyHintMismatchValidation() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
         RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()));
 
@@ -578,8 +553,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofCoordinates(0.0d, 0.0d, CoordinateStrategyRegistry.STRATEGY_LAT_LON))
                         .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, CoordinateStrategyRegistry.STRATEGY_LAT_LON))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                         .maxSnapDistance(10.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -587,18 +560,6 @@ class Stage15AddressingTraitTest {
                         .build())
         );
         assertEquals(RouteCore.REASON_MALFORMED_TYPED_PAYLOAD, hintMismatch.getReasonCode());
-
-        RouteResponse blankStrategy = core.route(RouteRequest.builder()
-                .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
-                .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId("   ")
-                .maxSnapDistance(10.0d)
-                .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
-                .build());
-        assertTrue(blankStrategy.isReachable());
     }
 
     @Test
@@ -612,8 +573,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                         .maxSnapDistance(-1.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -646,8 +605,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofCoordinates(0.0d, 0.0d, null))
                         .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, null))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId("BROKEN_STRATEGY")
                         .maxSnapDistance(10.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -680,8 +637,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofCoordinates(0.0d, 0.0d, null))
                         .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, null))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId("NEGATIVE_DISTANCE")
                         .maxSnapDistance(10.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
@@ -692,23 +647,29 @@ class Stage15AddressingTraitTest {
     }
 
     @Test
-    @DisplayName("Request addressing-trait hint must match startup trait")
-    void testRequestTraitHintMustMatchStartupTrait() {
+    @DisplayName("External-id-only startup trait rejects coordinate payloads without any request selector")
+    void testStartupTraitLockRejectsCoordinatePayloadsWithoutRequestSelector() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
-        RouteCore core = createCore(fixture, buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()));
+        RouteCore core = createCore(
+                fixture,
+                buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()),
+                fixture.nodeIdMapper(),
+                null,
+                AddressingRuntimeConfig.externalIdOnlyRuntime()
+        );
 
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
                 () -> core.route(RouteRequest.builder()
-                        .sourceAddress(AddressInput.ofExternalId("N0"))
-                        .targetAddress(AddressInput.ofExternalId("N4"))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_EXTERNAL_ID_ONLY)
+                        .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
+                        .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
+                        .maxSnapDistance(1.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
-        assertEquals(RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH, ex.getReasonCode());
+        assertEquals(RouteCore.REASON_UNSUPPORTED_ADDRESS_TYPE, ex.getReasonCode());
     }
 
     @Test
@@ -724,8 +685,6 @@ class Stage15AddressingTraitTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(0.0d, 0.0d))
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)

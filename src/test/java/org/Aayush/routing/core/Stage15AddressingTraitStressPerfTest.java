@@ -7,8 +7,6 @@ import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.addressing.AddressInput;
 import org.Aayush.routing.traits.addressing.AddressType;
 import org.Aayush.routing.traits.addressing.AddressingTelemetry;
-import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
-import org.Aayush.routing.traits.addressing.CoordinateStrategyRegistry;
 import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
 import org.Aayush.serialization.flatbuffers.taro.model.KDNode;
@@ -117,8 +115,6 @@ class Stage15AddressingTraitStressPerfTest {
                 .sourceAddress(coordinateAddressForNode(0, cols))
                 .targetExternalId("N" + (nodeCount - 1))
                 .allowMixedAddressing(true)
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.25d)
                 .departureTicks(17L)
                 .algorithm(RoutingAlgorithm.A_STAR)
@@ -189,8 +185,6 @@ class Stage15AddressingTraitStressPerfTest {
         return RouteRequest.builder()
                 .sourceAddress(coordinateAddressForNode(sourceNodeId, cols))
                 .targetAddress(coordinateAddressForNode(targetNodeId, cols))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.25d)
                 .departureTicks(departureTicks)
                 .algorithm(RoutingAlgorithm.A_STAR)
@@ -209,8 +203,6 @@ class Stage15AddressingTraitStressPerfTest {
         int[] targetNodes = new int[]{(17 * cols) + 0, (17 * cols) + 1, (18 * cols) + 0, (18 * cols) + 1, (19 * cols) + 0, (19 * cols) + 19};
 
         MatrixRequest.MatrixRequestBuilder builder = MatrixRequest.builder()
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.25d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.DIJKSTRA)

@@ -5,8 +5,6 @@ import org.Aayush.core.id.IDMapper;
 import org.Aayush.routing.spatial.SpatialRuntime;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.addressing.AddressInput;
-import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
-import org.Aayush.routing.traits.addressing.CoordinateStrategyRegistry;
 import org.Aayush.routing.traits.registry.TraitBundleRegistry;
 import org.Aayush.routing.traits.registry.TraitBundleRuntimeBinder;
 import org.Aayush.routing.traits.registry.TraitBundleRuntimeConfig;
@@ -35,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class Stage18TraitRegistryTest {
 
     @Test
-    @DisplayName("Named bundle route and matrix accept matching deprecated selector hints and expose bundle context")
+    @DisplayName("Named bundle route and matrix use startup-bound trait selection and expose bundle context")
     void testNamedBundleRouteAndMatrixSuccess() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
         RouteCore core = createCore(
@@ -48,8 +46,6 @@ class Stage18TraitRegistryTest {
         RouteResponse routeResponse = core.route(RouteRequest.builder()
                 .sourceAddress(AddressInput.ofXY(0.01d, 0.0d))
                 .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.20d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.A_STAR)
@@ -61,8 +57,6 @@ class Stage18TraitRegistryTest {
         MatrixResponse matrixResponse = core.matrix(MatrixRequest.builder()
                 .sourceAddress(AddressInput.ofXY(0.01d, 0.0d))
                 .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.20d)
                 .departureTicks(0L)
                 .algorithm(RoutingAlgorithm.DIJKSTRA)
@@ -77,14 +71,14 @@ class Stage18TraitRegistryTest {
     }
 
     @Test
-    @DisplayName("Route and matrix reject deprecated selector mismatch deterministically")
-    void testSelectorMismatchRejected() {
+    @DisplayName("Named bundle rejects coordinate payloads that conflict with startup trait lock")
+    void testStartupTraitLockStillAppliesWithNamedBundle() {
         RoutingFixtureFactory.Fixture fixture = createLinearFixtureXY();
         RouteCore core = createCore(
                 fixture,
                 buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()),
-                TraitBundleRuntimeConfig.ofBundleId("CITY_XY"),
-                new TraitBundleRegistry(List.of(namedBundle()))
+                TraitBundleRuntimeConfig.ofBundleId("EXTERNAL_ONLY"),
+                new TraitBundleRegistry(List.of(externalOnlyBundle()))
         );
 
         RouteCoreException routeMismatch = assertThrows(
@@ -92,28 +86,26 @@ class Stage18TraitRegistryTest {
                 () -> core.route(RouteRequest.builder()
                         .sourceAddress(AddressInput.ofXY(0.01d, 0.0d))
                         .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
-                        .addressingTraitId(AddressingTraitCatalog.TRAIT_EXTERNAL_ID_ONLY)
                         .maxSnapDistance(0.20d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.A_STAR)
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
-        assertEquals(RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH, routeMismatch.getReasonCode());
+        assertEquals(RouteCore.REASON_UNSUPPORTED_ADDRESS_TYPE, routeMismatch.getReasonCode());
 
         RouteCoreException matrixMismatch = assertThrows(
                 RouteCoreException.class,
                 () -> core.matrix(MatrixRequest.builder()
                         .sourceAddress(AddressInput.ofXY(0.01d, 0.0d))
                         .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
-                        .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_LAT_LON)
                         .maxSnapDistance(0.20d)
                         .departureTicks(0L)
                         .algorithm(RoutingAlgorithm.DIJKSTRA)
                         .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
-        assertEquals(RouteCore.REASON_REQUEST_TRAIT_SELECTOR_MISMATCH, matrixMismatch.getReasonCode());
+        assertEquals(RouteCore.REASON_UNSUPPORTED_ADDRESS_TYPE, matrixMismatch.getReasonCode());
     }
 
     @Test
@@ -189,8 +181,18 @@ class Stage18TraitRegistryTest {
     private TraitBundleSpec namedBundle() {
         return TraitBundleSpec.builder()
                 .bundleId("CITY_XY")
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
+                .addressingTraitId(org.Aayush.routing.traits.addressing.AddressingTraitCatalog.TRAIT_DEFAULT)
+                .coordinateDistanceStrategyId(org.Aayush.routing.traits.addressing.CoordinateStrategyRegistry.STRATEGY_XY)
+                .temporalTraitId(org.Aayush.routing.traits.temporal.TemporalTraitCatalog.TRAIT_CALENDAR)
+                .timezonePolicyId(TemporalTimezonePolicyRegistry.POLICY_UTC)
+                .transitionTraitId(TransitionTraitCatalog.TRAIT_EDGE_BASED)
+                .build();
+    }
+
+    private TraitBundleSpec externalOnlyBundle() {
+        return TraitBundleSpec.builder()
+                .bundleId("EXTERNAL_ONLY")
+                .addressingTraitId(org.Aayush.routing.traits.addressing.AddressingTraitCatalog.TRAIT_EXTERNAL_ID_ONLY)
                 .temporalTraitId(org.Aayush.routing.traits.temporal.TemporalTraitCatalog.TRAIT_CALENDAR)
                 .timezonePolicyId(TemporalTimezonePolicyRegistry.POLICY_UTC)
                 .transitionTraitId(TransitionTraitCatalog.TRAIT_EDGE_BASED)

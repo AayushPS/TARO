@@ -6,8 +6,6 @@ import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.spatial.SpatialRuntime;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.addressing.AddressInput;
-import org.Aayush.routing.traits.addressing.AddressingTraitCatalog;
-import org.Aayush.routing.traits.addressing.CoordinateStrategyRegistry;
 import org.Aayush.routing.traits.registry.TraitBundleRegistry;
 import org.Aayush.routing.traits.registry.TraitBundleRuntimeBinder;
 import org.Aayush.routing.traits.registry.TraitBundleRuntimeConfig;
@@ -63,8 +61,6 @@ class SystemIntegrationStressPerfTest {
         RouteRequest typedRouteRequest = RouteRequest.builder()
                 .sourceAddress(AddressInput.ofExternalId("N20"))
                 .targetAddress(AddressInput.ofExternalId("N460"))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .departureTicks(1_778_313_600L + 17L)
                 .algorithm(RoutingAlgorithm.A_STAR)
                 .heuristicType(HeuristicType.NONE)
@@ -177,8 +173,6 @@ class SystemIntegrationStressPerfTest {
         RouteRequest typedRouteRequest = RouteRequest.builder()
                 .sourceAddress(AddressInput.ofExternalId("N19"))
                 .targetAddress(AddressInput.ofExternalId("N378"))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .departureTicks(1_778_314_000L + 9L)
                 .algorithm(RoutingAlgorithm.A_STAR)
                 .heuristicType(HeuristicType.NONE)
@@ -353,8 +347,6 @@ class SystemIntegrationStressPerfTest {
         RouteRequest reachableCoordinateRoute = RouteRequest.builder()
                 .sourceAddress(AddressInput.ofXY(0.05d, 0.05d))
                 .targetAddress(AddressInput.ofXY(17.05d, 17.05d))
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.20d)
                 .departureTicks(1_778_315_000L)
                 .algorithm(RoutingAlgorithm.A_STAR)
@@ -414,8 +406,6 @@ class SystemIntegrationStressPerfTest {
                 .targetExternalId("N324")
                 .targetExternalId("N331")
                 .allowMixedAddressing(true)
-                .addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT)
-                .coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY)
                 .maxSnapDistance(0.20d)
                 .departureTicks(1_778_315_063L)
                 .algorithm(RoutingAlgorithm.A_STAR)
@@ -523,10 +513,6 @@ class SystemIntegrationStressPerfTest {
         for (int i = 0; i < targetCount; i++) {
             int nodeId = (i * 19 + 11) % nodeCount;
             builder.targetExternalId("N" + nodeId);
-        }
-        if (aStarCompatibilityMode) {
-            builder.addressingTraitId(AddressingTraitCatalog.TRAIT_DEFAULT);
-            builder.coordinateDistanceStrategyId(CoordinateStrategyRegistry.STRATEGY_XY);
         }
         return builder.build();
     }
