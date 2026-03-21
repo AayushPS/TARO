@@ -49,18 +49,32 @@ class TurnCost(object):
             return self._tab.Get(flatbuffers.number_types.Float32Flags, o + self._tab.Pos)
         return 0.0
 
-def TurnCostStart(builder): builder.StartObject(3)
+def TurnCostStart(builder):
+    builder.StartObject(3)
+
 def Start(builder):
-    return TurnCostStart(builder)
-def TurnCostAddFromEdgeIdx(builder, fromEdgeIdx): builder.PrependInt32Slot(0, fromEdgeIdx, 0)
+    TurnCostStart(builder)
+
+def TurnCostAddFromEdgeIdx(builder, fromEdgeIdx):
+    builder.PrependInt32Slot(0, fromEdgeIdx, 0)
+
 def AddFromEdgeIdx(builder, fromEdgeIdx):
-    return TurnCostAddFromEdgeIdx(builder, fromEdgeIdx)
-def TurnCostAddToEdgeIdx(builder, toEdgeIdx): builder.PrependInt32Slot(1, toEdgeIdx, 0)
+    TurnCostAddFromEdgeIdx(builder, fromEdgeIdx)
+
+def TurnCostAddToEdgeIdx(builder, toEdgeIdx):
+    builder.PrependInt32Slot(1, toEdgeIdx, 0)
+
 def AddToEdgeIdx(builder, toEdgeIdx):
-    return TurnCostAddToEdgeIdx(builder, toEdgeIdx)
-def TurnCostAddPenaltySeconds(builder, penaltySeconds): builder.PrependFloat32Slot(2, penaltySeconds, 0.0)
+    TurnCostAddToEdgeIdx(builder, toEdgeIdx)
+
+def TurnCostAddPenaltySeconds(builder, penaltySeconds):
+    builder.PrependFloat32Slot(2, penaltySeconds, 0.0)
+
 def AddPenaltySeconds(builder, penaltySeconds):
-    return TurnCostAddPenaltySeconds(builder, penaltySeconds)
-def TurnCostEnd(builder): return builder.EndObject()
+    TurnCostAddPenaltySeconds(builder, penaltySeconds)
+
+def TurnCostEnd(builder):
+    return builder.EndObject()
+
 def End(builder):
     return TurnCostEnd(builder)

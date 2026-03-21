@@ -75,21 +75,54 @@ class IdMapping(object):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         return o == 0
 
-def IdMappingStart(builder): builder.StartObject(2)
+def IdMappingStart(builder):
+    builder.StartObject(2)
+
 def Start(builder):
-    return IdMappingStart(builder)
-def IdMappingAddExternalIds(builder, externalIds): builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(externalIds), 0)
+    IdMappingStart(builder)
+
+def IdMappingAddExternalIds(builder, externalIds):
+    builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(externalIds), 0)
+
 def AddExternalIds(builder, externalIds):
-    return IdMappingAddExternalIds(builder, externalIds)
-def IdMappingStartExternalIdsVector(builder, numElems): return builder.StartVector(8, numElems, 8)
+    IdMappingAddExternalIds(builder, externalIds)
+
+def IdMappingStartExternalIdsVector(builder, numElems):
+    return builder.StartVector(8, numElems, 8)
+
 def StartExternalIdsVector(builder, numElems):
     return IdMappingStartExternalIdsVector(builder, numElems)
-def IdMappingAddExternalStringIds(builder, externalStringIds): builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(externalStringIds), 0)
+
+def IdMappingCreateExternalIdsVector(builder, data):
+    data = list(data)
+    builder.StartVector(8, len(data), 8)
+    for item in reversed(data):
+        builder.PrependInt64(item)
+    return builder.EndVector()
+
+def CreateExternalIdsVector(builder, data):
+    IdMappingCreateExternalIdsVector(builder, data)
+
+def IdMappingAddExternalStringIds(builder, externalStringIds):
+    builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(externalStringIds), 0)
+
 def AddExternalStringIds(builder, externalStringIds):
-    return IdMappingAddExternalStringIds(builder, externalStringIds)
-def IdMappingStartExternalStringIdsVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    IdMappingAddExternalStringIds(builder, externalStringIds)
+
+def IdMappingStartExternalStringIdsVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartExternalStringIdsVector(builder, numElems):
     return IdMappingStartExternalStringIdsVector(builder, numElems)
-def IdMappingEnd(builder): return builder.EndObject()
+
+def IdMappingCreateExternalStringIdsVector(builder, data):
+    return builder.CreateVectorOfTables(data)
+
+def CreateExternalStringIdsVector(builder, data):
+    IdMappingCreateExternalStringIdsVector(builder, data)
+
+def IdMappingEnd(builder):
+    return builder.EndObject()
+
 def End(builder):
     return IdMappingEnd(builder)

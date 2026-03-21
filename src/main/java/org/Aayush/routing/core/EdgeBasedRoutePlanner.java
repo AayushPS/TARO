@@ -176,8 +176,9 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         }
 
         if (bestGoalLabelId != NO_LABEL) {
-            int[] path = buildNodePath(edgeGraph, labelStore, sourceNodeId, bestGoalLabelId);
-            return new InternalRoutePlan(true, bestGoalCost, bestGoalArrival, settledStates, path);
+            int[] edgePath = buildEdgePath(labelStore, bestGoalLabelId);
+            int[] nodePath = buildNodePath(edgeGraph, sourceNodeId, edgePath);
+            return new InternalRoutePlan(true, bestGoalCost, bestGoalArrival, settledStates, nodePath, edgePath);
         }
         return InternalRoutePlan.unreachable(departureTicks, settledStates);
     }
@@ -266,12 +267,7 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
         terminationPolicy.shouldTerminate(Float.POSITIVE_INFINITY, priority);
     }
 
-    private static int[] buildNodePath(
-            EdgeGraph edgeGraph,
-            LabelStore labelStore,
-            int sourceNodeId,
-            int terminalLabelId
-    ) {
+    private static int[] buildEdgePath(LabelStore labelStore, int terminalLabelId) {
         IntArrayList edgePathReversed = new IntArrayList();
         int cursor = terminalLabelId;
         while (cursor != NO_LABEL) {
@@ -279,14 +275,22 @@ final class EdgeBasedRoutePlanner implements RoutePlanner {
             cursor = labelStore.predecessorLabelId(cursor);
         }
 
-        int pathNodeCount = edgePathReversed.size() + 1;
-        int[] nodePath = new int[pathNodeCount];
-        nodePath[0] = sourceNodeId;
+        int[] edgePath = new int[edgePathReversed.size()];
+        for (int i = edgePathReversed.size() - 1, writeIndex = 0; i >= 0; i--, writeIndex++) {
+            edgePath[writeIndex] = edgePathReversed.getInt(i);
+        }
+        return edgePath;
+    }
 
-        int nodeIndex = 1;
-        for (int i = edgePathReversed.size() - 1; i >= 0; i--) {
-            int edgeId = edgePathReversed.getInt(i);
-            nodePath[nodeIndex++] = edgeGraph.getEdgeDestination(edgeId);
+    private static int[] buildNodePath(
+            EdgeGraph edgeGraph,
+            int sourceNodeId,
+            int[] edgePath
+    ) {
+        int[] nodePath = new int[edgePath.length + 1];
+        nodePath[0] = sourceNodeId;
+        for (int i = 0; i < edgePath.length; i++) {
+            nodePath[i + 1] = edgeGraph.getEdgeDestination(edgePath[i]);
         }
         return nodePath;
     }

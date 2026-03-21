@@ -6,6 +6,7 @@ SCHEMA="${ROOT_DIR}/src/main/resources/flatbuffers/taro_model.fbs"
 JAVA_OUT_TMP="$(mktemp -d)"
 PY_OUT="${ROOT_DIR}/src/main/resources/flatbuffers"
 JAVA_OUT_FINAL="${ROOT_DIR}/src/main/java/org/Aayush/serialization/flatbuffers"
+JAVA_RUNTIME_VALIDATE_METHOD="FLATBUFFERS_25_2_10"
 
 if ! command -v flatc >/dev/null 2>&1; then
   echo "flatc not found. Please install FlatBuffers compiler." >&2
@@ -37,6 +38,7 @@ for f in "${taro_java_dir}"/*.java; do
   sed \
     -e 's/^package taro\.model;/package org.Aayush.serialization.flatbuffers.taro.model;/' \
     -e 's/\btaro\.model\./org.Aayush.serialization.flatbuffers.taro.model./g' \
+    -e "s/Constants\\.FLATBUFFERS_[0-9_]*()/Constants.${JAVA_RUNTIME_VALIDATE_METHOD}()/g" \
     "$f" > "${JAVA_OUT_FINAL}/taro/model/$(basename "$f")"
 done
 

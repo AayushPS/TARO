@@ -89,24 +89,64 @@ class Landmark(object):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(8))
         return o == 0
 
-def LandmarkStart(builder): builder.StartObject(3)
+def LandmarkStart(builder):
+    builder.StartObject(3)
+
 def Start(builder):
-    return LandmarkStart(builder)
-def LandmarkAddNodeIdx(builder, nodeIdx): builder.PrependInt32Slot(0, nodeIdx, 0)
+    LandmarkStart(builder)
+
+def LandmarkAddNodeIdx(builder, nodeIdx):
+    builder.PrependInt32Slot(0, nodeIdx, 0)
+
 def AddNodeIdx(builder, nodeIdx):
-    return LandmarkAddNodeIdx(builder, nodeIdx)
-def LandmarkAddForwardDistances(builder, forwardDistances): builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(forwardDistances), 0)
+    LandmarkAddNodeIdx(builder, nodeIdx)
+
+def LandmarkAddForwardDistances(builder, forwardDistances):
+    builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(forwardDistances), 0)
+
 def AddForwardDistances(builder, forwardDistances):
-    return LandmarkAddForwardDistances(builder, forwardDistances)
-def LandmarkStartForwardDistancesVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    LandmarkAddForwardDistances(builder, forwardDistances)
+
+def LandmarkStartForwardDistancesVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartForwardDistancesVector(builder, numElems):
     return LandmarkStartForwardDistancesVector(builder, numElems)
-def LandmarkAddBackwardDistances(builder, backwardDistances): builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(backwardDistances), 0)
+
+def LandmarkCreateForwardDistancesVector(builder, data):
+    data = list(data)
+    builder.StartVector(4, len(data), 4)
+    for item in reversed(data):
+        builder.PrependFloat32(item)
+    return builder.EndVector()
+
+def CreateForwardDistancesVector(builder, data):
+    LandmarkCreateForwardDistancesVector(builder, data)
+
+def LandmarkAddBackwardDistances(builder, backwardDistances):
+    builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(backwardDistances), 0)
+
 def AddBackwardDistances(builder, backwardDistances):
-    return LandmarkAddBackwardDistances(builder, backwardDistances)
-def LandmarkStartBackwardDistancesVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    LandmarkAddBackwardDistances(builder, backwardDistances)
+
+def LandmarkStartBackwardDistancesVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartBackwardDistancesVector(builder, numElems):
     return LandmarkStartBackwardDistancesVector(builder, numElems)
-def LandmarkEnd(builder): return builder.EndObject()
+
+def LandmarkCreateBackwardDistancesVector(builder, data):
+    data = list(data)
+    builder.StartVector(4, len(data), 4)
+    for item in reversed(data):
+        builder.PrependFloat32(item)
+    return builder.EndVector()
+
+def CreateBackwardDistancesVector(builder, data):
+    LandmarkCreateBackwardDistancesVector(builder, data)
+
+def LandmarkEnd(builder):
+    return builder.EndObject()
+
 def End(builder):
     return LandmarkEnd(builder)

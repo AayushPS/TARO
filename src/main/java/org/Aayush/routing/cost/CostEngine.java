@@ -133,6 +133,20 @@ public final class CostEngine {
     }
 
     /**
+     * Exposes the live-overlay contract used by this cost engine.
+     */
+    public LiveOverlay liveOverlay() {
+        return liveOverlay;
+    }
+
+    /**
+     * Exposes the optional turn-cost map bound to this cost engine.
+     */
+    public TurnCostMap turnCostMap() {
+        return turnCostMap;
+    }
+
+    /**
      * Convenience overload with explicit temporal context and no predecessor transition.
      */
     public float computeEdgeCost(

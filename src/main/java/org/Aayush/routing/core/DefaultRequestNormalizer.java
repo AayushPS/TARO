@@ -7,7 +7,8 @@ import org.Aayush.routing.execution.ResolvedExecutionProfileContext;
 import java.util.Objects;
 
 /**
- * Default request normalizer that binds request payloads to startup-selected execution mode.
+ * Default request normalizer that binds request payloads either to a startup-selected
+ * execution profile or to the legacy per-request selectors when no startup profile is provided.
  */
 public final class DefaultRequestNormalizer implements RequestNormalizer {
     /**
@@ -20,23 +21,23 @@ public final class DefaultRequestNormalizer implements RequestNormalizer {
         }
 
         Context nonNullContext = Objects.requireNonNull(context, "context");
-        validateExecutionHints(
-                request.getAlgorithm(),
-                request.getHeuristicType(),
-                nonNullContext.getResolvedExecutionProfileContext()
-        );
-
         AddressingTraitEngine.RouteResolution addressing = nonNullContext.getAddressingTraitEngine().resolveRoute(
                 request,
                 addressingContext(nonNullContext)
         );
         ResolvedExecutionProfileContext executionProfileContext = nonNullContext.getResolvedExecutionProfileContext();
+        RoutingAlgorithm algorithm = resolveAlgorithm(request.getAlgorithm(), executionProfileContext);
+        HeuristicType heuristicType = resolveHeuristicType(
+                request.getHeuristicType(),
+                algorithm,
+                executionProfileContext
+        );
         InternalRouteRequest internalRequest = new InternalRouteRequest(
                 addressing.sourceNodeId(),
                 addressing.targetNodeId(),
                 request.getDepartureTicks(),
-                executionProfileContext.getAlgorithm(),
-                executionProfileContext.getHeuristicType(),
+                algorithm,
+                heuristicType,
                 nonNullContext.getResolvedTemporalContext(),
                 nonNullContext.getResolvedTransitionContext()
         );
@@ -59,23 +60,23 @@ public final class DefaultRequestNormalizer implements RequestNormalizer {
         }
 
         Context nonNullContext = Objects.requireNonNull(context, "context");
-        validateExecutionHints(
-                request.getAlgorithm(),
-                request.getHeuristicType(),
-                nonNullContext.getResolvedExecutionProfileContext()
-        );
-
         AddressingTraitEngine.MatrixResolution addressing = nonNullContext.getAddressingTraitEngine().resolveMatrix(
                 request,
                 addressingContext(nonNullContext)
         );
         ResolvedExecutionProfileContext executionProfileContext = nonNullContext.getResolvedExecutionProfileContext();
+        RoutingAlgorithm algorithm = resolveAlgorithm(request.getAlgorithm(), executionProfileContext);
+        HeuristicType heuristicType = resolveHeuristicType(
+                request.getHeuristicType(),
+                algorithm,
+                executionProfileContext
+        );
         InternalMatrixRequest internalRequest = new InternalMatrixRequest(
                 addressing.sourceNodeIds(),
                 addressing.targetNodeIds(),
                 request.getDepartureTicks(),
-                executionProfileContext.getAlgorithm(),
-                executionProfileContext.getHeuristicType(),
+                algorithm,
+                heuristicType,
                 nonNullContext.getResolvedTemporalContext(),
                 nonNullContext.getResolvedTransitionContext()
         );
@@ -120,5 +121,46 @@ public final class DefaultRequestNormalizer implements RequestNormalizer {
                             + executionProfileContext.getHeuristicType()
             );
         }
+    }
+
+    private RoutingAlgorithm resolveAlgorithm(
+            RoutingAlgorithm requestedAlgorithm,
+            ResolvedExecutionProfileContext executionProfileContext
+    ) {
+        if (usesLegacyRequestSelectors(executionProfileContext)) {
+            if (requestedAlgorithm == null) {
+                throw new RouteCoreException(RouteCore.REASON_ALGORITHM_REQUIRED, "algorithm must be provided");
+            }
+            return requestedAlgorithm;
+        }
+
+        validateExecutionHints(requestedAlgorithm, null, executionProfileContext);
+        return executionProfileContext.getAlgorithm();
+    }
+
+    private HeuristicType resolveHeuristicType(
+            HeuristicType requestedHeuristicType,
+            RoutingAlgorithm algorithm,
+            ResolvedExecutionProfileContext executionProfileContext
+    ) {
+        if (usesLegacyRequestSelectors(executionProfileContext)) {
+            if (requestedHeuristicType == null) {
+                throw new RouteCoreException(RouteCore.REASON_HEURISTIC_REQUIRED, "heuristicType must be provided");
+            }
+            if (algorithm == RoutingAlgorithm.DIJKSTRA && requestedHeuristicType != HeuristicType.NONE) {
+                throw new RouteCoreException(
+                        RouteCore.REASON_DIJKSTRA_HEURISTIC_MISMATCH,
+                        "DIJKSTRA requires heuristicType NONE"
+                );
+            }
+            return requestedHeuristicType;
+        }
+
+        validateExecutionHints(null, requestedHeuristicType, executionProfileContext);
+        return executionProfileContext.getHeuristicType();
+    }
+
+    private boolean usesLegacyRequestSelectors(ResolvedExecutionProfileContext executionProfileContext) {
+        return executionProfileContext.getAlgorithm() == null;
     }
 }

@@ -237,7 +237,7 @@ final class BidirectionalTdAStarPlanner implements RoutePlanner {
                 transitionContext
         );
         int[] nodePath = pathEvaluator.toNodePath(edgeGraph, sourceNodeId, edgePath);
-        return new InternalRoutePlan(true, evaluation.totalCost(), evaluation.arrivalTicks(), settledStates, nodePath);
+        return new InternalRoutePlan(true, evaluation.totalCost(), evaluation.arrivalTicks(), settledStates, nodePath, edgePath);
     }
 
     private int expandBackwardOne(

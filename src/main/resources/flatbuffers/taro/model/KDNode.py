@@ -32,7 +32,7 @@ class KDNode(object):
     # KDNode
     def IsLeaf(self): return self._tab.Get(flatbuffers.number_types.Uint8Flags, self._tab.Pos + flatbuffers.number_types.UOffsetTFlags.py_type(19))
 
-def CreateKDNode(builder, splitValue, leftChild, rightChild, itemStartIndex, itemCount, splitAxis, isLeaf):
+def CreateKdnode(builder, splitValue, leftChild, rightChild, itemStartIndex, itemCount, splitAxis, isLeaf):
     builder.Prep(4, 20)
     builder.PrependUint8(isLeaf)
     builder.PrependUint8(splitAxis)

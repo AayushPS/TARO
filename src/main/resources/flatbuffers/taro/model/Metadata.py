@@ -133,54 +133,104 @@ class Metadata(object):
             return self._tab.String(o + self._tab.Pos)
         return None
 
-def MetadataStart(builder): builder.StartObject(15)
+def MetadataStart(builder):
+    builder.StartObject(15)
+
 def Start(builder):
-    return MetadataStart(builder)
-def MetadataAddVersion(builder, version): builder.PrependInt32Slot(0, version, 0)
+    MetadataStart(builder)
+
+def MetadataAddVersion(builder, version):
+    builder.PrependInt32Slot(0, version, 0)
+
 def AddVersion(builder, version):
-    return MetadataAddVersion(builder, version)
-def MetadataAddCreatedAt(builder, createdAt): builder.PrependInt64Slot(1, createdAt, 0)
+    MetadataAddVersion(builder, version)
+
+def MetadataAddCreatedAt(builder, createdAt):
+    builder.PrependInt64Slot(1, createdAt, 0)
+
 def AddCreatedAt(builder, createdAt):
-    return MetadataAddCreatedAt(builder, createdAt)
-def MetadataAddTraitConfig(builder, traitConfig): builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(traitConfig), 0)
+    MetadataAddCreatedAt(builder, createdAt)
+
+def MetadataAddTraitConfig(builder, traitConfig):
+    builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(traitConfig), 0)
+
 def AddTraitConfig(builder, traitConfig):
-    return MetadataAddTraitConfig(builder, traitConfig)
-def MetadataAddDescription(builder, description): builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(description), 0)
+    MetadataAddTraitConfig(builder, traitConfig)
+
+def MetadataAddDescription(builder, description):
+    builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(description), 0)
+
 def AddDescription(builder, description):
-    return MetadataAddDescription(builder, description)
-def MetadataAddMinLat(builder, minLat): builder.PrependFloat64Slot(4, minLat, 0.0)
+    MetadataAddDescription(builder, description)
+
+def MetadataAddMinLat(builder, minLat):
+    builder.PrependFloat64Slot(4, minLat, 0.0)
+
 def AddMinLat(builder, minLat):
-    return MetadataAddMinLat(builder, minLat)
-def MetadataAddMaxLat(builder, maxLat): builder.PrependFloat64Slot(5, maxLat, 0.0)
+    MetadataAddMinLat(builder, minLat)
+
+def MetadataAddMaxLat(builder, maxLat):
+    builder.PrependFloat64Slot(5, maxLat, 0.0)
+
 def AddMaxLat(builder, maxLat):
-    return MetadataAddMaxLat(builder, maxLat)
-def MetadataAddMinLon(builder, minLon): builder.PrependFloat64Slot(6, minLon, 0.0)
+    MetadataAddMaxLat(builder, maxLat)
+
+def MetadataAddMinLon(builder, minLon):
+    builder.PrependFloat64Slot(6, minLon, 0.0)
+
 def AddMinLon(builder, minLon):
-    return MetadataAddMinLon(builder, minLon)
-def MetadataAddMaxLon(builder, maxLon): builder.PrependFloat64Slot(7, maxLon, 0.0)
+    MetadataAddMinLon(builder, minLon)
+
+def MetadataAddMaxLon(builder, maxLon):
+    builder.PrependFloat64Slot(7, maxLon, 0.0)
+
 def AddMaxLon(builder, maxLon):
-    return MetadataAddMaxLon(builder, maxLon)
-def MetadataAddSchemaVersion(builder, schemaVersion): builder.PrependUint32Slot(8, schemaVersion, 1)
+    MetadataAddMaxLon(builder, maxLon)
+
+def MetadataAddSchemaVersion(builder, schemaVersion):
+    builder.PrependUint32Slot(8, schemaVersion, 1)
+
 def AddSchemaVersion(builder, schemaVersion):
-    return MetadataAddSchemaVersion(builder, schemaVersion)
-def MetadataAddModelVersion(builder, modelVersion): builder.PrependUOffsetTRelativeSlot(9, flatbuffers.number_types.UOffsetTFlags.py_type(modelVersion), 0)
+    MetadataAddSchemaVersion(builder, schemaVersion)
+
+def MetadataAddModelVersion(builder, modelVersion):
+    builder.PrependUOffsetTRelativeSlot(9, flatbuffers.number_types.UOffsetTFlags.py_type(modelVersion), 0)
+
 def AddModelVersion(builder, modelVersion):
-    return MetadataAddModelVersion(builder, modelVersion)
-def MetadataAddTimeUnit(builder, timeUnit): builder.PrependUint8Slot(10, timeUnit, 0)
+    MetadataAddModelVersion(builder, modelVersion)
+
+def MetadataAddTimeUnit(builder, timeUnit):
+    builder.PrependUint8Slot(10, timeUnit, 0)
+
 def AddTimeUnit(builder, timeUnit):
-    return MetadataAddTimeUnit(builder, timeUnit)
-def MetadataAddTickDurationNs(builder, tickDurationNs): builder.PrependUint64Slot(11, tickDurationNs, 1000000000)
+    MetadataAddTimeUnit(builder, timeUnit)
+
+def MetadataAddTickDurationNs(builder, tickDurationNs):
+    builder.PrependUint64Slot(11, tickDurationNs, 1000000000)
+
 def AddTickDurationNs(builder, tickDurationNs):
-    return MetadataAddTickDurationNs(builder, tickDurationNs)
-def MetadataAddProfileTimezone(builder, profileTimezone): builder.PrependUOffsetTRelativeSlot(12, flatbuffers.number_types.UOffsetTFlags.py_type(profileTimezone), 0)
+    MetadataAddTickDurationNs(builder, tickDurationNs)
+
+def MetadataAddProfileTimezone(builder, profileTimezone):
+    builder.PrependUOffsetTRelativeSlot(12, flatbuffers.number_types.UOffsetTFlags.py_type(profileTimezone), 0)
+
 def AddProfileTimezone(builder, profileTimezone):
-    return MetadataAddProfileTimezone(builder, profileTimezone)
-def MetadataAddTraitsHash(builder, traitsHash): builder.PrependUOffsetTRelativeSlot(13, flatbuffers.number_types.UOffsetTFlags.py_type(traitsHash), 0)
+    MetadataAddProfileTimezone(builder, profileTimezone)
+
+def MetadataAddTraitsHash(builder, traitsHash):
+    builder.PrependUOffsetTRelativeSlot(13, flatbuffers.number_types.UOffsetTFlags.py_type(traitsHash), 0)
+
 def AddTraitsHash(builder, traitsHash):
-    return MetadataAddTraitsHash(builder, traitsHash)
-def MetadataAddModelHash(builder, modelHash): builder.PrependUOffsetTRelativeSlot(14, flatbuffers.number_types.UOffsetTFlags.py_type(modelHash), 0)
+    MetadataAddTraitsHash(builder, traitsHash)
+
+def MetadataAddModelHash(builder, modelHash):
+    builder.PrependUOffsetTRelativeSlot(14, flatbuffers.number_types.UOffsetTFlags.py_type(modelHash), 0)
+
 def AddModelHash(builder, modelHash):
-    return MetadataAddModelHash(builder, modelHash)
-def MetadataEnd(builder): return builder.EndObject()
+    MetadataAddModelHash(builder, modelHash)
+
+def MetadataEnd(builder):
+    return builder.EndObject()
+
 def End(builder):
     return MetadataEnd(builder)

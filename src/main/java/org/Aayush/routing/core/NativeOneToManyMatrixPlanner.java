@@ -88,16 +88,22 @@ final class NativeOneToManyMatrixPlanner implements MatrixPlanner {
      */
     @Override
     public MatrixPlan compute(RouteCore routeCore, InternalMatrixRequest request) {
+        return compute(routeCore, request, routeCore.costEngineContract());
+    }
+
+    @Override
+    public MatrixPlan compute(RouteCore routeCore, InternalMatrixRequest request, CostEngine activeCostEngine) {
         Objects.requireNonNull(routeCore, "routeCore");
         Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(activeCostEngine, "activeCostEngine");
 
         if (request.algorithm() == RoutingAlgorithm.DIJKSTRA) {
             if (request.heuristicType() != HeuristicType.NONE) {
-                return compatibilityPlanner.compute(routeCore, request);
+                return compatibilityPlanner.compute(routeCore, request, activeCostEngine);
             }
             return computeNative(
                     routeCore.edgeGraphContract(),
-                    routeCore.costEngineContract(),
+                    activeCostEngine,
                     request,
                     null,
                     NATIVE_IMPLEMENTATION_NOTE
@@ -105,12 +111,12 @@ final class NativeOneToManyMatrixPlanner implements MatrixPlanner {
         }
 
         if (request.algorithm() != RoutingAlgorithm.A_STAR) {
-            return compatibilityPlanner.compute(routeCore, request);
+            return compatibilityPlanner.compute(routeCore, request, activeCostEngine);
         }
 
         MatrixTargetIndex targetIndex = new MatrixTargetIndex(request.targetNodeIds());
         if (targetIndex.uniqueTargetCount() > maxNativeAStarTargets) {
-            return computeBatchedAStarCompatibility(routeCore, request);
+            return computeBatchedAStarCompatibility(routeCore, request, activeCostEngine);
         }
 
         GoalBoundHeuristic[] targetHeuristics = bindTargetHeuristics(
@@ -120,7 +126,7 @@ final class NativeOneToManyMatrixPlanner implements MatrixPlanner {
         );
         return computeNative(
                 routeCore.edgeGraphContract(),
-                routeCore.costEngineContract(),
+                activeCostEngine,
                 request,
                 targetHeuristics,
                 NATIVE_A_STAR_IMPLEMENTATION_NOTE
@@ -212,7 +218,11 @@ final class NativeOneToManyMatrixPlanner implements MatrixPlanner {
     /**
      * Executes A* compatibility planner in bounded target batches.
      */
-    private MatrixPlan computeBatchedAStarCompatibility(RouteCore routeCore, InternalMatrixRequest request) {
+    private MatrixPlan computeBatchedAStarCompatibility(
+            RouteCore routeCore,
+            InternalMatrixRequest request,
+            CostEngine activeCostEngine
+    ) {
         int sourceCount = request.sourceNodeIds().length;
         int targetCount = request.targetNodeIds().length;
 
@@ -242,7 +252,7 @@ final class NativeOneToManyMatrixPlanner implements MatrixPlanner {
                     request.transitionContext()
             );
 
-            MatrixPlan batchPlan = compatibilityPlanner.compute(routeCore, batchRequest);
+            MatrixPlan batchPlan = compatibilityPlanner.compute(routeCore, batchRequest, activeCostEngine);
             copyBatchColumns(batchPlan, start, reachable, totalCosts, arrivalTicks);
 
             MatrixExecutionStats batchStats = batchPlan.executionStats();

@@ -86,24 +86,64 @@ class SpatialIndex(object):
             return self._tab.Get(flatbuffers.number_types.Int32Flags, o + self._tab.Pos)
         return 0
 
-def SpatialIndexStart(builder): builder.StartObject(3)
+def SpatialIndexStart(builder):
+    builder.StartObject(3)
+
 def Start(builder):
-    return SpatialIndexStart(builder)
-def SpatialIndexAddTreeNodes(builder, treeNodes): builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(treeNodes), 0)
+    SpatialIndexStart(builder)
+
+def SpatialIndexAddTreeNodes(builder, treeNodes):
+    builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(treeNodes), 0)
+
 def AddTreeNodes(builder, treeNodes):
-    return SpatialIndexAddTreeNodes(builder, treeNodes)
-def SpatialIndexStartTreeNodesVector(builder, numElems): return builder.StartVector(20, numElems, 4)
+    SpatialIndexAddTreeNodes(builder, treeNodes)
+
+def SpatialIndexStartTreeNodesVector(builder, numElems):
+    return builder.StartVector(20, numElems, 4)
+
 def StartTreeNodesVector(builder, numElems):
     return SpatialIndexStartTreeNodesVector(builder, numElems)
-def SpatialIndexAddLeafItems(builder, leafItems): builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(leafItems), 0)
+
+def SpatialIndexCreateTreeNodesVector(builder, data):
+    data = list(data)
+    builder.StartVector(20, len(data), 4)
+    for item in reversed(data):
+        item.Pack(builder)
+    return builder.EndVector()
+
+def CreateTreeNodesVector(builder, data):
+    SpatialIndexCreateTreeNodesVector(builder, data)
+
+def SpatialIndexAddLeafItems(builder, leafItems):
+    builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(leafItems), 0)
+
 def AddLeafItems(builder, leafItems):
-    return SpatialIndexAddLeafItems(builder, leafItems)
-def SpatialIndexStartLeafItemsVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    SpatialIndexAddLeafItems(builder, leafItems)
+
+def SpatialIndexStartLeafItemsVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartLeafItemsVector(builder, numElems):
     return SpatialIndexStartLeafItemsVector(builder, numElems)
-def SpatialIndexAddRootIndex(builder, rootIndex): builder.PrependInt32Slot(2, rootIndex, 0)
+
+def SpatialIndexCreateLeafItemsVector(builder, data):
+    data = list(data)
+    builder.StartVector(4, len(data), 4)
+    for item in reversed(data):
+        builder.PrependInt32(item)
+    return builder.EndVector()
+
+def CreateLeafItemsVector(builder, data):
+    SpatialIndexCreateLeafItemsVector(builder, data)
+
+def SpatialIndexAddRootIndex(builder, rootIndex):
+    builder.PrependInt32Slot(2, rootIndex, 0)
+
 def AddRootIndex(builder, rootIndex):
-    return SpatialIndexAddRootIndex(builder, rootIndex)
-def SpatialIndexEnd(builder): return builder.EndObject()
+    SpatialIndexAddRootIndex(builder, rootIndex)
+
+def SpatialIndexEnd(builder):
+    return builder.EndObject()
+
 def End(builder):
     return SpatialIndexEnd(builder)

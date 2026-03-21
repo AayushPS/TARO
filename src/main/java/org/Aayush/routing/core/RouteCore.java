@@ -11,6 +11,7 @@ import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.execution.ResolvedExecutionProfileContext;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.heuristic.GoalBoundHeuristic;
+import org.Aayush.routing.heuristic.HeuristicConfigurationException;
 import org.Aayush.routing.heuristic.HeuristicProvider;
 import org.Aayush.routing.heuristic.HeuristicProviderFactory;
 import org.Aayush.routing.heuristic.HeuristicType;
@@ -52,6 +53,7 @@ import org.Aayush.routing.traits.transition.TransitionTraitCatalog;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Main routing orchestration entry point.
@@ -166,6 +168,8 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
     private final TraitBundleTelemetry traitBundleTelemetry;
     private final ResolvedExecutionProfileContext resolvedExecutionProfileContext;
     private final HeuristicProvider boundHeuristicProvider;
+    private final ConcurrentHashMap<HeuristicType, HeuristicProvider> legacyHeuristicProviders =
+            new ConcurrentHashMap<>();
 
     private final ThreadLocal<MatrixExecutionStats> matrixExecutionStats =
             ThreadLocal.withInitial(() -> MatrixExecutionStats.empty(0));
@@ -313,37 +317,42 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
                 traitBundleBinding.getTraitBundleTelemetry(),
                 "traitBundleBinding.traitBundleTelemetry"
         );
-        ExecutionRuntimeBinder activeExecutionRuntimeBinder = executionRuntimeBinder == null
-                ? new DefaultExecutionRuntimeBinder()
-                : executionRuntimeBinder;
-        ExecutionRuntimeBinder.Binding executionBinding;
-        try {
-            executionBinding = activeExecutionRuntimeBinder.bind(ExecutionRuntimeBinder.BindInput.builder()
-                    .executionRuntimeConfig(executionRuntimeConfig)
-                    .executionProfileRegistry(executionProfileRegistry)
-                    .edgeGraph(this.edgeGraph)
-                    .profileStore(this.profileStore)
-                    .costEngine(this.costEngine)
-                    .landmarkStore(this.landmarkStore)
-                    .heuristicProviderFactory(this.heuristicProviderFactory)
-                    .build());
-        } catch (RouteCoreException ex) {
-            throw ex;
-        } catch (RuntimeException ex) {
-            throw new RouteCoreException(
-                    REASON_EXECUTION_PROFILE_INCOMPATIBLE,
-                    "failed to bind execution runtime config: " + ex.getMessage(),
-                    ex
+        if (executionRuntimeConfig == null) {
+            this.resolvedExecutionProfileContext = ResolvedExecutionProfileContext.builder().build();
+            this.boundHeuristicProvider = null;
+        } else {
+            ExecutionRuntimeBinder activeExecutionRuntimeBinder = executionRuntimeBinder == null
+                    ? new DefaultExecutionRuntimeBinder()
+                    : executionRuntimeBinder;
+            ExecutionRuntimeBinder.Binding executionBinding;
+            try {
+                executionBinding = activeExecutionRuntimeBinder.bind(ExecutionRuntimeBinder.BindInput.builder()
+                        .executionRuntimeConfig(executionRuntimeConfig)
+                        .executionProfileRegistry(executionProfileRegistry)
+                        .edgeGraph(this.edgeGraph)
+                        .profileStore(this.profileStore)
+                        .costEngine(this.costEngine)
+                        .landmarkStore(this.landmarkStore)
+                        .heuristicProviderFactory(this.heuristicProviderFactory)
+                        .build());
+            } catch (RouteCoreException ex) {
+                throw ex;
+            } catch (RuntimeException ex) {
+                throw new RouteCoreException(
+                        REASON_EXECUTION_PROFILE_INCOMPATIBLE,
+                        "failed to bind execution runtime config: " + ex.getMessage(),
+                        ex
+                );
+            }
+            this.resolvedExecutionProfileContext = Objects.requireNonNull(
+                    executionBinding.getResolvedExecutionProfileContext(),
+                    "executionBinding.resolvedExecutionProfileContext"
+            );
+            this.boundHeuristicProvider = Objects.requireNonNull(
+                    executionBinding.getHeuristicProvider(),
+                    "executionBinding.heuristicProvider"
             );
         }
-        this.resolvedExecutionProfileContext = Objects.requireNonNull(
-                executionBinding.getResolvedExecutionProfileContext(),
-                "executionBinding.resolvedExecutionProfileContext"
-        );
-        this.boundHeuristicProvider = Objects.requireNonNull(
-                executionBinding.getHeuristicProvider(),
-                "executionBinding.heuristicProvider"
-        );
 
         this.aStarPlanner = aStarPlanner == null
                 ? new BidirectionalTdAStarPlanner(edgeGraph, costEngine)
@@ -359,16 +368,27 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
      */
     @Override
     public RouteResponse route(RouteRequest request) {
+        RequestNormalizer.NormalizedRouteRequest normalized = normalizeRouteRequest(request);
+        InternalRouteRequest internalRequest = normalized.getInternalRequest();
+        InternalRoutePlan plan = computeInternal(internalRequest);
+        return buildRouteResponse(normalized, plan);
+    }
+
+    RequestNormalizer.NormalizedRouteRequest normalizeRouteRequest(RouteRequest request) {
         addressingTelemetry.set(AddressingTelemetry.empty());
         RequestNormalizer.NormalizedRouteRequest normalized = requestNormalizer.normalizeRoute(
                 request,
                 normalizationContext()
         );
         addressingTelemetry.set(normalized.getAddressingTelemetry());
+        return normalized;
+    }
 
+    RouteResponse buildRouteResponse(
+            RequestNormalizer.NormalizedRouteRequest normalized,
+            InternalRoutePlan plan
+    ) {
         InternalRouteRequest internalRequest = normalized.getInternalRequest();
-        InternalRoutePlan plan = computeInternal(internalRequest);
-
         RouteResponse.RouteResponseBuilder builder = RouteResponse.builder()
                 .reachable(plan.reachable())
                 .departureTicks(internalRequest.departureTicks())
@@ -399,27 +419,29 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
     @Override
     public MatrixResponse matrix(MatrixRequest request) {
         matrixExecutionStats.set(MatrixExecutionStats.empty(0));
+        RequestNormalizer.NormalizedMatrixRequest normalized = normalizeMatrixRequest(request);
+        MatrixPlan matrixPlan = computeMatrixInternal(normalized.getInternalRequest());
+        matrixExecutionStats.set(matrixPlan.executionStats());
+        return RouteCoreMatrixSupport.buildResponse(normalized, matrixPlan);
+    }
+
+    RequestNormalizer.NormalizedMatrixRequest normalizeMatrixRequest(MatrixRequest request) {
         addressingTelemetry.set(AddressingTelemetry.empty());
         RequestNormalizer.NormalizedMatrixRequest normalized = requestNormalizer.normalizeMatrix(
                 request,
                 normalizationContext()
         );
         addressingTelemetry.set(normalized.getAddressingTelemetry());
+        return normalized;
+    }
 
-        InternalMatrixRequest internalRequest = normalized.getInternalRequest();
+    MatrixPlan computeMatrixInternal(InternalMatrixRequest request) {
+        return computeMatrixInternal(request, costEngine);
+    }
+
+    MatrixPlan computeMatrixInternal(InternalMatrixRequest request, CostEngine activeCostEngine) {
         try {
-            MatrixPlan matrixPlan = matrixPlanner.compute(this, internalRequest);
-            matrixExecutionStats.set(matrixPlan.executionStats());
-            return MatrixResponse.builder()
-                    .sourceExternalIds(normalized.getSourceExternalIds())
-                    .targetExternalIds(normalized.getTargetExternalIds())
-                    .reachable(matrixPlan.reachable())
-                    .totalCosts(matrixPlan.totalCosts())
-                    .arrivalTicks(matrixPlan.arrivalTicks())
-                    .algorithm(internalRequest.algorithm())
-                    .heuristicType(internalRequest.heuristicType())
-                    .implementationNote(matrixPlan.implementationNote())
-                    .build();
+            return matrixPlanner.compute(this, request, activeCostEngine);
         } catch (TemporalContextResolver.TemporalResolutionException ex) {
             throw new RouteCoreException(
                     REASON_TEMPORAL_RESOLUTION_FAILURE,
@@ -445,26 +467,8 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
                     ex
             );
         } catch (RouteCoreException ex) {
-            throw remapMatrixCompatibilityException(ex);
+            throw RouteCoreMatrixSupport.remapCompatibilityException(ex);
         }
-    }
-
-    private RouteCoreException remapMatrixCompatibilityException(RouteCoreException ex) {
-        if (REASON_SEARCH_BUDGET_EXCEEDED.equals(ex.getReasonCode())) {
-            return new RouteCoreException(
-                    REASON_MATRIX_SEARCH_BUDGET_EXCEEDED,
-                    ex.getMessage(),
-                    ex
-            );
-        }
-        if (REASON_NUMERIC_SAFETY_BREACH.equals(ex.getReasonCode())) {
-            return new RouteCoreException(
-                    REASON_MATRIX_NUMERIC_SAFETY_BREACH,
-                    ex.getMessage(),
-                    ex
-            );
-        }
-        return ex;
     }
 
     /**
@@ -518,19 +522,30 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
     }
 
     /**
+     * Exposes the live-overlay contract bound to this runtime snapshot.
+     */
+    public org.Aayush.routing.overlay.LiveOverlay liveOverlayContract() {
+        return costEngine.liveOverlay();
+    }
+
+    /**
      * Computes one normalized internal request using the algorithm selected in the request.
      *
      * <p>All planner-specific guardrail exceptions are normalized to route-core reason codes
      * to keep caller error handling stable even when planner internals evolve.</p>
      */
     InternalRoutePlan computeInternal(InternalRouteRequest request) {
+        return computeInternal(request, costEngine);
+    }
+
+    InternalRoutePlan computeInternal(InternalRouteRequest request, CostEngine activeCostEngine) {
         GoalBoundHeuristic heuristic = resolveGoalBoundHeuristic(request);
         RoutePlanner planner = switch (request.algorithm()) {
             case DIJKSTRA -> dijkstraPlanner;
             case A_STAR -> aStarPlanner;
         };
         try {
-            return planner.compute(edgeGraph, costEngine, heuristic, request);
+            return planner.compute(edgeGraph, activeCostEngine, heuristic, request);
         } catch (TemporalContextResolver.TemporalResolutionException ex) {
             throw new RouteCoreException(
                     REASON_TEMPORAL_RESOLUTION_FAILURE,
@@ -595,6 +610,9 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
         if (heuristicType == HeuristicType.NONE) {
             return ZERO_HEURISTIC;
         }
+        if (usesLegacyRequestExecutionSelectors()) {
+            return bindLegacyGoalHeuristic(heuristicType, targetNodeId);
+        }
         if (heuristicType != resolvedExecutionProfileContext.getHeuristicType()) {
             throw new RouteCoreException(
                     REASON_EXECUTION_PROFILE_INCOMPATIBLE,
@@ -609,6 +627,52 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
             throw new RouteCoreException(
                     REASON_HEURISTIC_BIND_FAILED,
                     "failed to bind heuristic " + heuristicType + " to goal node " + targetNodeId,
+                    ex
+            );
+        }
+    }
+
+    private boolean usesLegacyRequestExecutionSelectors() {
+        return resolvedExecutionProfileContext.getAlgorithm() == null;
+    }
+
+    private GoalBoundHeuristic bindLegacyGoalHeuristic(HeuristicType heuristicType, int targetNodeId) {
+        HeuristicProvider provider = legacyHeuristicProviders.get(heuristicType);
+        if (provider == null) {
+            HeuristicProvider candidate = createLegacyHeuristicProvider(heuristicType);
+            HeuristicProvider raced = legacyHeuristicProviders.putIfAbsent(heuristicType, candidate);
+            provider = raced == null ? candidate : raced;
+        }
+        try {
+            return provider.bindGoal(targetNodeId);
+        } catch (RuntimeException ex) {
+            throw new RouteCoreException(
+                    REASON_HEURISTIC_BIND_FAILED,
+                    "failed to bind heuristic " + heuristicType + " to goal node " + targetNodeId,
+                    ex
+            );
+        }
+    }
+
+    private HeuristicProvider createLegacyHeuristicProvider(HeuristicType heuristicType) {
+        try {
+            return heuristicProviderFactory.create(
+                    heuristicType,
+                    edgeGraph,
+                    profileStore,
+                    costEngine,
+                    landmarkStore
+            );
+        } catch (HeuristicConfigurationException ex) {
+            throw new RouteCoreException(
+                    REASON_HEURISTIC_CONFIGURATION_FAILED,
+                    "failed to initialize heuristic " + heuristicType + ": " + ex.getMessage(),
+                    ex
+            );
+        } catch (RuntimeException ex) {
+            throw new RouteCoreException(
+                    REASON_HEURISTIC_CONFIGURATION_FAILED,
+                    "failed to initialize heuristic " + heuristicType + ": " + ex.getMessage(),
                     ex
             );
         }

@@ -71,22 +71,31 @@ class ExecutionProfileRouteCoreTest {
     }
 
     @Test
-    @DisplayName("Execution runtime config is required at construction")
-    void testExecutionRuntimeConfigRequiredAtConstruction() {
+    @DisplayName("Legacy per-request execution selectors remain supported without startup execution profile")
+    void testLegacyPerRequestExecutionSelectorsRemainSupported() {
         RoutingFixtureFactory.Fixture fixture = createFixture();
-        RouteCoreException ex = assertThrows(
-                RouteCoreException.class,
-                () -> RouteCore.builder()
-                        .edgeGraph(fixture.edgeGraph())
-                        .profileStore(fixture.profileStore())
-                        .costEngine(fixture.costEngine())
-                        .nodeIdMapper(fixture.nodeIdMapper())
-                        .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
-                        .transitionRuntimeConfig(TransitionRuntimeConfig.edgeBased())
-                        .addressingRuntimeConfig(AddressingRuntimeConfig.defaultRuntime())
+        RouteCore core = RouteCore.builder()
+                .edgeGraph(fixture.edgeGraph())
+                .profileStore(fixture.profileStore())
+                .costEngine(fixture.costEngine())
+                .nodeIdMapper(fixture.nodeIdMapper())
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(TransitionRuntimeConfig.edgeBased())
+                .addressingRuntimeConfig(AddressingRuntimeConfig.defaultRuntime())
+                .build();
+
+        RouteResponse response = core.route(RouteRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .algorithm(RoutingAlgorithm.A_STAR)
+                .heuristicType(HeuristicType.NONE)
                         .build()
         );
-        assertEquals(RouteCore.REASON_EXECUTION_CONFIG_REQUIRED, ex.getReasonCode());
+
+        assertTrue(response.isReachable());
+        assertEquals(RoutingAlgorithm.A_STAR, response.getAlgorithm());
+        assertEquals(HeuristicType.NONE, response.getHeuristicType());
     }
 
     private RouteCore createCore(ExecutionRuntimeConfig executionRuntimeConfig) {

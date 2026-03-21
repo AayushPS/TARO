@@ -8,6 +8,7 @@ import lombok.experimental.Accessors;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -224,6 +225,36 @@ public final class LiveOverlay {
      */
     public float livePenaltyMultiplier(int edgeId, long nowTicks) {
         return lookup(edgeId, nowTicks).livePenaltyMultiplier();
+    }
+
+    /**
+     * Returns a deterministic snapshot of active updates.
+     */
+    public List<LiveUpdate> snapshotActiveUpdates(long nowTicks) {
+        ArrayList<LiveUpdate> snapshot = new ArrayList<>();
+        writeLock.lock();
+        try {
+            for (Map.Entry<Integer, Entry> entry : entries.entrySet()) {
+                Entry value = entry.getValue();
+                if (value.validUntilTicks <= nowTicks) {
+                    continue;
+                }
+                snapshot.add(LiveUpdate.of(entry.getKey(), value.speedFactor, value.validUntilTicks));
+            }
+        } finally {
+            writeLock.unlock();
+        }
+        snapshot.sort((lhs, rhs) -> Integer.compare(lhs.edgeId(), rhs.edgeId()));
+        return List.copyOf(snapshot);
+    }
+
+    /**
+     * Creates a new overlay containing only the updates active at {@code nowTicks}.
+     */
+    public LiveOverlay copyActiveSnapshot(long nowTicks) {
+        LiveOverlay copy = new LiveOverlay(maxLiveOverrides, capacityPolicy, writeCleanupBudget, readCleanupEnabled);
+        copy.applyBatch(snapshotActiveUpdates(nowTicks), nowTicks);
+        return copy;
     }
 
     /**

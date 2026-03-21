@@ -1,5 +1,7 @@
 package org.Aayush.routing.core;
 
+import org.Aayush.routing.cost.CostEngine;
+
 /**
  * Pairwise matrix compatibility planner.
  *
@@ -16,6 +18,11 @@ final class TemporaryMatrixPlanner implements MatrixPlanner {
      */
     @Override
     public MatrixPlan compute(RouteCore routeCore, InternalMatrixRequest request) {
+        return compute(routeCore, request, routeCore.costEngineContract());
+    }
+
+    @Override
+    public MatrixPlan compute(RouteCore routeCore, InternalMatrixRequest request, CostEngine activeCostEngine) {
         int sourceCount = request.sourceNodeIds().length;
         int targetCount = request.targetNodeIds().length;
 
@@ -45,7 +52,7 @@ final class TemporaryMatrixPlanner implements MatrixPlanner {
                         request.transitionContext()
                 );
 
-                InternalRoutePlan plan = routeCore.computeInternal(routeRequest);
+                InternalRoutePlan plan = routeCore.computeInternal(routeRequest, activeCostEngine);
                 reachable[i][j] = plan.reachable();
                 costs[i][j] = plan.totalCost();
                 arrivals[i][j] = plan.arrivalTicks();

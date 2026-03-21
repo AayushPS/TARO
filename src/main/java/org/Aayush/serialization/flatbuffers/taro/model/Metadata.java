@@ -2,14 +2,25 @@
 
 package org.Aayush.serialization.flatbuffers.taro.model;
 
-import java.nio.*;
-import java.lang.*;
-import java.util.*;
-import com.google.flatbuffers.*;
+import com.google.flatbuffers.BaseVector;
+import com.google.flatbuffers.BooleanVector;
+import com.google.flatbuffers.ByteVector;
+import com.google.flatbuffers.Constants;
+import com.google.flatbuffers.DoubleVector;
+import com.google.flatbuffers.FlatBufferBuilder;
+import com.google.flatbuffers.FloatVector;
+import com.google.flatbuffers.IntVector;
+import com.google.flatbuffers.LongVector;
+import com.google.flatbuffers.ShortVector;
+import com.google.flatbuffers.StringVector;
+import com.google.flatbuffers.Struct;
+import com.google.flatbuffers.UnionVector;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 @SuppressWarnings("unused")
-public final class Metadata extends Table {
-  public static void ValidateVersion() { Constants.FLATBUFFERS_2_0_8(); }
+public final class Metadata extends com.google.flatbuffers.Table {
+  public static void ValidateVersion() { Constants.FLATBUFFERS_25_2_10(); }
   public static Metadata getRootAsMetadata(ByteBuffer _bb) { return getRootAsMetadata(_bb, new Metadata()); }
   public static Metadata getRootAsMetadata(ByteBuffer _bb, Metadata obj) { _bb.order(ByteOrder.LITTLE_ENDIAN); return (obj.__assign(_bb.getInt(_bb.position()) + _bb.position(), _bb)); }
   public void __init(int _i, ByteBuffer _bb) { __reset(_i, _bb); }
@@ -106,4 +117,3 @@ public final class Metadata extends Table {
     public Metadata get(Metadata obj, int j) {  return obj.__assign(__indirect(__element(j), bb), bb); }
   }
 }
-

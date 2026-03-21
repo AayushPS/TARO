@@ -1,7 +1,7 @@
 # TARO v13 Architecture Plan: Topology Evolution, Failure Quarantine, and Atomic Reload
 
-Status: Proposed  
-Date: 2026-03-20  
+Status: Proposed with 2026-03-21 hardening updates  
+Date: 2026-03-21  
 Companion: `docs/taro_v12_architecture_plan.md`  
 Scope: Infrequent topology additions/removals, transient failure handling, and reload-safe future-aware serving
 
@@ -129,6 +129,11 @@ For node failure:
 
 This path is operationally fast and avoids rebuilding the model immediately.
 
+Hardening note:
+- bind `FailureQuarantine` to a topology-scoped incident-edge index
+- precompute blocked-edge expansion inside the quarantine snapshot
+- allow scenario materialization to read the pre-expanded live updates without rescanning the full graph on each request
+
 ## 6.2 Slow Path: Structural Rebuild and Reload
 
 Purpose:
@@ -141,6 +146,10 @@ Mechanism:
 - atomically swap in the new runtime snapshot.
 
 This path is appropriate because the user has stated these changes are **not frequent**.
+
+Reload continuity note:
+- active live-overlay state should still be preserved where compatible
+- active quarantines should also be rebound onto the candidate snapshot by stable source node/edge ids so transient suppression does not disappear across atomic reload
 
 ## 7. v13 Runtime Additions
 
@@ -167,6 +176,7 @@ Capabilities:
 Recommended scope:
 - edge failures use existing overlay semantics where possible
 - node failures use a normalized incident-edge suppression view
+- snapshot materialization should prefer topology-bound pre-expansion over request-time graph scans
 
 ## 7.2 `StructuralChangeSet`
 
@@ -215,7 +225,7 @@ Operational note:
 
 1. Add node to topology inputs and coordinates.
 2. Add connecting edges and turn relationships.
-3. Rebuild spatial artifacts.
+3. Rebuild spatial artifacts with a deterministic balanced KD layout when coordinates are enabled.
 4. Rebuild heuristic artifacts that depend on topology size and connectivity.
 5. Revalidate and reload.
 
@@ -258,6 +268,7 @@ Main contributors:
    - edge additions/removals may change legal transitions.
 3. **Spatial artifact cost**
    - node additions/removals require spatial index rebuild when coordinates are enabled.
+   - rebuild quality matters: a degenerate single-leaf rebuild destroys the sublinear nearest-node behavior that Stage 8 depends on.
 4. **Heuristic artifact cost**
    - landmark or other topology-derived lower bounds must be regenerated.
 5. **Validation cost**
@@ -343,10 +354,10 @@ v13 should add:
 v13 reload flow:
 
 1. Build candidate model from base inputs plus accepted structural changes.
-2. Materialize runtime stores off the active path.
+2. Materialize runtime stores off the active path, including deterministic topology index layout and balanced spatial artifacts.
 3. Run validation gates.
 4. If validation fails, keep current runtime.
-5. If validation passes, atomically publish the new runtime.
+5. If validation passes, atomically publish the new runtime after rebinding any still-active quarantines from stable source ids onto the candidate runtime.
 6. Start serving new queries on the new topology version.
 7. Handle old retained result sets according to compatibility policy.
 

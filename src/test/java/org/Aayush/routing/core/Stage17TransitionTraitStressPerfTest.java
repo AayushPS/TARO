@@ -22,6 +22,7 @@ import org.Aayush.serialization.flatbuffers.taro.model.TemporalProfile;
 import org.Aayush.serialization.flatbuffers.taro.model.TimeUnit;
 import org.Aayush.serialization.flatbuffers.taro.model.TurnCost;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -41,6 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("perf")
 @DisplayName("Stage 17 Transition Trait Stress and Perf Tests")
 class Stage17TransitionTraitStressPerfTest {
     private static final int ALL_DAYS_MASK = 0x7F;

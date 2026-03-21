@@ -76,24 +76,54 @@ class TemporalProfile(object):
             return self._tab.Get(flatbuffers.number_types.Float32Flags, o + self._tab.Pos)
         return 1.0
 
-def TemporalProfileStart(builder): builder.StartObject(4)
+def TemporalProfileStart(builder):
+    builder.StartObject(4)
+
 def Start(builder):
-    return TemporalProfileStart(builder)
-def TemporalProfileAddProfileId(builder, profileId): builder.PrependUint16Slot(0, profileId, 0)
+    TemporalProfileStart(builder)
+
+def TemporalProfileAddProfileId(builder, profileId):
+    builder.PrependUint16Slot(0, profileId, 0)
+
 def AddProfileId(builder, profileId):
-    return TemporalProfileAddProfileId(builder, profileId)
-def TemporalProfileAddDayMask(builder, dayMask): builder.PrependUint8Slot(1, dayMask, 0)
+    TemporalProfileAddProfileId(builder, profileId)
+
+def TemporalProfileAddDayMask(builder, dayMask):
+    builder.PrependUint8Slot(1, dayMask, 0)
+
 def AddDayMask(builder, dayMask):
-    return TemporalProfileAddDayMask(builder, dayMask)
-def TemporalProfileAddBuckets(builder, buckets): builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(buckets), 0)
+    TemporalProfileAddDayMask(builder, dayMask)
+
+def TemporalProfileAddBuckets(builder, buckets):
+    builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(buckets), 0)
+
 def AddBuckets(builder, buckets):
-    return TemporalProfileAddBuckets(builder, buckets)
-def TemporalProfileStartBucketsVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    TemporalProfileAddBuckets(builder, buckets)
+
+def TemporalProfileStartBucketsVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartBucketsVector(builder, numElems):
     return TemporalProfileStartBucketsVector(builder, numElems)
-def TemporalProfileAddMultiplier(builder, multiplier): builder.PrependFloat32Slot(3, multiplier, 1.0)
+
+def TemporalProfileCreateBucketsVector(builder, data):
+    data = list(data)
+    builder.StartVector(4, len(data), 4)
+    for item in reversed(data):
+        builder.PrependFloat32(item)
+    return builder.EndVector()
+
+def CreateBucketsVector(builder, data):
+    TemporalProfileCreateBucketsVector(builder, data)
+
+def TemporalProfileAddMultiplier(builder, multiplier):
+    builder.PrependFloat32Slot(3, multiplier, 1.0)
+
 def AddMultiplier(builder, multiplier):
-    return TemporalProfileAddMultiplier(builder, multiplier)
-def TemporalProfileEnd(builder): return builder.EndObject()
+    TemporalProfileAddMultiplier(builder, multiplier)
+
+def TemporalProfileEnd(builder):
+    return builder.EndObject()
+
 def End(builder):
     return TemporalProfileEnd(builder)

@@ -1,5 +1,5 @@
 import unittest
-from Utils.IDMapper import IDMapper
+from src.main.python.Utils import IDMapper
 
 
 class TestIDMapper(unittest.TestCase):

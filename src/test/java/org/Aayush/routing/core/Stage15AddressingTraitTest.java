@@ -243,7 +243,7 @@ class Stage15AddressingTraitTest {
                                 .build())
                         .build()
         );
-        assertEquals(RouteCore.REASON_MISSING_TRAIT_DEPENDENCY, strategyEx.getReasonCode());
+        assertEquals(RouteCore.REASON_UNKNOWN_COORDINATE_STRATEGY, strategyEx.getReasonCode());
     }
 
     @Test

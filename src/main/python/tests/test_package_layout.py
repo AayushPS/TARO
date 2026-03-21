@@ -2,8 +2,8 @@ import inspect
 import unittest
 from pathlib import Path
 
-import Utils
-from Utils.IDMapper import IDMapper
+import src.main.python.Utils as Utils
+from src.main.python.Utils import IDMapper
 
 
 class TestPythonPackageLayout(unittest.TestCase):
@@ -20,5 +20,5 @@ class TestPythonPackageLayout(unittest.TestCase):
 
     def test_idmapper_import_contract(self):
         mapper = IDMapper()
-        self.assertEqual("Utils.IDMapper", IDMapper.__module__)
+        self.assertEqual("src.main.python.Utils.IDMapper", IDMapper.__module__)
         self.assertEqual(0, mapper.get_or_create("package-layout-check"))

@@ -4,6 +4,7 @@ import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -15,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("perf")
 @DisplayName("Stage 16 Temporal Trait Stress and Perf Tests")
 class Stage16TemporalTraitStressPerfTest {
     private static final double MAX_ROUTE_AVG_MICROS = 3_500.0d;

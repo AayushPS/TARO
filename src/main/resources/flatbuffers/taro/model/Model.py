@@ -147,39 +147,92 @@ class Model(object):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         return o == 0
 
-def ModelStart(builder): builder.StartObject(7)
+def ModelStart(builder):
+    builder.StartObject(7)
+
 def Start(builder):
-    return ModelStart(builder)
-def ModelAddMetadata(builder, metadata): builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(metadata), 0)
+    ModelStart(builder)
+
+def ModelAddMetadata(builder, metadata):
+    builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(metadata), 0)
+
 def AddMetadata(builder, metadata):
-    return ModelAddMetadata(builder, metadata)
-def ModelAddTopology(builder, topology): builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(topology), 0)
+    ModelAddMetadata(builder, metadata)
+
+def ModelAddTopology(builder, topology):
+    builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(topology), 0)
+
 def AddTopology(builder, topology):
-    return ModelAddTopology(builder, topology)
-def ModelAddProfiles(builder, profiles): builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(profiles), 0)
+    ModelAddTopology(builder, topology)
+
+def ModelAddProfiles(builder, profiles):
+    builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(profiles), 0)
+
 def AddProfiles(builder, profiles):
-    return ModelAddProfiles(builder, profiles)
-def ModelStartProfilesVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    ModelAddProfiles(builder, profiles)
+
+def ModelStartProfilesVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartProfilesVector(builder, numElems):
     return ModelStartProfilesVector(builder, numElems)
-def ModelAddTurnCosts(builder, turnCosts): builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(turnCosts), 0)
+
+def ModelCreateProfilesVector(builder, data):
+    return builder.CreateVectorOfTables(data)
+
+def CreateProfilesVector(builder, data):
+    ModelCreateProfilesVector(builder, data)
+
+def ModelAddTurnCosts(builder, turnCosts):
+    builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(turnCosts), 0)
+
 def AddTurnCosts(builder, turnCosts):
-    return ModelAddTurnCosts(builder, turnCosts)
-def ModelStartTurnCostsVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    ModelAddTurnCosts(builder, turnCosts)
+
+def ModelStartTurnCostsVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartTurnCostsVector(builder, numElems):
     return ModelStartTurnCostsVector(builder, numElems)
-def ModelAddSpatialIndex(builder, spatialIndex): builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(spatialIndex), 0)
+
+def ModelCreateTurnCostsVector(builder, data):
+    return builder.CreateVectorOfTables(data)
+
+def CreateTurnCostsVector(builder, data):
+    ModelCreateTurnCostsVector(builder, data)
+
+def ModelAddSpatialIndex(builder, spatialIndex):
+    builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(spatialIndex), 0)
+
 def AddSpatialIndex(builder, spatialIndex):
-    return ModelAddSpatialIndex(builder, spatialIndex)
-def ModelAddIdMapping(builder, idMapping): builder.PrependUOffsetTRelativeSlot(5, flatbuffers.number_types.UOffsetTFlags.py_type(idMapping), 0)
+    ModelAddSpatialIndex(builder, spatialIndex)
+
+def ModelAddIdMapping(builder, idMapping):
+    builder.PrependUOffsetTRelativeSlot(5, flatbuffers.number_types.UOffsetTFlags.py_type(idMapping), 0)
+
 def AddIdMapping(builder, idMapping):
-    return ModelAddIdMapping(builder, idMapping)
-def ModelAddLandmarks(builder, landmarks): builder.PrependUOffsetTRelativeSlot(6, flatbuffers.number_types.UOffsetTFlags.py_type(landmarks), 0)
+    ModelAddIdMapping(builder, idMapping)
+
+def ModelAddLandmarks(builder, landmarks):
+    builder.PrependUOffsetTRelativeSlot(6, flatbuffers.number_types.UOffsetTFlags.py_type(landmarks), 0)
+
 def AddLandmarks(builder, landmarks):
-    return ModelAddLandmarks(builder, landmarks)
-def ModelStartLandmarksVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    ModelAddLandmarks(builder, landmarks)
+
+def ModelStartLandmarksVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartLandmarksVector(builder, numElems):
     return ModelStartLandmarksVector(builder, numElems)
-def ModelEnd(builder): return builder.EndObject()
+
+def ModelCreateLandmarksVector(builder, data):
+    return builder.CreateVectorOfTables(data)
+
+def CreateLandmarksVector(builder, data):
+    ModelCreateLandmarksVector(builder, data)
+
+def ModelEnd(builder):
+    return builder.EndObject()
+
 def End(builder):
     return ModelEnd(builder)

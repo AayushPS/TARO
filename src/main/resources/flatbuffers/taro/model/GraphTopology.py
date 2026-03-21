@@ -228,57 +228,180 @@ class GraphTopology(object):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(20))
         return o == 0
 
-def GraphTopologyStart(builder): builder.StartObject(9)
+def GraphTopologyStart(builder):
+    builder.StartObject(9)
+
 def Start(builder):
-    return GraphTopologyStart(builder)
-def GraphTopologyAddNodeCount(builder, nodeCount): builder.PrependInt32Slot(0, nodeCount, 0)
+    GraphTopologyStart(builder)
+
+def GraphTopologyAddNodeCount(builder, nodeCount):
+    builder.PrependInt32Slot(0, nodeCount, 0)
+
 def AddNodeCount(builder, nodeCount):
-    return GraphTopologyAddNodeCount(builder, nodeCount)
-def GraphTopologyAddEdgeCount(builder, edgeCount): builder.PrependInt32Slot(1, edgeCount, 0)
+    GraphTopologyAddNodeCount(builder, nodeCount)
+
+def GraphTopologyAddEdgeCount(builder, edgeCount):
+    builder.PrependInt32Slot(1, edgeCount, 0)
+
 def AddEdgeCount(builder, edgeCount):
-    return GraphTopologyAddEdgeCount(builder, edgeCount)
-def GraphTopologyAddFirstEdge(builder, firstEdge): builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(firstEdge), 0)
+    GraphTopologyAddEdgeCount(builder, edgeCount)
+
+def GraphTopologyAddFirstEdge(builder, firstEdge):
+    builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(firstEdge), 0)
+
 def AddFirstEdge(builder, firstEdge):
-    return GraphTopologyAddFirstEdge(builder, firstEdge)
-def GraphTopologyStartFirstEdgeVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    GraphTopologyAddFirstEdge(builder, firstEdge)
+
+def GraphTopologyStartFirstEdgeVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartFirstEdgeVector(builder, numElems):
     return GraphTopologyStartFirstEdgeVector(builder, numElems)
-def GraphTopologyAddEdgeTarget(builder, edgeTarget): builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(edgeTarget), 0)
+
+def GraphTopologyCreateFirstEdgeVector(builder, data):
+    data = list(data)
+    builder.StartVector(4, len(data), 4)
+    for item in reversed(data):
+        builder.PrependInt32(item)
+    return builder.EndVector()
+
+def CreateFirstEdgeVector(builder, data):
+    GraphTopologyCreateFirstEdgeVector(builder, data)
+
+def GraphTopologyAddEdgeTarget(builder, edgeTarget):
+    builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(edgeTarget), 0)
+
 def AddEdgeTarget(builder, edgeTarget):
-    return GraphTopologyAddEdgeTarget(builder, edgeTarget)
-def GraphTopologyStartEdgeTargetVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    GraphTopologyAddEdgeTarget(builder, edgeTarget)
+
+def GraphTopologyStartEdgeTargetVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartEdgeTargetVector(builder, numElems):
     return GraphTopologyStartEdgeTargetVector(builder, numElems)
-def GraphTopologyAddCoordinates(builder, coordinates): builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(coordinates), 0)
+
+def GraphTopologyCreateEdgeTargetVector(builder, data):
+    data = list(data)
+    builder.StartVector(4, len(data), 4)
+    for item in reversed(data):
+        builder.PrependInt32(item)
+    return builder.EndVector()
+
+def CreateEdgeTargetVector(builder, data):
+    GraphTopologyCreateEdgeTargetVector(builder, data)
+
+def GraphTopologyAddCoordinates(builder, coordinates):
+    builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(coordinates), 0)
+
 def AddCoordinates(builder, coordinates):
-    return GraphTopologyAddCoordinates(builder, coordinates)
-def GraphTopologyStartCoordinatesVector(builder, numElems): return builder.StartVector(16, numElems, 16)
+    GraphTopologyAddCoordinates(builder, coordinates)
+
+def GraphTopologyStartCoordinatesVector(builder, numElems):
+    return builder.StartVector(16, numElems, 16)
+
 def StartCoordinatesVector(builder, numElems):
     return GraphTopologyStartCoordinatesVector(builder, numElems)
-def GraphTopologyAddBaseWeights(builder, baseWeights): builder.PrependUOffsetTRelativeSlot(5, flatbuffers.number_types.UOffsetTFlags.py_type(baseWeights), 0)
+
+def GraphTopologyCreateCoordinatesVector(builder, data):
+    data = list(data)
+    builder.StartVector(16, len(data), 16)
+    for item in reversed(data):
+        item.Pack(builder)
+    return builder.EndVector()
+
+def CreateCoordinatesVector(builder, data):
+    GraphTopologyCreateCoordinatesVector(builder, data)
+
+def GraphTopologyAddBaseWeights(builder, baseWeights):
+    builder.PrependUOffsetTRelativeSlot(5, flatbuffers.number_types.UOffsetTFlags.py_type(baseWeights), 0)
+
 def AddBaseWeights(builder, baseWeights):
-    return GraphTopologyAddBaseWeights(builder, baseWeights)
-def GraphTopologyStartBaseWeightsVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    GraphTopologyAddBaseWeights(builder, baseWeights)
+
+def GraphTopologyStartBaseWeightsVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartBaseWeightsVector(builder, numElems):
     return GraphTopologyStartBaseWeightsVector(builder, numElems)
-def GraphTopologyAddEdgeProfileId(builder, edgeProfileId): builder.PrependUOffsetTRelativeSlot(6, flatbuffers.number_types.UOffsetTFlags.py_type(edgeProfileId), 0)
+
+def GraphTopologyCreateBaseWeightsVector(builder, data):
+    data = list(data)
+    builder.StartVector(4, len(data), 4)
+    for item in reversed(data):
+        builder.PrependFloat32(item)
+    return builder.EndVector()
+
+def CreateBaseWeightsVector(builder, data):
+    GraphTopologyCreateBaseWeightsVector(builder, data)
+
+def GraphTopologyAddEdgeProfileId(builder, edgeProfileId):
+    builder.PrependUOffsetTRelativeSlot(6, flatbuffers.number_types.UOffsetTFlags.py_type(edgeProfileId), 0)
+
 def AddEdgeProfileId(builder, edgeProfileId):
-    return GraphTopologyAddEdgeProfileId(builder, edgeProfileId)
-def GraphTopologyStartEdgeProfileIdVector(builder, numElems): return builder.StartVector(2, numElems, 2)
+    GraphTopologyAddEdgeProfileId(builder, edgeProfileId)
+
+def GraphTopologyStartEdgeProfileIdVector(builder, numElems):
+    return builder.StartVector(2, numElems, 2)
+
 def StartEdgeProfileIdVector(builder, numElems):
     return GraphTopologyStartEdgeProfileIdVector(builder, numElems)
-def GraphTopologyAddEdgeFlags(builder, edgeFlags): builder.PrependUOffsetTRelativeSlot(7, flatbuffers.number_types.UOffsetTFlags.py_type(edgeFlags), 0)
+
+def GraphTopologyCreateEdgeProfileIdVector(builder, data):
+    data = list(data)
+    builder.StartVector(2, len(data), 2)
+    for item in reversed(data):
+        builder.PrependUint16(item)
+    return builder.EndVector()
+
+def CreateEdgeProfileIdVector(builder, data):
+    GraphTopologyCreateEdgeProfileIdVector(builder, data)
+
+def GraphTopologyAddEdgeFlags(builder, edgeFlags):
+    builder.PrependUOffsetTRelativeSlot(7, flatbuffers.number_types.UOffsetTFlags.py_type(edgeFlags), 0)
+
 def AddEdgeFlags(builder, edgeFlags):
-    return GraphTopologyAddEdgeFlags(builder, edgeFlags)
-def GraphTopologyStartEdgeFlagsVector(builder, numElems): return builder.StartVector(1, numElems, 1)
+    GraphTopologyAddEdgeFlags(builder, edgeFlags)
+
+def GraphTopologyStartEdgeFlagsVector(builder, numElems):
+    return builder.StartVector(1, numElems, 1)
+
 def StartEdgeFlagsVector(builder, numElems):
     return GraphTopologyStartEdgeFlagsVector(builder, numElems)
-def GraphTopologyAddEdgeOrigin(builder, edgeOrigin): builder.PrependUOffsetTRelativeSlot(8, flatbuffers.number_types.UOffsetTFlags.py_type(edgeOrigin), 0)
+
+def GraphTopologyCreateEdgeFlagsVector(builder, data):
+    data = list(data)
+    builder.StartVector(1, len(data), 1)
+    for item in reversed(data):
+        builder.PrependUint8(item)
+    return builder.EndVector()
+
+def CreateEdgeFlagsVector(builder, data):
+    GraphTopologyCreateEdgeFlagsVector(builder, data)
+
+def GraphTopologyAddEdgeOrigin(builder, edgeOrigin):
+    builder.PrependUOffsetTRelativeSlot(8, flatbuffers.number_types.UOffsetTFlags.py_type(edgeOrigin), 0)
+
 def AddEdgeOrigin(builder, edgeOrigin):
-    return GraphTopologyAddEdgeOrigin(builder, edgeOrigin)
-def GraphTopologyStartEdgeOriginVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+    GraphTopologyAddEdgeOrigin(builder, edgeOrigin)
+
+def GraphTopologyStartEdgeOriginVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
 def StartEdgeOriginVector(builder, numElems):
     return GraphTopologyStartEdgeOriginVector(builder, numElems)
-def GraphTopologyEnd(builder): return builder.EndObject()
+
+def GraphTopologyCreateEdgeOriginVector(builder, data):
+    data = list(data)
+    builder.StartVector(4, len(data), 4)
+    for item in reversed(data):
+        builder.PrependInt32(item)
+    return builder.EndVector()
+
+def CreateEdgeOriginVector(builder, data):
+    GraphTopologyCreateEdgeOriginVector(builder, data)
+
+def GraphTopologyEnd(builder):
+    return builder.EndObject()
+
 def End(builder):
     return GraphTopologyEnd(builder)

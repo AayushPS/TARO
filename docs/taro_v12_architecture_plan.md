@@ -1,7 +1,7 @@
 # TARO v12 Architecture Plan: Scenario-Aware Future Routing and Ephemeral Result Serving
 
-Status: Proposed  
-Date: 2026-03-20  
+Status: Proposed with 2026-03-21 hardening updates  
+Date: 2026-03-21  
 Companion: `docs/taro_v11_architecture_plan.md`  
 Scope: Online future-aware serving layer on top of v11 offline learning outputs
 
@@ -99,6 +99,11 @@ Required product layers:
 
 The runtime may reuse the existing deterministic route engine repeatedly rather than inventing a separate probabilistic pathfinder.
 
+Hardening note:
+- per-scenario shortest-path runs remain the source of scenario metrics, scenario-optimality probability, and distinct-alternative seeds
+- the primary expected ETA and robust/P90 winners must be selected by a direct multi-scenario objective planner, not only from the subset of routes that were individually optimal in one scenario
+- this prevents "compromise" routes that are second-best everywhere but best in aggregate from being silently excluded
+
 ## 5.4 Plane D: Ephemeral Result Serving
 
 New in v12:
@@ -155,6 +160,7 @@ Product contract:
 - expose selected route
 - expose expected ETA
 - expose spread indicators such as min/median/max or standard confidence interval
+- compute the winner through direct multi-scenario objective search so aggregate-only winners remain eligible
 
 ## 7.2 Robust / P90 Route
 
@@ -174,6 +180,7 @@ Product contract:
 - expose selected route
 - expose P50 and P90 ETA
 - expose a "reliability-first" explanation
+- compute the winner through direct multi-scenario objective search rather than ranking only per-scenario-optimal candidates
 
 ## 7.3 Top-K Scenario Routes With Confidence
 
@@ -182,6 +189,7 @@ Objective:
 
 Definition:
 - evaluate candidates across scenarios
+- seed the alternative family with the chosen expected route and robust route even when neither is individually optimal in any one scenario
 - deduplicate near-identical paths
 - rank distinct routes by a configurable utility policy
 - attach confidence semantics such as:
@@ -240,13 +248,19 @@ Recommended default posture:
 - keep full details only while hot
 - store enough metadata to allow partial summary responses after compaction if needed
 
+Current in-memory hardening posture:
+- route result store defaults to `512` entries, `64 MiB` total, and `2 MiB` per entry
+- matrix result store defaults to `128` entries, `256 MiB` total, and `32 MiB` per entry
+- evict expired entries first, then earliest-expiry entries, then least-recently-read ties
+- compact matrix payloads into flattened primitive buffers and compress larger payloads before retention
+
 ## 10. Serving Contracts
 
 Planned internal service concepts:
 
 - `ScenarioBundleResolver`
 - `FutureRouteEvaluator`
-- `FutureRouteAggregator`
+- `FutureRouteObjectivePlanner`
 - `EphemeralRouteResultStore`
 - `FutureRouteResultSet`
 
@@ -330,7 +344,7 @@ Product:
 ## 14. Key Risks and Mitigations
 
 1. Scenario explosion  
-   Mitigation: cap scenario count, merge similar futures, use bounded candidate route sets.
+   Mitigation: cap scenario count, merge similar futures, use direct multi-scenario objective search for the primary expected/robust winners and bounded candidate sets only for distinct alternatives.
 2. Misleading confidence language  
    Mitigation: standardize confidence semantics and calibrate them offline.
 3. Temporary-store bloat  
