@@ -14,7 +14,7 @@ import java.util.List;
  * Geometry and endpoint metadata for one selected route.
  */
 @Value
-@Builder
+@Builder(toBuilder = true)
 public class RouteShape {
     boolean reachable;
     long departureTicks;

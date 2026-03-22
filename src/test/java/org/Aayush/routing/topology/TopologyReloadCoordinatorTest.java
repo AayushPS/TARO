@@ -6,6 +6,8 @@ import org.Aayush.routing.core.RouteRequest;
 import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.future.EphemeralMatrixResultStore;
 import org.Aayush.routing.future.EphemeralRouteResultStore;
+import org.Aayush.routing.future.CandidateDensityCalibrationReport;
+import org.Aayush.routing.future.CandidateDensityClass;
 import org.Aayush.routing.future.FutureMatrixAggregate;
 import org.Aayush.routing.future.FutureMatrixRequest;
 import org.Aayush.routing.future.FutureMatrixResultSet;
@@ -16,6 +18,7 @@ import org.Aayush.routing.future.InMemoryEphemeralMatrixResultStore;
 import org.Aayush.routing.future.ScenarioBundle;
 import org.Aayush.routing.future.ScenarioDefinition;
 import org.Aayush.routing.future.RouteShape;
+import org.Aayush.routing.future.RouteSelectionProvenance;
 import org.Aayush.routing.future.ScenarioRouteSelection;
 import org.Aayush.routing.future.InMemoryEphemeralRouteResultStore;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
@@ -160,6 +163,7 @@ class TopologyReloadCoordinatorTest {
                 .optimalityProbability(1.0d)
                 .dominantScenarioId("baseline")
                 .dominantScenarioLabel("baseline")
+                .routeSelectionProvenance(RouteSelectionProvenance.SCENARIO_OPTIMAL)
                 .build();
         ScenarioBundle bundle = ScenarioBundle.builder()
                 .scenarioBundleId("bundle-" + resultSetId)
@@ -188,6 +192,21 @@ class TopologyReloadCoordinatorTest {
                 .topologyVersion(topologyVersion)
                 .quarantineSnapshotId("q-reload:0")
                 .scenarioBundle(bundle)
+                .candidateDensityCalibrationReport(CandidateDensityCalibrationReport.builder()
+                        .policyId("b5-density-v2")
+                        .scenarioCount(1)
+                        .scenarioOptimalRouteCount(1)
+                        .uniqueScenarioOptimalRouteCount(1)
+                        .uniqueCandidateRouteCount(1)
+                        .aggregateAddedCandidateCount(0)
+                        .expectedRouteAggregateOnly(false)
+                        .robustRouteAggregateOnly(false)
+                        .selectedAlternativeCount(1)
+                        .scenarioCoverageRatio(1.0d)
+                        .candidateCoverageRatio(1.0d)
+                        .aggregateExpansionRatio(0.0d)
+                        .densityClass(CandidateDensityClass.LOW_DENSITY)
+                        .build())
                 .expectedRoute(selection)
                 .robustRoute(selection)
                 .alternatives(List.of(selection))

@@ -175,6 +175,43 @@ class InMemoryEphemeralResultStoreTest {
     }
 
     @Test
+    @DisplayName("Route store rejects malformed B5 density and provenance artifacts")
+    void testRouteStoreRejectsMalformedB5Artifacts() {
+        MutableClock clock = new MutableClock(BASE_INSTANT);
+        InMemoryEphemeralRouteResultStore store = new InMemoryEphemeralRouteResultStore(clock, InMemoryEphemeralRouteResultStore.Config.defaults());
+
+        FutureRouteResultSet valid = routeResultSet("route-valid", BASE_INSTANT.plus(Duration.ofMinutes(10)), List.of("N0", "N1"));
+        FutureRouteResultSet invalidDensity = valid.toBuilder()
+                .candidateDensityCalibrationReport(valid.getCandidateDensityCalibrationReport().toBuilder()
+                        .aggregateAddedCandidateCount(1)
+                        .build())
+                .build();
+        FutureRouteResultSet invalidRatios = valid.toBuilder()
+                .candidateDensityCalibrationReport(valid.getCandidateDensityCalibrationReport().toBuilder()
+                        .scenarioCoverageRatio(0.25d)
+                        .build())
+                .build();
+        ScenarioRouteSelection invalidSelection = valid.getExpectedRoute().toBuilder()
+                .routeSelectionProvenance(null)
+                .build();
+        FutureRouteResultSet invalidProvenance = valid.toBuilder()
+                .expectedRoute(invalidSelection)
+                .build();
+        ScenarioRouteSelection invalidUnreachable = valid.getExpectedRoute().toBuilder()
+                .route(valid.getExpectedRoute().getRoute().toBuilder().reachable(false).build())
+                .routeSelectionProvenance(RouteSelectionProvenance.SCENARIO_OPTIMAL)
+                .build();
+        FutureRouteResultSet invalidUnreachableSelection = valid.toBuilder()
+                .expectedRoute(invalidUnreachable)
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () -> store.put(invalidDensity));
+        assertThrows(IllegalArgumentException.class, () -> store.put(invalidRatios));
+        assertThrows(IllegalArgumentException.class, () -> store.put(invalidProvenance));
+        assertThrows(IllegalArgumentException.class, () -> store.put(invalidUnreachableSelection));
+    }
+
+    @Test
     @DisplayName("Matrix store utility helpers handle zero-sized and corrupted payload edge cases")
     void testMatrixStoreUtilityEdgeCases() throws Exception {
         MutableClock clock = new MutableClock(BASE_INSTANT);
@@ -235,6 +272,7 @@ class InMemoryEphemeralResultStoreTest {
                 .optimalityProbability(1.0d)
                 .dominantScenarioId("baseline")
                 .dominantScenarioLabel("baseline")
+                .routeSelectionProvenance(RouteSelectionProvenance.SCENARIO_OPTIMAL)
                 .build();
         return FutureRouteResultSet.builder()
                 .resultSetId(resultSetId)
@@ -262,6 +300,21 @@ class InMemoryEphemeralResultStoreTest {
                                 .label("baseline")
                                 .probability(1.0d)
                                 .build())
+                        .build())
+                .candidateDensityCalibrationReport(CandidateDensityCalibrationReport.builder()
+                        .policyId("b5-density-v2")
+                        .scenarioCount(1)
+                        .scenarioOptimalRouteCount(1)
+                        .uniqueScenarioOptimalRouteCount(1)
+                        .uniqueCandidateRouteCount(1)
+                        .aggregateAddedCandidateCount(0)
+                        .expectedRouteAggregateOnly(false)
+                        .robustRouteAggregateOnly(false)
+                        .selectedAlternativeCount(1)
+                        .scenarioCoverageRatio(1.0d)
+                        .candidateCoverageRatio(1.0d)
+                        .aggregateExpansionRatio(0.0d)
+                        .densityClass(CandidateDensityClass.LOW_DENSITY)
                         .build())
                 .expectedRoute(selection)
                 .robustRoute(selection)

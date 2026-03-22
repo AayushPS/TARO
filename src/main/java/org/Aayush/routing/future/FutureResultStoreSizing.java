@@ -32,6 +32,7 @@ final class FutureResultStoreSizing {
         size += topologyVersion(resultSet.getTopologyVersion());
         size += string(resultSet.getQuarantineSnapshotId());
         size += scenarioBundle(resultSet.getScenarioBundle());
+        size += candidateDensityCalibrationReport(resultSet.getCandidateDensityCalibrationReport());
         size += scenarioRouteSelection(resultSet.getExpectedRoute());
         size += scenarioRouteSelection(resultSet.getRobustRoute());
         size += listOverhead(resultSet.getAlternatives()) + resultSet.getAlternatives().stream()
@@ -212,7 +213,18 @@ final class FutureResultStoreSizing {
         size += routeShape(selection.getRoute());
         size += string(selection.getDominantScenarioId());
         size += string(selection.getDominantScenarioLabel());
+        size += enumBytes(selection.getRouteSelectionProvenance());
         size += stringList(selection.getExplanationTags());
+        return size;
+    }
+
+    private static long candidateDensityCalibrationReport(CandidateDensityCalibrationReport report) {
+        if (report == null) {
+            return 0L;
+        }
+        long size = OBJECT_HEADER_BYTES + 6 * Integer.BYTES + 3 * Double.BYTES + 2;
+        size += string(report.getPolicyId());
+        size += enumBytes(report.getDensityClass());
         return size;
     }
 

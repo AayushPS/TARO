@@ -1,6 +1,8 @@
 package org.Aayush.routing.core;
 
 import org.Aayush.routing.cost.CostEngine;
+import org.Aayush.routing.future.CandidateDensityCalibrationReport;
+import org.Aayush.routing.future.CandidateDensityClass;
 import org.Aayush.routing.future.FutureRouteRequest;
 import org.Aayush.routing.future.FutureRouteResultSet;
 import org.Aayush.routing.future.FutureRouteScenarioResult;
@@ -9,6 +11,7 @@ import org.Aayush.routing.future.ScenarioBundle;
 import org.Aayush.routing.future.ScenarioBundleResolver;
 import org.Aayush.routing.future.ScenarioDefinition;
 import org.Aayush.routing.future.ScenarioRouteSelection;
+import org.Aayush.routing.future.RouteSelectionProvenance;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.overlay.LiveUpdate;
 import org.Aayush.routing.topology.FailureQuarantine;
@@ -29,6 +32,7 @@ import java.util.UUID;
  * v12 multi-scenario route evaluator built on top of the deterministic {@link RouteCore}.
  */
 public final class FutureRouteEvaluator {
+    private static final String DENSITY_CALIBRATION_POLICY_ID = "b5-density-v2";
     private static final double PROBABILITY_TOLERANCE = 1.0e-6d;
     private static final double DISTINCT_PATH_OVERLAP_THRESHOLD = 0.85d;
     private static final float DISTINCT_EXPECTED_COST_TOLERANCE = 1.0f;
@@ -70,6 +74,8 @@ public final class FutureRouteEvaluator {
 
         ArrayList<EvaluatedScenario> evaluatedScenarios = new ArrayList<>(scenarioBundle.getScenarios().size());
         ArrayList<CandidateRoute> candidates = new ArrayList<>();
+        Set<String> scenarioOptimalSignatures = new HashSet<>();
+        int scenarioOptimalRouteCount = 0;
         ArrayList<FutureRouteObjectivePlanner.ScenarioCostSurface> scenarioCostSurfaces =
                 new ArrayList<>(scenarioBundle.getScenarios().size());
         for (ScenarioDefinition scenario : scenarioBundle.getScenarios()) {
@@ -86,7 +92,9 @@ public final class FutureRouteEvaluator {
                     scenarioCostEngine
             ));
             if (plan.reachable()) {
+                scenarioOptimalRouteCount++;
                 RouteCandidateKey key = RouteCandidateKey.fromPlan(plan);
+                scenarioOptimalSignatures.add(key.signature());
                 if (findCandidate(candidates, key) == null) {
                     candidates.add(new CandidateRoute(
                             key,
@@ -104,6 +112,15 @@ public final class FutureRouteEvaluator {
         Instant expiresAt = createdAt.plus(nonNullRequest.getResultTtl());
         if (candidates.isEmpty()) {
             ScenarioRouteSelection unreachable = buildUnreachableSelection(normalized);
+            CandidateDensityCalibrationReport densityCalibrationReport = buildDensityCalibrationReport(
+                    scenarioBundle.getScenarios().size(),
+                    scenarioOptimalRouteCount,
+                    scenarioOptimalSignatures.size(),
+                    0,
+                    false,
+                    false,
+                    0
+            );
             return buildResultSet(
                     nonNullRequest,
                     nonNullSnapshot,
@@ -111,6 +128,7 @@ public final class FutureRouteEvaluator {
                     scenarioBundle,
                     createdAt,
                     expiresAt,
+                    densityCalibrationReport,
                     unreachable,
                     unreachable,
                     List.of(),
@@ -135,7 +153,7 @@ public final class FutureRouteEvaluator {
 
         ArrayList<ScoredCandidate> scoredCandidates = new ArrayList<>(candidates.size());
         for (CandidateRoute candidate : candidates) {
-            scoredCandidates.add(scoreCandidate(candidate, evaluatedScenarios, normalized));
+            scoredCandidates.add(scoreCandidate(candidate, evaluatedScenarios, normalized, scenarioOptimalSignatures));
         }
 
         ScoredCandidate expectedRoute = resolveWinner(
@@ -159,6 +177,15 @@ public final class FutureRouteEvaluator {
                 nonNullRequest.getTopKAlternatives(),
                 List.of(expectedRoute, robustRoute)
         );
+        CandidateDensityCalibrationReport densityCalibrationReport = buildDensityCalibrationReport(
+                scenarioBundle.getScenarios().size(),
+                scenarioOptimalRouteCount,
+                scenarioOptimalSignatures.size(),
+                candidates.size(),
+                isAggregateOnlyWinner(expectedPlan, scenarioOptimalSignatures),
+                isAggregateOnlyWinner(robustPlan, scenarioOptimalSignatures),
+                alternatives.size()
+        );
 
         return buildResultSet(
                 nonNullRequest,
@@ -167,6 +194,7 @@ public final class FutureRouteEvaluator {
                 scenarioBundle,
                 createdAt,
                 expiresAt,
+                densityCalibrationReport,
                 expectedRoute.selection(),
                 robustRoute.selection(),
                 alternatives,
@@ -198,6 +226,7 @@ public final class FutureRouteEvaluator {
                 .optimalityProbability(0.0d)
                 .dominantScenarioId("unreachable")
                 .dominantScenarioLabel("unreachable")
+                .routeSelectionProvenance(RouteSelectionProvenance.UNREACHABLE)
                 .build();
     }
 
@@ -222,6 +251,7 @@ public final class FutureRouteEvaluator {
             ScenarioBundle scenarioBundle,
             Instant createdAt,
             Instant expiresAt,
+            CandidateDensityCalibrationReport densityCalibrationReport,
             ScenarioRouteSelection expectedRoute,
             ScenarioRouteSelection robustRoute,
             List<ScenarioRouteSelection> alternatives,
@@ -235,11 +265,78 @@ public final class FutureRouteEvaluator {
                 .topologyVersion(snapshot.getTopologyVersion())
                 .quarantineSnapshotId(quarantineSnapshot.snapshotId())
                 .scenarioBundle(scenarioBundle)
+                .candidateDensityCalibrationReport(densityCalibrationReport)
                 .expectedRoute(expectedRoute)
                 .robustRoute(robustRoute)
                 .alternatives(alternatives)
                 .scenarioResults(scenarioResults)
                 .build();
+    }
+
+    private CandidateDensityCalibrationReport buildDensityCalibrationReport(
+            int scenarioCount,
+            int scenarioOptimalRouteCount,
+            int uniqueScenarioOptimalRouteCount,
+            int uniqueCandidateRouteCount,
+            boolean expectedRouteAggregateOnly,
+            boolean robustRouteAggregateOnly,
+            int selectedAlternativeCount
+    ) {
+        int aggregateAddedCandidateCount = Math.max(0, uniqueCandidateRouteCount - uniqueScenarioOptimalRouteCount);
+        double scenarioCoverageRatio = scenarioOptimalRouteCount <= 0
+                ? 0.0d
+                : (double) uniqueScenarioOptimalRouteCount / (double) scenarioOptimalRouteCount;
+        double candidateCoverageRatio = uniqueScenarioOptimalRouteCount <= 0
+                ? (uniqueCandidateRouteCount == 0 ? 0.0d : Double.POSITIVE_INFINITY)
+                : (double) uniqueCandidateRouteCount / (double) uniqueScenarioOptimalRouteCount;
+        double aggregateExpansionRatio = uniqueScenarioOptimalRouteCount <= 0
+                ? (aggregateAddedCandidateCount == 0 ? 0.0d : Double.POSITIVE_INFINITY)
+                : (double) aggregateAddedCandidateCount / (double) uniqueScenarioOptimalRouteCount;
+        if (!Double.isFinite(candidateCoverageRatio)) {
+            candidateCoverageRatio = 0.0d;
+        }
+        if (!Double.isFinite(aggregateExpansionRatio)) {
+            aggregateExpansionRatio = 0.0d;
+        }
+        return CandidateDensityCalibrationReport.builder()
+                .policyId(DENSITY_CALIBRATION_POLICY_ID)
+                .scenarioCount(scenarioCount)
+                .scenarioOptimalRouteCount(scenarioOptimalRouteCount)
+                .uniqueScenarioOptimalRouteCount(uniqueScenarioOptimalRouteCount)
+                .uniqueCandidateRouteCount(uniqueCandidateRouteCount)
+                .aggregateAddedCandidateCount(aggregateAddedCandidateCount)
+                .expectedRouteAggregateOnly(expectedRouteAggregateOnly)
+                .robustRouteAggregateOnly(robustRouteAggregateOnly)
+                .selectedAlternativeCount(selectedAlternativeCount)
+                .scenarioCoverageRatio(scenarioCoverageRatio)
+                .candidateCoverageRatio(candidateCoverageRatio)
+                .aggregateExpansionRatio(aggregateExpansionRatio)
+                .densityClass(densityClass(
+                        uniqueCandidateRouteCount,
+                        aggregateAddedCandidateCount,
+                        scenarioCoverageRatio
+                ))
+                .build();
+    }
+
+    private static CandidateDensityClass densityClass(
+            int uniqueCandidateRouteCount,
+            int aggregateAddedCandidateCount,
+            double scenarioCoverageRatio
+    ) {
+        if (uniqueCandidateRouteCount <= 1) {
+            return CandidateDensityClass.LOW_DENSITY;
+        }
+        if (aggregateAddedCandidateCount > 0) {
+            return CandidateDensityClass.HIGH_DENSITY;
+        }
+        return scenarioCoverageRatio >= 0.75d
+                ? CandidateDensityClass.HIGH_DENSITY
+                : CandidateDensityClass.LOW_DENSITY;
+    }
+
+    private static boolean isAggregateOnlyWinner(InternalRoutePlan plan, Set<String> scenarioOptimalSignatures) {
+        return plan.reachable() && !scenarioOptimalSignatures.contains(RouteCandidateKey.fromPlan(plan).signature());
     }
 
     private List<ScenarioRouteSelection> selectAlternatives(
@@ -315,7 +412,8 @@ public final class FutureRouteEvaluator {
     private ScoredCandidate scoreCandidate(
             CandidateRoute candidate,
             List<EvaluatedScenario> evaluatedScenarios,
-            RequestNormalizer.NormalizedRouteRequest normalized
+            RequestNormalizer.NormalizedRouteRequest normalized,
+            Set<String> scenarioOptimalSignatures
     ) {
         ArrayList<CandidateScenarioSample> samples = new ArrayList<>(evaluatedScenarios.size());
         String dominantScenarioId = candidate.dominantScenarioId();
@@ -367,6 +465,9 @@ public final class FutureRouteEvaluator {
         float maxCost = maxCost(samples);
         long minArrivalTicks = minArrival(samples);
         long maxArrivalTicks = maxArrival(samples);
+        RouteSelectionProvenance routeSelectionProvenance = scenarioOptimalSignatures.contains(candidate.key().signature())
+                ? RouteSelectionProvenance.SCENARIO_OPTIMAL
+                : RouteSelectionProvenance.AGGREGATE_OBJECTIVE;
 
         ScenarioRouteSelection selection = ScenarioRouteSelection.builder()
                 .route(RouteShape.fromRouteResponse(candidate.representativeResponse()))
@@ -380,6 +481,7 @@ public final class FutureRouteEvaluator {
                 .optimalityProbability(optimalityProbability)
                 .dominantScenarioId(dominantScenarioId)
                 .dominantScenarioLabel(dominantScenarioLabel)
+                .routeSelectionProvenance(routeSelectionProvenance)
                 .explanationTags(selectedExplanationTags)
                 .build();
         return new ScoredCandidate(candidate.key().signature(), candidate.edgePath(), selection);

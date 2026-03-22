@@ -114,6 +114,44 @@ class TemporalFidelityContractTest {
         );
     }
 
+    @Test
+    @DisplayName("Directional asymmetry survives scenario evaluation and served route selection")
+    void testDirectionalAsymmetrySurvivesFutureServing() {
+        FutureRouteService service = new FutureRouteService(
+                new FutureRouteEvaluator(baselineResolver(), FIXED_CLOCK),
+                new InMemoryEphemeralRouteResultStore(FIXED_CLOCK)
+        );
+        TopologyRuntimeSnapshot snapshot = snapshot(directionalDivergenceContractSource(), "b5-directional-fidelity");
+
+        FutureRouteResultSet forward = service.evaluate(snapshot, requestAt("N0", "N1", "2026-03-23T08:00:00Z"));
+        FutureRouteResultSet reverse = service.evaluate(snapshot, requestAt("N1", "N0", "2026-03-23T08:00:00Z"));
+
+        assertEquals(List.of("N0", "N2", "N1"), forward.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(List.of("N1", "N0"), reverse.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(RouteSelectionProvenance.SCENARIO_OPTIMAL, forward.getExpectedRoute().getRouteSelectionProvenance());
+        assertEquals(RouteSelectionProvenance.SCENARIO_OPTIMAL, reverse.getExpectedRoute().getRouteSelectionProvenance());
+    }
+
+    @Test
+    @DisplayName("Density calibration keeps aggregate compromise winners visible in served output")
+    void testDensityCalibrationPreservesAggregateCompromiseWinner() {
+        FutureRouteService service = new FutureRouteService(
+                new FutureRouteEvaluator(compromiseContractResolver(), FIXED_CLOCK),
+                new InMemoryEphemeralRouteResultStore(FIXED_CLOCK)
+        );
+        TopologyRuntimeSnapshot snapshot = snapshot(aggregateDensityContractSource(), "b5-density-fidelity");
+
+        FutureRouteResultSet resultSet = service.evaluate(snapshot, requestAt("N0", "N4", "2026-03-23T07:00:00Z"));
+
+        assertEquals(List.of("N0", "N3", "N4"), resultSet.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(List.of("N0", "N3", "N4"), resultSet.getRobustRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(RouteSelectionProvenance.AGGREGATE_OBJECTIVE, resultSet.getExpectedRoute().getRouteSelectionProvenance());
+        assertEquals(RouteSelectionProvenance.AGGREGATE_OBJECTIVE, resultSet.getRobustRoute().getRouteSelectionProvenance());
+        assertEquals(CandidateDensityClass.HIGH_DENSITY, resultSet.getCandidateDensityCalibrationReport().getDensityClass());
+        assertTrue(resultSet.getCandidateDensityCalibrationReport().isExpectedRouteAggregateOnly());
+        assertTrue(resultSet.getCandidateDensityCalibrationReport().isRobustRouteAggregateOnly());
+    }
+
     private ScenarioBundleResolver periodicContractResolver() {
         return (request, baseCostEngine, temporalContext, topologyVersion, quarantineSnapshot, clock) -> {
             Instant now = clock.instant();
@@ -142,11 +180,60 @@ class TemporalFidelityContractTest {
         };
     }
 
+    private ScenarioBundleResolver baselineResolver() {
+        return (request, baseCostEngine, temporalContext, topologyVersion, quarantineSnapshot, clock) ->
+                ScenarioBundle.builder()
+                        .scenarioBundleId("baseline-" + request.getDepartureTicks())
+                        .generatedAt(clock.instant())
+                        .validUntil(clock.instant().plus(Duration.ofMinutes(15)))
+                        .horizonTicks(request.getHorizonTicks())
+                        .topologyVersion(topologyVersion)
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("baseline")
+                                .label("baseline")
+                                .probability(1.0d)
+                                .build())
+                        .build();
+    }
+
+    private ScenarioBundleResolver compromiseContractResolver() {
+        return (request, baseCostEngine, temporalContext, topologyVersion, quarantineSnapshot, clock) -> {
+            long validUntilTicks = request.getDepartureTicks() + request.getHorizonTicks();
+            return ScenarioBundle.builder()
+                    .scenarioBundleId("density-" + request.getDepartureTicks())
+                    .generatedAt(clock.instant())
+                    .validUntil(clock.instant().plus(Duration.ofMinutes(15)))
+                    .horizonTicks(request.getHorizonTicks())
+                    .topologyVersion(topologyVersion)
+                    .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                    .scenario(ScenarioDefinition.builder()
+                            .scenarioId("b_slow")
+                            .label("b_slow")
+                            .probability(0.5d)
+                            .liveUpdate(LiveUpdate.of(1, 0.1f, validUntilTicks))
+                            .liveUpdate(LiveUpdate.of(4, 0.1f, validUntilTicks))
+                            .build())
+                    .scenario(ScenarioDefinition.builder()
+                            .scenarioId("a_slow")
+                            .label("a_slow")
+                            .probability(0.5d)
+                            .liveUpdate(LiveUpdate.of(0, 0.1f, validUntilTicks))
+                            .liveUpdate(LiveUpdate.of(3, 0.1f, validUntilTicks))
+                            .build())
+                    .build();
+        };
+    }
+
     private FutureRouteRequest requestAt(String departureIsoInstant) {
+        return requestAt("N0", "N3", departureIsoInstant);
+    }
+
+    private FutureRouteRequest requestAt(String sourceExternalId, String targetExternalId, String departureIsoInstant) {
         return FutureRouteRequest.builder()
                 .routeRequest(RouteRequest.builder()
-                        .sourceExternalId("N0")
-                        .targetExternalId("N3")
+                        .sourceExternalId(sourceExternalId)
+                        .targetExternalId(targetExternalId)
                         .departureTicks(Instant.parse(departureIsoInstant).getEpochSecond())
                         .build())
                 .horizonTicks(Duration.ofHours(2).toSeconds())
@@ -195,6 +282,44 @@ class TemporalFidelityContractTest {
                 .build();
     }
 
+    private TopologyModelSource directionalDivergenceContractSource() {
+        return TopologyModelSource.builder()
+                .modelVersion("b5-directional-fidelity-source")
+                .profileTimezone("UTC")
+                .profile(peakProfile(1, 4.0f))
+                .profile(flatProfile(2, 1.0f))
+                .profile(flatProfile(3, 1.0f))
+                .node(node("N0", 0.0d, 0.0d))
+                .node(node("N1", 2.0d, 0.0d))
+                .node(node("N2", 1.0d, 1.0d))
+                .edge(edge("E01", "N0", "N1", 10.0f, 1))
+                .edge(edge("E10", "N1", "N0", 10.0f, 2))
+                .edge(edge("E02", "N0", "N2", 8.0f, 3))
+                .edge(edge("E21", "N2", "N1", 8.0f, 3))
+                .edge(edge("E12", "N1", "N2", 8.0f, 3))
+                .edge(edge("E20", "N2", "N0", 8.0f, 3))
+                .build();
+    }
+
+    private TopologyModelSource aggregateDensityContractSource() {
+        return TopologyModelSource.builder()
+                .modelVersion("b5-density-fidelity-source")
+                .profileTimezone("UTC")
+                .profile(flatProfile(1, 1.0f))
+                .node(node("N0", 0.0d, 0.0d))
+                .node(node("N1", 1.0d, 1.0d))
+                .node(node("N2", 1.0d, 0.0d))
+                .node(node("N3", 1.0d, -1.0d))
+                .node(node("N4", 2.0d, 0.0d))
+                .edge(edge("E01", "N0", "N1", 5.0f, 1))
+                .edge(edge("E02", "N0", "N2", 5.0f, 1))
+                .edge(edge("E03", "N0", "N3", 20.0f, 1))
+                .edge(edge("E14", "N1", "N4", 5.0f, 1))
+                .edge(edge("E24", "N2", "N4", 5.0f, 1))
+                .edge(edge("E34", "N3", "N4", 20.0f, 1))
+                .build();
+    }
+
     private TopologyModelSource recencySensitivePeriodicSource(long lastObservedAtTicks) {
         return TopologyModelSource.builder()
                 .modelVersion("b4-recency-fidelity-" + lastObservedAtTicks)
@@ -238,6 +363,17 @@ class TemporalFidelityContractTest {
                 .lastObservedAtTicks(lastObservedAtTicks);
         for (int hour = 0; hour < 24; hour++) {
             builder.bucket(hour == 8 ? 2.0f : 1.0f);
+        }
+        return builder.build();
+    }
+
+    private TopologyModelSource.ProfileDefinition peakProfile(int profileId, float peakMultiplier) {
+        TopologyModelSource.ProfileDefinition.ProfileDefinitionBuilder builder = TopologyModelSource.ProfileDefinition.builder()
+                .profileId(profileId)
+                .dayMask(0x1F)
+                .multiplier(1.0f);
+        for (int hour = 0; hour < 24; hour++) {
+            builder.bucket(hour == 8 ? peakMultiplier : 1.0f);
         }
         return builder.build();
     }

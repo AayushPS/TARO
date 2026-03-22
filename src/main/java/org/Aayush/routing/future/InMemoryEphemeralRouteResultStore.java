@@ -41,6 +41,7 @@ public final class InMemoryEphemeralRouteResultStore implements EphemeralRouteRe
     @Override
     public FutureRouteResultSet put(FutureRouteResultSet resultSet) {
         FutureRouteResultSet nonNullResultSet = Objects.requireNonNull(resultSet, "resultSet");
+        FutureRouteResultSupport.validateRouteResultSet(nonNullResultSet);
         Instant now = clock.instant();
         long estimatedBytes = FutureResultStoreSizing.estimateRouteResultSet(nonNullResultSet);
         if (estimatedBytes > config.maxPerEntryBytes()) {

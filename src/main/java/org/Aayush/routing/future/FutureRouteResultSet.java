@@ -12,7 +12,7 @@ import java.util.List;
  * Retained future-aware route result set exposed by {@code resultSetId}.
  */
 @Value
-@Builder
+@Builder(toBuilder = true)
 public class FutureRouteResultSet {
     String resultSetId;
     Instant createdAt;
@@ -21,6 +21,7 @@ public class FutureRouteResultSet {
     TopologyVersion topologyVersion;
     String quarantineSnapshotId;
     ScenarioBundle scenarioBundle;
+    CandidateDensityCalibrationReport candidateDensityCalibrationReport;
     ScenarioRouteSelection expectedRoute;
     ScenarioRouteSelection robustRoute;
     @Singular("alternative")

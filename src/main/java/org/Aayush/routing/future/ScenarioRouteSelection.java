@@ -10,7 +10,7 @@ import java.util.List;
  * Aggregate summary for one selected route across all scenarios.
  */
 @Value
-@Builder
+@Builder(toBuilder = true)
 public class ScenarioRouteSelection {
     RouteShape route;
     float expectedCost;
@@ -23,6 +23,7 @@ public class ScenarioRouteSelection {
     double optimalityProbability;
     String dominantScenarioId;
     String dominantScenarioLabel;
+    RouteSelectionProvenance routeSelectionProvenance;
     @Singular("explanationTag")
     List<String> explanationTags;
 }

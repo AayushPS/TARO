@@ -97,10 +97,16 @@ class FutureRouteServiceTest {
         assertEquals(List.of("N0", "N2", "N3"), resultSet.getRobustRoute().getRoute().getPathExternalNodeIds());
         assertEquals(2.6f, resultSet.getExpectedRoute().getExpectedCost(), 0.0001f);
         assertEquals(3.0f, resultSet.getRobustRoute().getP90Cost(), 0.0001f);
+        assertEquals(RouteSelectionProvenance.SCENARIO_OPTIMAL, resultSet.getExpectedRoute().getRouteSelectionProvenance());
+        assertEquals(RouteSelectionProvenance.SCENARIO_OPTIMAL, resultSet.getRobustRoute().getRouteSelectionProvenance());
         assertEquals(2, resultSet.getAlternatives().size());
         assertEquals(List.of("N0", "N1", "N3"), resultSet.getAlternatives().get(0).getRoute().getPathExternalNodeIds());
         assertEquals(List.of("N0", "N2", "N3"), resultSet.getAlternatives().get(1).getRoute().getPathExternalNodeIds());
         assertEquals(2, resultSet.getScenarioResults().size());
+        assertEquals(CandidateDensityClass.HIGH_DENSITY, resultSet.getCandidateDensityCalibrationReport().getDensityClass());
+        assertEquals(1.0d, resultSet.getCandidateDensityCalibrationReport().getScenarioCoverageRatio(), 1.0e-9d);
+        assertEquals(1.0d, resultSet.getCandidateDensityCalibrationReport().getCandidateCoverageRatio(), 1.0e-9d);
+        assertEquals(0.0d, resultSet.getCandidateDensityCalibrationReport().getAggregateExpansionRatio(), 1.0e-9d);
         assertTrue(store.get(resultSet.getResultSetId()).isPresent());
     }
 
@@ -175,6 +181,15 @@ class FutureRouteServiceTest {
         assertEquals(0.0d, resultSet.getExpectedRoute().getOptimalityProbability(), 1.0e-6d);
         assertEquals(0.0d, resultSet.getRobustRoute().getOptimalityProbability(), 1.0e-6d);
         assertEquals("b_slow", resultSet.getExpectedRoute().getDominantScenarioId());
+        assertEquals(RouteSelectionProvenance.AGGREGATE_OBJECTIVE, resultSet.getExpectedRoute().getRouteSelectionProvenance());
+        assertEquals(RouteSelectionProvenance.AGGREGATE_OBJECTIVE, resultSet.getRobustRoute().getRouteSelectionProvenance());
+        assertTrue(resultSet.getCandidateDensityCalibrationReport().isExpectedRouteAggregateOnly());
+        assertTrue(resultSet.getCandidateDensityCalibrationReport().isRobustRouteAggregateOnly());
+        assertEquals(1, resultSet.getCandidateDensityCalibrationReport().getAggregateAddedCandidateCount());
+        assertEquals(CandidateDensityClass.HIGH_DENSITY, resultSet.getCandidateDensityCalibrationReport().getDensityClass());
+        assertEquals(1.0d, resultSet.getCandidateDensityCalibrationReport().getScenarioCoverageRatio(), 1.0e-9d);
+        assertEquals(1.5d, resultSet.getCandidateDensityCalibrationReport().getCandidateCoverageRatio(), 1.0e-9d);
+        assertEquals(0.5d, resultSet.getCandidateDensityCalibrationReport().getAggregateExpansionRatio(), 1.0e-9d);
         assertEquals(3, resultSet.getAlternatives().size());
         assertEquals(List.of("N0", "N3", "N4"), resultSet.getAlternatives().get(0).getRoute().getPathExternalNodeIds());
         assertTrue(resultSet.getAlternatives().stream()
