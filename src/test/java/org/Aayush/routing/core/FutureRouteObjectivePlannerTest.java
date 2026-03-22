@@ -35,8 +35,6 @@ class FutureRouteObjectivePlannerTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N0")
                         .departureTicks(7L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build()
         );
 
@@ -66,8 +64,6 @@ class FutureRouteObjectivePlannerTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N2")
                         .departureTicks(11L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build()
         );
 
@@ -96,8 +92,6 @@ class FutureRouteObjectivePlannerTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.EUCLIDEAN)
                         .build()
         );
 

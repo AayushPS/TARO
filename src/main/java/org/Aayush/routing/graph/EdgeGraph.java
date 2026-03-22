@@ -168,22 +168,6 @@ public class EdgeGraph {
     }
 
     /**
-     * @deprecated Use {@link #getNodeX(int)} instead. Assumes GPS semantics.
-     */
-    @Deprecated
-    public double getNodeLat(int nodeId) {
-        return getNodeX(nodeId);
-    }
-
-    /**
-     * @deprecated Use {@link #getNodeY(int)} instead. Assumes GPS semantics.
-     */
-    @Deprecated
-    public double getNodeLon(int nodeId) {
-        return getNodeY(nodeId);
-    }
-
-    /**
      * Returns the number of outgoing edges for a node.
      */
     public int getNodeDegree(int nodeId) {
@@ -323,24 +307,6 @@ public class EdgeGraph {
         int start = firstEdge.get(targetNode);
         int end = firstEdge.get(targetNode + 1);
         return ((long) start << 32) | (end & 0xFFFFFFFFL);
-    }
-
-    /**
-     * Materializes outgoing edges for compatibility with older callers.
-     *
-     * @deprecated Prefer iterator-based traversal or {@link #getOutgoingEdgeRange(int)}.
-     */
-    @Deprecated
-    public int[] getOutgoingEdges(int edgeId) {
-        long range = getOutgoingEdgeRange(edgeId);
-        int start = (int)(range >>> 32);
-        int end = (int)range;
-        int len = end - start;
-        int[] result = new int[len];
-        for (int i = 0; i < len; i++) {
-            result[i] = start + i;
-        }
-        return result;
     }
 
     // ========================================================================

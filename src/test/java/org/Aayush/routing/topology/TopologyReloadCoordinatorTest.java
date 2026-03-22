@@ -246,8 +246,6 @@ class TopologyReloadCoordinatorTest {
                                 .reachable(new boolean[][]{{true}})
                                 .totalCosts(new float[][]{{1.0f}})
                                 .arrivalTicks(new long[][]{{1L}})
-                                .algorithm(null)
-                                .heuristicType(null)
                                 .implementationNote("dummy")
                                 .build())
                         .build())

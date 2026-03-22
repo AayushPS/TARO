@@ -37,14 +37,15 @@ class FailureQuarantineTest {
                 )
         );
         FailureQuarantine quarantine = new FailureQuarantine("runtime-a");
-        quarantine.quarantineNode(1, 80L, "node_down", "ops");
-        quarantine.quarantineEdge(3, 120L, "edge_down", "ops");
+        quarantine.quarantineNode(1, 80L, 10L, "node_down", "ops");
+        quarantine.quarantineEdge(3, 120L, 20L, "edge_down", "ops");
 
         FailureQuarantine.Snapshot snapshot = quarantine.snapshot(0L);
         List<LiveUpdate> updates = snapshot.toLiveUpdates(fixture.edgeGraph());
 
         assertEquals(1, snapshot.activeNodeFailureCount());
         assertEquals(1, snapshot.activeEdgeFailureCount());
+        assertEquals(20L, snapshot.mostRecentObservedAtTicks());
         assertEquals(List.of("edge_down", "node_down", "ops"), snapshot.explanationTags());
         assertIterableEquals(List.of(0, 2, 3), updates.stream().map(LiveUpdate::edgeId).toList());
         assertEquals(80L, updates.get(0).validUntilTicks());

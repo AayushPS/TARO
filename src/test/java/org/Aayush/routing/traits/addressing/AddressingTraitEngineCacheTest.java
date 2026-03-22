@@ -90,8 +90,6 @@ class AddressingTraitEngineCacheTest {
                 .allowMixedAddressing(true)
                 .maxSnapDistance(0.25d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         return engine.resolveRoute(request, context).telemetry();
     }

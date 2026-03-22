@@ -6,12 +6,15 @@ import org.Aayush.core.time.TimeUtils;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.graph.TurnCostMap;
 import org.Aayush.routing.overlay.LiveOverlay;
+import org.Aayush.routing.profile.ProfileRecurrenceCalibrationStore;
+import org.Aayush.routing.profile.ProfileRecencyCalibrationStore;
 import org.Aayush.routing.profile.ProfileStore;
 import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
 import org.Aayush.routing.traits.temporal.TemporalContextResolver;
 import org.Aayush.routing.traits.transition.ResolvedTransitionContext;
 import org.Aayush.routing.traits.transition.TransitionCostStrategy;
 
+import java.util.function.IntFunction;
 import java.util.Objects;
 
 /**
@@ -31,6 +34,9 @@ import java.util.Objects;
  */
 @Accessors(fluent = true)
 public final class CostEngine {
+    private static final double FIFO_EPSILON = 1e-9d;
+    private static final String[] DAY_LABELS = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+
     /**
      * Sentinel predecessor when no turn transition is available.
      */
@@ -46,6 +52,16 @@ public final class CostEngine {
         INTERPOLATED
     }
 
+    /**
+     * Startup validation posture for directed temporal profiles.
+     */
+    public enum ProfileValidationMode {
+        /** Preserve the historical per-day FIFO validation used by low-level engine utilities. */
+        DAILY_ONLY,
+        /** Enforce FIFO on the deployed calendar-aware weekly representation. */
+        DAY_MASK_AWARE_WEEKLY
+    }
+
     private final EdgeGraph edgeGraph;
     private final ProfileStore profileStore;
     private final LiveOverlay liveOverlay;
@@ -57,6 +73,12 @@ public final class CostEngine {
     private final long bucketSizeTicks;
     @Getter
     private final TemporalSamplingPolicy temporalSamplingPolicy;
+    @Getter
+    private final ProfileValidationMode profileValidationMode;
+    @Getter
+    private final ProfileRecurrenceCalibrationStore recurrenceCalibrationStore;
+    @Getter
+    private final ProfileRecencyCalibrationStore recencyCalibrationStore;
 
     /**
      * Creates a cost engine without explicit turn-cost map.
@@ -76,7 +98,10 @@ public final class CostEngine {
                 null,
                 engineTimeUnit,
                 bucketSizeSeconds,
-                TemporalSamplingPolicy.INTERPOLATED
+                TemporalSamplingPolicy.INTERPOLATED,
+                edgeId -> "edge " + edgeId,
+                ProfileValidationMode.DAILY_ONLY,
+                null
         );
     }
 
@@ -92,6 +117,124 @@ public final class CostEngine {
             int bucketSizeSeconds,
             TemporalSamplingPolicy temporalSamplingPolicy
     ) {
+        this(
+                edgeGraph,
+                profileStore,
+                liveOverlay,
+                turnCostMap,
+                engineTimeUnit,
+                bucketSizeSeconds,
+                temporalSamplingPolicy,
+                edgeId -> "edge " + edgeId,
+                ProfileValidationMode.DAILY_ONLY,
+                null
+        );
+    }
+
+    /**
+     * Creates a cost engine with optional turn-cost map, explicit temporal sampling mode,
+     * and caller-supplied edge labels for startup contract diagnostics.
+     */
+    public CostEngine(
+            EdgeGraph edgeGraph,
+            ProfileStore profileStore,
+            LiveOverlay liveOverlay,
+            TurnCostMap turnCostMap,
+            TimeUtils.EngineTimeUnit engineTimeUnit,
+            int bucketSizeSeconds,
+            TemporalSamplingPolicy temporalSamplingPolicy,
+            IntFunction<String> edgeLabelProvider
+    ) {
+        this(
+                edgeGraph,
+                profileStore,
+                liveOverlay,
+                turnCostMap,
+                engineTimeUnit,
+                bucketSizeSeconds,
+                temporalSamplingPolicy,
+                edgeLabelProvider,
+                ProfileValidationMode.DAILY_ONLY,
+                null
+        );
+    }
+
+    /**
+     * Creates a cost engine with explicit temporal sampling mode and validation posture.
+     */
+    public CostEngine(
+            EdgeGraph edgeGraph,
+            ProfileStore profileStore,
+            LiveOverlay liveOverlay,
+            TurnCostMap turnCostMap,
+            TimeUtils.EngineTimeUnit engineTimeUnit,
+            int bucketSizeSeconds,
+            TemporalSamplingPolicy temporalSamplingPolicy,
+            IntFunction<String> edgeLabelProvider,
+            ProfileValidationMode profileValidationMode
+    ) {
+        this(
+                edgeGraph,
+                profileStore,
+                liveOverlay,
+                turnCostMap,
+                engineTimeUnit,
+                bucketSizeSeconds,
+                temporalSamplingPolicy,
+                edgeLabelProvider,
+                profileValidationMode,
+                null
+        );
+    }
+
+    /**
+     * Creates a cost engine with explicit temporal sampling mode, validation posture,
+     * and optional recurrence calibration overrides for shipped scenario serving.
+     */
+    public CostEngine(
+            EdgeGraph edgeGraph,
+            ProfileStore profileStore,
+            LiveOverlay liveOverlay,
+            TurnCostMap turnCostMap,
+            TimeUtils.EngineTimeUnit engineTimeUnit,
+            int bucketSizeSeconds,
+            TemporalSamplingPolicy temporalSamplingPolicy,
+            IntFunction<String> edgeLabelProvider,
+            ProfileValidationMode profileValidationMode,
+            ProfileRecurrenceCalibrationStore recurrenceCalibrationStore
+    ) {
+        this(
+                edgeGraph,
+                profileStore,
+                liveOverlay,
+                turnCostMap,
+                engineTimeUnit,
+                bucketSizeSeconds,
+                temporalSamplingPolicy,
+                edgeLabelProvider,
+                profileValidationMode,
+                recurrenceCalibrationStore,
+                null
+        );
+    }
+
+    /**
+     * Creates a cost engine with explicit temporal sampling mode, validation posture,
+     * and optional recurrence/recency calibration overrides for shipped scenario serving.
+     */
+    public CostEngine(
+            EdgeGraph edgeGraph,
+            ProfileStore profileStore,
+            LiveOverlay liveOverlay,
+            TurnCostMap turnCostMap,
+            TimeUtils.EngineTimeUnit engineTimeUnit,
+            int bucketSizeSeconds,
+            TemporalSamplingPolicy temporalSamplingPolicy,
+            IntFunction<String> edgeLabelProvider,
+            ProfileValidationMode profileValidationMode,
+            ProfileRecurrenceCalibrationStore recurrenceCalibrationStore,
+            ProfileRecencyCalibrationStore recencyCalibrationStore
+    ) {
         this.edgeGraph = Objects.requireNonNull(edgeGraph, "edgeGraph");
         this.profileStore = Objects.requireNonNull(profileStore, "profileStore");
         this.liveOverlay = Objects.requireNonNull(liveOverlay, "liveOverlay");
@@ -102,7 +245,86 @@ public final class CostEngine {
         }
         this.bucketSizeSeconds = bucketSizeSeconds;
         this.temporalSamplingPolicy = Objects.requireNonNull(temporalSamplingPolicy, "temporalSamplingPolicy");
+        this.profileValidationMode = Objects.requireNonNull(profileValidationMode, "profileValidationMode");
+        this.recurrenceCalibrationStore = recurrenceCalibrationStore == null
+                ? ProfileRecurrenceCalibrationStore.empty()
+                : recurrenceCalibrationStore;
+        this.recencyCalibrationStore = recencyCalibrationStore == null
+                ? ProfileRecencyCalibrationStore.empty()
+                : recencyCalibrationStore;
         this.bucketSizeTicks = Math.multiplyExact(bucketSizeSeconds, engineTimeUnit.ticksPerSecond());
+        validateDirectedEdgeProfileContracts(
+                edgeGraph,
+                profileStore,
+                engineTimeUnit,
+                bucketSizeSeconds,
+                Objects.requireNonNull(edgeLabelProvider, "edgeLabelProvider"),
+                profileValidationMode
+        );
+    }
+
+    /**
+     * Validates that every directed edge's final temporal cost curve preserves FIFO ordering.
+     *
+     * <p>The check runs on the edge-specific compiled representation used by runtime queries:
+     * {@code baseWeight * profileMultiplier(bucket)}. Missing profiles are treated as the
+     * neutral fallback and therefore remain FIFO-safe by construction.</p>
+     *
+     * @param edgeGraph final directed edge graph.
+     * @param profileStore loaded profile runtime.
+     * @param engineTimeUnit runtime tick unit.
+     * @param bucketSizeSeconds configured profile bucket width in seconds.
+     * @param edgeLabelProvider label provider for diagnostics.
+     */
+    public static void validateDirectedEdgeProfileContracts(
+            EdgeGraph edgeGraph,
+            ProfileStore profileStore,
+            TimeUtils.EngineTimeUnit engineTimeUnit,
+            int bucketSizeSeconds,
+            IntFunction<String> edgeLabelProvider
+    ) {
+        validateDirectedEdgeProfileContracts(
+                edgeGraph,
+                profileStore,
+                engineTimeUnit,
+                bucketSizeSeconds,
+                edgeLabelProvider,
+                ProfileValidationMode.DAILY_ONLY
+        );
+    }
+
+    /**
+     * Validates the directed edge profile contract under the requested runtime posture.
+     */
+    public static void validateDirectedEdgeProfileContracts(
+            EdgeGraph edgeGraph,
+            ProfileStore profileStore,
+            TimeUtils.EngineTimeUnit engineTimeUnit,
+            int bucketSizeSeconds,
+            IntFunction<String> edgeLabelProvider,
+            ProfileValidationMode profileValidationMode
+    ) {
+        Objects.requireNonNull(edgeGraph, "edgeGraph");
+        Objects.requireNonNull(profileStore, "profileStore");
+        TimeUtils.EngineTimeUnit nonNullEngineTimeUnit = Objects.requireNonNull(engineTimeUnit, "engineTimeUnit");
+        IntFunction<String> nonNullEdgeLabelProvider = Objects.requireNonNull(edgeLabelProvider, "edgeLabelProvider");
+        ProfileValidationMode nonNullProfileValidationMode =
+                Objects.requireNonNull(profileValidationMode, "profileValidationMode");
+        if (bucketSizeSeconds <= 0) {
+            throw new IllegalArgumentException("bucketSizeSeconds must be > 0");
+        }
+
+        long bucketSizeTicks = Math.multiplyExact(bucketSizeSeconds, nonNullEngineTimeUnit.ticksPerSecond());
+        for (int edgeId = 0; edgeId < edgeGraph.edgeCount(); edgeId++) {
+            validateDirectedEdgeFifo(
+                    edgeGraph,
+                    profileStore,
+                    bucketSizeTicks,
+                    edgeId,
+                    nonNullEdgeLabelProvider,
+                    nonNullProfileValidationMode
+            );
+        }
     }
 
     /**
@@ -322,6 +544,227 @@ public final class CostEngine {
         }
 
         return effectiveCost;
+    }
+
+    private static void validateDirectedEdgeFifo(
+            EdgeGraph edgeGraph,
+            ProfileStore profileStore,
+            long bucketSizeTicks,
+            int edgeId,
+            IntFunction<String> edgeLabelProvider,
+            ProfileValidationMode profileValidationMode
+    ) {
+        int profileId = edgeGraph.getProfileId(edgeId);
+        if (!profileStore.hasProfile(profileId)) {
+            if (profileId != 0) {
+                throw new IllegalArgumentException(
+                        edgeLabelProvider.apply(edgeId)
+                                + " references unknown profile "
+                                + profileId
+                                + "; only profileId 0 may use the neutral fallback"
+                );
+            }
+            return;
+        }
+
+        int bucketCount = profileStore.bucketCount(profileId);
+        boolean calendarAwareWeeklyValidation =
+                profileValidationMode == ProfileValidationMode.DAY_MASK_AWARE_WEEKLY
+                        && !profileStore.isAllDaysActive(profileId);
+        if (bucketCount <= 1 && !calendarAwareWeeklyValidation) {
+            return;
+        }
+
+        double baseWeight = edgeGraph.getBaseWeight(edgeId);
+        if (calendarAwareWeeklyValidation) {
+            validateWeeklyDayMaskAwareFifo(
+                    profileStore,
+                    bucketSizeTicks,
+                    edgeId,
+                    edgeLabelProvider,
+                    profileId,
+                    bucketCount,
+                    baseWeight
+            );
+            return;
+        }
+
+        validateDailyFifo(
+                profileStore,
+                bucketSizeTicks,
+                edgeId,
+                edgeLabelProvider,
+                profileId,
+                bucketCount,
+                baseWeight
+        );
+    }
+
+    private static void validateDailyFifo(
+            ProfileStore profileStore,
+            long bucketSizeTicks,
+            int edgeId,
+            IntFunction<String> edgeLabelProvider,
+            int profileId,
+            int bucketCount,
+            double baseWeight
+    ) {
+        if (bucketCount <= 1) {
+            return;
+        }
+
+        double previousArrival = arrivalTicks(0, bucketSizeTicks, baseWeight, profileStore.getMultiplier(profileId, 0));
+        for (int bucketIndex = 1; bucketIndex < bucketCount; bucketIndex++) {
+            double currentArrival = arrivalTicks(
+                    bucketIndex,
+                    bucketSizeTicks,
+                    baseWeight,
+                    profileStore.getMultiplier(profileId, bucketIndex)
+            );
+            ensureFifoOrdering(
+                    previousArrival,
+                    currentArrival,
+                    edgeLabelProvider.apply(edgeId),
+                    profileId,
+                    bucketIndex - 1,
+                    bucketIndex
+            );
+            previousArrival = currentArrival;
+        }
+
+        double wrapArrival = arrivalTicks(
+                bucketCount,
+                bucketSizeTicks,
+                baseWeight,
+                profileStore.getMultiplier(profileId, 0)
+        );
+        ensureFifoOrdering(
+                previousArrival,
+                wrapArrival,
+                edgeLabelProvider.apply(edgeId),
+                profileId,
+                bucketCount - 1,
+                0
+        );
+    }
+
+    private static void validateWeeklyDayMaskAwareFifo(
+            ProfileStore profileStore,
+            long bucketSizeTicks,
+            int edgeId,
+            IntFunction<String> edgeLabelProvider,
+            int profileId,
+            int bucketCount,
+            double baseWeight
+    ) {
+        int sequenceLength = DAY_LABELS.length * bucketCount;
+        if (sequenceLength <= 1) {
+            return;
+        }
+
+        double previousArrival = arrivalTicks(
+                0,
+                bucketSizeTicks,
+                baseWeight,
+                profileStore.getMultiplierForDay(profileId, 0, 0)
+        );
+        for (int sequenceIndex = 1; sequenceIndex < sequenceLength; sequenceIndex++) {
+            int dayOfWeek = sequenceIndex / bucketCount;
+            int bucketIndex = sequenceIndex % bucketCount;
+            double currentArrival = arrivalTicks(
+                    sequenceIndex,
+                    bucketSizeTicks,
+                    baseWeight,
+                    profileStore.getMultiplierForDay(profileId, dayOfWeek, bucketIndex)
+            );
+            ensureFifoOrdering(
+                    previousArrival,
+                    currentArrival,
+                    edgeLabelProvider.apply(edgeId),
+                    profileId,
+                    weeklyPositionLabel((sequenceIndex - 1) / bucketCount, (sequenceIndex - 1) % bucketCount),
+                    weeklyPositionLabel(dayOfWeek, bucketIndex)
+            );
+            previousArrival = currentArrival;
+        }
+
+        double wrapArrival = arrivalTicks(
+                sequenceLength,
+                bucketSizeTicks,
+                baseWeight,
+                profileStore.getMultiplierForDay(profileId, 0, 0)
+        );
+        ensureFifoOrdering(
+                previousArrival,
+                wrapArrival,
+                edgeLabelProvider.apply(edgeId),
+                profileId,
+                weeklyPositionLabel(DAY_LABELS.length - 1, bucketCount - 1),
+                weeklyPositionLabel(0, 0)
+        );
+    }
+
+    private static double arrivalTicks(
+            int bucketIndex,
+            long bucketSizeTicks,
+            double baseWeight,
+            double multiplier
+    ) {
+        return (double) bucketIndex * (double) bucketSizeTicks + (baseWeight * multiplier);
+    }
+
+    private static void ensureFifoOrdering(
+            double previousArrival,
+            double currentArrival,
+            String edgeLabel,
+            int profileId,
+            int previousBucket,
+            int currentBucket
+    ) {
+        if (currentArrival + FIFO_EPSILON < previousArrival) {
+            throw new IllegalArgumentException(
+                    edgeLabel
+                            + " profile "
+                            + profileId
+                            + " violates FIFO between bucket "
+                            + previousBucket
+                            + " and bucket "
+                            + currentBucket
+                            + ": arrival "
+                            + currentArrival
+                            + " < "
+                            + previousArrival
+            );
+        }
+    }
+
+    private static void ensureFifoOrdering(
+            double previousArrival,
+            double currentArrival,
+            String edgeLabel,
+            int profileId,
+            String previousPosition,
+            String currentPosition
+    ) {
+        if (currentArrival + FIFO_EPSILON < previousArrival) {
+            throw new IllegalArgumentException(
+                    edgeLabel
+                            + " profile "
+                            + profileId
+                            + " violates FIFO between "
+                            + previousPosition
+                            + " and "
+                            + currentPosition
+                            + ": arrival "
+                            + currentArrival
+                            + " < "
+                            + previousArrival
+            );
+        }
+    }
+
+    private static String weeklyPositionLabel(int dayOfWeek, int bucketIndex) {
+        return DAY_LABELS[dayOfWeek] + "/bucket " + bucketIndex;
     }
 
     /**

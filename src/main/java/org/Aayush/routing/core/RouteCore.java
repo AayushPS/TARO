@@ -11,7 +11,6 @@ import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.execution.ResolvedExecutionProfileContext;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.heuristic.GoalBoundHeuristic;
-import org.Aayush.routing.heuristic.HeuristicConfigurationException;
 import org.Aayush.routing.heuristic.HeuristicProvider;
 import org.Aayush.routing.heuristic.HeuristicProviderFactory;
 import org.Aayush.routing.heuristic.HeuristicType;
@@ -53,7 +52,6 @@ import org.Aayush.routing.traits.transition.TransitionTraitCatalog;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Main routing orchestration entry point.
@@ -62,8 +60,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * applies deterministic request validation before any search starts. Execution flow:</p>
  * <ul>
  * <li>Normalize client payloads from external/typed addressing to internal node ids.</li>
- * <li>Validate algorithm/heuristic compatibility and required fields.</li>
- * <li>Resolve or lazily build heuristic providers with strict contract checks.</li>
+ * <li>Validate request structure against the startup-bound execution profile.</li>
+ * <li>Resolve goal heuristics with strict contract checks.</li>
  * <li>Delegate to point-to-point or matrix planners.</li>
  * <li>Wrap planner guardrail exceptions into {@link RouteCoreException} with stable reason codes.</li>
  * <li>Map internal node paths and matrices back to external response payloads.</li>
@@ -74,8 +72,6 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
     public static final String REASON_MATRIX_REQUEST_REQUIRED = "H12_MATRIX_REQUEST_REQUIRED";
     public static final String REASON_SOURCE_EXTERNAL_ID_REQUIRED = "H12_SOURCE_EXTERNAL_ID_REQUIRED";
     public static final String REASON_TARGET_EXTERNAL_ID_REQUIRED = "H12_TARGET_EXTERNAL_ID_REQUIRED";
-    public static final String REASON_ALGORITHM_REQUIRED = "H12_ALGORITHM_REQUIRED";
-    public static final String REASON_HEURISTIC_REQUIRED = "H12_HEURISTIC_REQUIRED";
     public static final String REASON_UNKNOWN_EXTERNAL_NODE = "H12_UNKNOWN_EXTERNAL_NODE";
     public static final String REASON_INTERNAL_NODE_OUT_OF_BOUNDS = "H12_INTERNAL_NODE_OUT_OF_BOUNDS";
     public static final String REASON_DIJKSTRA_HEURISTIC_MISMATCH = "H12_DIJKSTRA_HEURISTIC_MISMATCH";
@@ -137,7 +133,6 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
     public static final String REASON_UNKNOWN_EXECUTION_PROFILE = "HEX_UNKNOWN_EXECUTION_PROFILE";
     public static final String REASON_EXECUTION_CONFIG_CONFLICT = "HEX_EXECUTION_CONFIG_CONFLICT";
     public static final String REASON_EXECUTION_PROFILE_INCOMPATIBLE = "HEX_EXECUTION_PROFILE_INCOMPATIBLE";
-    public static final String REASON_REQUEST_EXECUTION_SELECTOR_MISMATCH = "HEX_REQUEST_EXECUTION_SELECTOR_MISMATCH";
 
     private static final GoalBoundHeuristic ZERO_HEURISTIC = nodeId -> 0.0d;
 
@@ -168,8 +163,6 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
     private final TraitBundleTelemetry traitBundleTelemetry;
     private final ResolvedExecutionProfileContext resolvedExecutionProfileContext;
     private final HeuristicProvider boundHeuristicProvider;
-    private final ConcurrentHashMap<HeuristicType, HeuristicProvider> legacyHeuristicProviders =
-            new ConcurrentHashMap<>();
 
     private final ThreadLocal<MatrixExecutionStats> matrixExecutionStats =
             ThreadLocal.withInitial(() -> MatrixExecutionStats.empty(0));
@@ -317,42 +310,37 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
                 traitBundleBinding.getTraitBundleTelemetry(),
                 "traitBundleBinding.traitBundleTelemetry"
         );
-        if (executionRuntimeConfig == null) {
-            this.resolvedExecutionProfileContext = ResolvedExecutionProfileContext.builder().build();
-            this.boundHeuristicProvider = null;
-        } else {
-            ExecutionRuntimeBinder activeExecutionRuntimeBinder = executionRuntimeBinder == null
-                    ? new DefaultExecutionRuntimeBinder()
-                    : executionRuntimeBinder;
-            ExecutionRuntimeBinder.Binding executionBinding;
-            try {
-                executionBinding = activeExecutionRuntimeBinder.bind(ExecutionRuntimeBinder.BindInput.builder()
-                        .executionRuntimeConfig(executionRuntimeConfig)
-                        .executionProfileRegistry(executionProfileRegistry)
-                        .edgeGraph(this.edgeGraph)
-                        .profileStore(this.profileStore)
-                        .costEngine(this.costEngine)
-                        .landmarkStore(this.landmarkStore)
-                        .heuristicProviderFactory(this.heuristicProviderFactory)
-                        .build());
-            } catch (RouteCoreException ex) {
-                throw ex;
-            } catch (RuntimeException ex) {
-                throw new RouteCoreException(
-                        REASON_EXECUTION_PROFILE_INCOMPATIBLE,
-                        "failed to bind execution runtime config: " + ex.getMessage(),
-                        ex
-                );
-            }
-            this.resolvedExecutionProfileContext = Objects.requireNonNull(
-                    executionBinding.getResolvedExecutionProfileContext(),
-                    "executionBinding.resolvedExecutionProfileContext"
-            );
-            this.boundHeuristicProvider = Objects.requireNonNull(
-                    executionBinding.getHeuristicProvider(),
-                    "executionBinding.heuristicProvider"
+        ExecutionRuntimeBinder activeExecutionRuntimeBinder = executionRuntimeBinder == null
+                ? new DefaultExecutionRuntimeBinder()
+                : executionRuntimeBinder;
+        ExecutionRuntimeBinder.Binding executionBinding;
+        try {
+            executionBinding = activeExecutionRuntimeBinder.bind(ExecutionRuntimeBinder.BindInput.builder()
+                    .executionRuntimeConfig(executionRuntimeConfig)
+                    .executionProfileRegistry(executionProfileRegistry)
+                    .edgeGraph(this.edgeGraph)
+                    .profileStore(this.profileStore)
+                    .costEngine(this.costEngine)
+                    .landmarkStore(this.landmarkStore)
+                    .heuristicProviderFactory(this.heuristicProviderFactory)
+                    .build());
+        } catch (RouteCoreException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new RouteCoreException(
+                    REASON_EXECUTION_PROFILE_INCOMPATIBLE,
+                    "failed to bind execution runtime config: " + ex.getMessage(),
+                    ex
             );
         }
+        this.resolvedExecutionProfileContext = Objects.requireNonNull(
+                executionBinding.getResolvedExecutionProfileContext(),
+                "executionBinding.resolvedExecutionProfileContext"
+        );
+        this.boundHeuristicProvider = Objects.requireNonNull(
+                executionBinding.getHeuristicProvider(),
+                "executionBinding.heuristicProvider"
+        );
 
         this.aStarPlanner = aStarPlanner == null
                 ? new BidirectionalTdAStarPlanner(edgeGraph, costEngine)
@@ -529,7 +517,7 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
     }
 
     /**
-     * Computes one normalized internal request using the algorithm selected in the request.
+     * Computes one normalized internal request using the startup-bound execution profile.
      *
      * <p>All planner-specific guardrail exceptions are normalized to route-core reason codes
      * to keep caller error handling stable even when planner internals evolve.</p>
@@ -579,19 +567,11 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
         }
     }
 
-    /**
-     * Exposes the graph runtime contract used by planners.
-     */
-    EdgeGraph edgeGraphContract() {
-        return edgeGraph;
-    }
-
-    /**
-     * Exposes the cost-engine runtime contract used by planners.
-     */
-    CostEngine costEngineContract() {
-        return costEngine;
-    }
+    // Package-private runtime contracts used by future-aware evaluators.
+    EdgeGraph edgeGraphContract() { return edgeGraph; }
+    ProfileStore profileStoreContract() { return profileStore; }
+    CostEngine costEngineContract() { return costEngine; }
+    ResolvedTemporalContext temporalContextContract() { return resolvedTemporalContext; }
 
     /**
      * Resolves a goal-bound heuristic for the current request.
@@ -610,9 +590,6 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
         if (heuristicType == HeuristicType.NONE) {
             return ZERO_HEURISTIC;
         }
-        if (usesLegacyRequestExecutionSelectors()) {
-            return bindLegacyGoalHeuristic(heuristicType, targetNodeId);
-        }
         if (heuristicType != resolvedExecutionProfileContext.getHeuristicType()) {
             throw new RouteCoreException(
                     REASON_EXECUTION_PROFILE_INCOMPATIBLE,
@@ -627,52 +604,6 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
             throw new RouteCoreException(
                     REASON_HEURISTIC_BIND_FAILED,
                     "failed to bind heuristic " + heuristicType + " to goal node " + targetNodeId,
-                    ex
-            );
-        }
-    }
-
-    private boolean usesLegacyRequestExecutionSelectors() {
-        return resolvedExecutionProfileContext.getAlgorithm() == null;
-    }
-
-    private GoalBoundHeuristic bindLegacyGoalHeuristic(HeuristicType heuristicType, int targetNodeId) {
-        HeuristicProvider provider = legacyHeuristicProviders.get(heuristicType);
-        if (provider == null) {
-            HeuristicProvider candidate = createLegacyHeuristicProvider(heuristicType);
-            HeuristicProvider raced = legacyHeuristicProviders.putIfAbsent(heuristicType, candidate);
-            provider = raced == null ? candidate : raced;
-        }
-        try {
-            return provider.bindGoal(targetNodeId);
-        } catch (RuntimeException ex) {
-            throw new RouteCoreException(
-                    REASON_HEURISTIC_BIND_FAILED,
-                    "failed to bind heuristic " + heuristicType + " to goal node " + targetNodeId,
-                    ex
-            );
-        }
-    }
-
-    private HeuristicProvider createLegacyHeuristicProvider(HeuristicType heuristicType) {
-        try {
-            return heuristicProviderFactory.create(
-                    heuristicType,
-                    edgeGraph,
-                    profileStore,
-                    costEngine,
-                    landmarkStore
-            );
-        } catch (HeuristicConfigurationException ex) {
-            throw new RouteCoreException(
-                    REASON_HEURISTIC_CONFIGURATION_FAILED,
-                    "failed to initialize heuristic " + heuristicType + ": " + ex.getMessage(),
-                    ex
-            );
-        } catch (RuntimeException ex) {
-            throw new RouteCoreException(
-                    REASON_HEURISTIC_CONFIGURATION_FAILED,
-                    "failed to initialize heuristic " + heuristicType + ": " + ex.getMessage(),
                     ex
             );
         }

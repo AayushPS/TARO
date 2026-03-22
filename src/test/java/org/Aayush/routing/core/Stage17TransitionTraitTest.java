@@ -5,6 +5,7 @@ import org.Aayush.core.id.FastUtilIDMapper;
 import org.Aayush.core.id.IDMapper;
 import org.Aayush.core.time.TimeUtils;
 import org.Aayush.routing.cost.CostEngine;
+import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.graph.TurnCostMap;
 import org.Aayush.routing.overlay.LiveOverlay;
@@ -90,15 +91,13 @@ class Stage17TransitionTraitTest {
     @DisplayName("EDGE_BASED applies finite turn penalty while NODE_BASED ignores it")
     void testEdgeBasedAppliesFiniteTurnPenaltyNodeBasedIgnores() {
         Fixture fixture = createFixture(new TurnSpec[]{new TurnSpec(0, 2, 5.0f)}, true);
-        RouteCore edgeCore = createCore(fixture, TransitionRuntimeConfig.edgeBased());
-        RouteCore nodeCore = createCore(fixture, TransitionRuntimeConfig.nodeBased());
+        RouteCore edgeCore = createCore(fixture, TransitionRuntimeConfig.edgeBased(), ExecutionRuntimeConfig.dijkstra());
+        RouteCore nodeCore = createCore(fixture, TransitionRuntimeConfig.nodeBased(), ExecutionRuntimeConfig.dijkstra());
 
         RouteRequest request = RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N2")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
 
         RouteResponse edge = edgeCore.route(request);
@@ -116,26 +115,35 @@ class Stage17TransitionTraitTest {
     @DisplayName("Optimality: A_STAR matches DIJKSTRA under finite-turn semantics in both modes")
     void testAStarRouteOptimalityMatchesDijkstraInBothTransitionModes() {
         Fixture fixture = createFixture(new TurnSpec[]{new TurnSpec(0, 2, 5.0f)}, true);
-        RouteCore edgeCore = createCore(fixture, TransitionRuntimeConfig.edgeBased());
-        RouteCore nodeCore = createCore(fixture, TransitionRuntimeConfig.nodeBased());
+        RouteCore edgeDijkstraCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.edgeBased(),
+                ExecutionRuntimeConfig.dijkstra()
+        );
+        RouteCore edgeAStarCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.edgeBased(),
+                ExecutionRuntimeConfig.aStarNone()
+        );
+        RouteCore nodeDijkstraCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.nodeBased(),
+                ExecutionRuntimeConfig.dijkstra()
+        );
+        RouteCore nodeAStarCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.nodeBased(),
+                ExecutionRuntimeConfig.aStarNone()
+        );
 
-        RouteRequest edgeDijkstraRequest = RouteRequest.builder()
+        RouteRequest request = RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N2")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
-                .build();
-        RouteRequest edgeAStarRequest = RouteRequest.builder()
-                .sourceExternalId("N0")
-                .targetExternalId("N2")
-                .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
 
-        RouteResponse edgeDijkstra = edgeCore.route(edgeDijkstraRequest);
-        RouteResponse edgeAStar = edgeCore.route(edgeAStarRequest);
+        RouteResponse edgeDijkstra = edgeDijkstraCore.route(request);
+        RouteResponse edgeAStar = edgeAStarCore.route(request);
         assertEquals(edgeDijkstra.isReachable(), edgeAStar.isReachable());
         assertEquals(edgeDijkstra.getTotalCost(), edgeAStar.getTotalCost(), 1e-6f);
         assertEquals(edgeDijkstra.getArrivalTicks(), edgeAStar.getArrivalTicks());
@@ -143,8 +151,8 @@ class Stage17TransitionTraitTest {
         assertEquals(3.0f, edgeAStar.getTotalCost(), 1e-6f);
         assertEquals(List.of("N0", "N2"), edgeAStar.getPathExternalNodeIds());
 
-        RouteResponse nodeDijkstra = nodeCore.route(edgeDijkstraRequest);
-        RouteResponse nodeAStar = nodeCore.route(edgeAStarRequest);
+        RouteResponse nodeDijkstra = nodeDijkstraCore.route(request);
+        RouteResponse nodeAStar = nodeAStarCore.route(request);
         assertEquals(nodeDijkstra.isReachable(), nodeAStar.isReachable());
         assertEquals(nodeDijkstra.getTotalCost(), nodeAStar.getTotalCost(), 1e-6f);
         assertEquals(nodeDijkstra.getArrivalTicks(), nodeAStar.getArrivalTicks());
@@ -157,33 +165,42 @@ class Stage17TransitionTraitTest {
     @DisplayName("Matrix optimality: A_STAR matches DIJKSTRA under finite-turn semantics in both modes")
     void testAStarMatrixOptimalityMatchesDijkstraInBothTransitionModes() {
         Fixture fixture = createFixture(new TurnSpec[]{new TurnSpec(0, 2, 5.0f)}, true);
-        RouteCore edgeCore = createCore(fixture, TransitionRuntimeConfig.edgeBased());
-        RouteCore nodeCore = createCore(fixture, TransitionRuntimeConfig.nodeBased());
+        RouteCore edgeDijkstraCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.edgeBased(),
+                ExecutionRuntimeConfig.dijkstra()
+        );
+        RouteCore edgeAStarCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.edgeBased(),
+                ExecutionRuntimeConfig.aStarNone()
+        );
+        RouteCore nodeDijkstraCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.nodeBased(),
+                ExecutionRuntimeConfig.dijkstra()
+        );
+        RouteCore nodeAStarCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.nodeBased(),
+                ExecutionRuntimeConfig.aStarNone()
+        );
 
-        MatrixRequest dijkstraRequest = MatrixRequest.builder()
+        MatrixRequest request = MatrixRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N2")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
-                .build();
-        MatrixRequest aStarRequest = MatrixRequest.builder()
-                .sourceExternalId("N0")
-                .targetExternalId("N2")
-                .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
 
-        MatrixResponse edgeDijkstra = edgeCore.matrix(dijkstraRequest);
-        MatrixResponse edgeAStar = edgeCore.matrix(aStarRequest);
+        MatrixResponse edgeDijkstra = edgeDijkstraCore.matrix(request);
+        MatrixResponse edgeAStar = edgeAStarCore.matrix(request);
         assertEquals(edgeDijkstra.getReachable()[0][0], edgeAStar.getReachable()[0][0]);
         assertEquals(edgeDijkstra.getTotalCosts()[0][0], edgeAStar.getTotalCosts()[0][0], 1e-6f);
         assertEquals(edgeDijkstra.getArrivalTicks()[0][0], edgeAStar.getArrivalTicks()[0][0]);
         assertEquals(3.0f, edgeAStar.getTotalCosts()[0][0], 1e-6f);
 
-        MatrixResponse nodeDijkstra = nodeCore.matrix(dijkstraRequest);
-        MatrixResponse nodeAStar = nodeCore.matrix(aStarRequest);
+        MatrixResponse nodeDijkstra = nodeDijkstraCore.matrix(request);
+        MatrixResponse nodeAStar = nodeAStarCore.matrix(request);
         assertEquals(nodeDijkstra.getReachable()[0][0], nodeAStar.getReachable()[0][0]);
         assertEquals(nodeDijkstra.getTotalCosts()[0][0], nodeAStar.getTotalCosts()[0][0], 1e-6f);
         assertEquals(nodeDijkstra.getArrivalTicks()[0][0], nodeAStar.getArrivalTicks()[0][0]);
@@ -201,16 +218,24 @@ class Stage17TransitionTraitTest {
                 1,
                 1
         );
-        RouteCore edgeCore = createCore(fixture, TransitionRuntimeConfig.edgeBased(), fallbackPlanner);
-        RouteCore nodeCore = createCore(fixture, TransitionRuntimeConfig.nodeBased(), fallbackPlanner);
+        RouteCore edgeCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.edgeBased(),
+                fallbackPlanner,
+                ExecutionRuntimeConfig.aStarNone()
+        );
+        RouteCore nodeCore = createCore(
+                fixture,
+                TransitionRuntimeConfig.nodeBased(),
+                fallbackPlanner,
+                ExecutionRuntimeConfig.aStarNone()
+        );
 
         MatrixRequest matrixRequest = MatrixRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N1")
                 .targetExternalId("N2")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
 
         MatrixResponse edgeMatrix = edgeCore.matrix(matrixRequest);
@@ -234,15 +259,13 @@ class Stage17TransitionTraitTest {
     @DisplayName("Forbidden turn blocks expansion in both EDGE_BASED and NODE_BASED")
     void testForbiddenTurnBlockedInBothModes() {
         Fixture fixture = createFixture(new TurnSpec[]{new TurnSpec(0, 1, Float.POSITIVE_INFINITY)}, false);
-        RouteCore edgeCore = createCore(fixture, TransitionRuntimeConfig.edgeBased());
-        RouteCore nodeCore = createCore(fixture, TransitionRuntimeConfig.nodeBased());
+        RouteCore edgeCore = createCore(fixture, TransitionRuntimeConfig.edgeBased(), ExecutionRuntimeConfig.dijkstra());
+        RouteCore nodeCore = createCore(fixture, TransitionRuntimeConfig.nodeBased(), ExecutionRuntimeConfig.dijkstra());
 
         RouteRequest routeRequest = RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N2")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
 
         RouteResponse edgeRoute = edgeCore.route(routeRequest);
@@ -254,8 +277,6 @@ class Stage17TransitionTraitTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N2")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
 
         MatrixResponse edgeMatrix = edgeCore.matrix(matrixRequest);
@@ -270,15 +291,13 @@ class Stage17TransitionTraitTest {
     @DisplayName("Turn-map absent fixture keeps EDGE_BASED and NODE_BASED outputs identical")
     void testTurnMapAbsentParityAcrossModes() {
         Fixture fixture = createFixture(null, true);
-        RouteCore edgeCore = createCore(fixture, TransitionRuntimeConfig.edgeBased());
-        RouteCore nodeCore = createCore(fixture, TransitionRuntimeConfig.nodeBased());
+        RouteCore edgeCore = createCore(fixture, TransitionRuntimeConfig.edgeBased(), ExecutionRuntimeConfig.dijkstra());
+        RouteCore nodeCore = createCore(fixture, TransitionRuntimeConfig.nodeBased(), ExecutionRuntimeConfig.dijkstra());
 
         RouteRequest routeRequest = RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N2")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
 
         RouteResponse edgeRoute = edgeCore.route(routeRequest);
@@ -293,8 +312,6 @@ class Stage17TransitionTraitTest {
                 .sourceExternalId("N1")
                 .targetExternalId("N2")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
 
         MatrixResponse edgeMatrix = edgeCore.matrix(matrixRequest);
@@ -308,7 +325,15 @@ class Stage17TransitionTraitTest {
     }
 
     private RouteCore createCore(Fixture fixture, TransitionRuntimeConfig transitionRuntimeConfig) {
-        return createCore(fixture, transitionRuntimeConfig, null);
+        return createCore(fixture, transitionRuntimeConfig, null, ExecutionRuntimeConfig.dijkstra());
+    }
+
+    private RouteCore createCore(
+            Fixture fixture,
+            TransitionRuntimeConfig transitionRuntimeConfig,
+            ExecutionRuntimeConfig executionRuntimeConfig
+    ) {
+        return createCore(fixture, transitionRuntimeConfig, null, executionRuntimeConfig);
     }
 
     private RouteCore createCore(
@@ -316,11 +341,21 @@ class Stage17TransitionTraitTest {
             TransitionRuntimeConfig transitionRuntimeConfig,
             MatrixPlanner matrixPlanner
     ) {
+        return createCore(fixture, transitionRuntimeConfig, matrixPlanner, ExecutionRuntimeConfig.dijkstra());
+    }
+
+    private RouteCore createCore(
+            Fixture fixture,
+            TransitionRuntimeConfig transitionRuntimeConfig,
+            MatrixPlanner matrixPlanner,
+            ExecutionRuntimeConfig executionRuntimeConfig
+    ) {
         RouteCore.RouteCoreBuilder builder = RouteCore.builder()
                 .edgeGraph(fixture.edgeGraph())
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .executionRuntimeConfig(executionRuntimeConfig)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(transitionRuntimeConfig)
                 .addressingRuntimeConfig(AddressingRuntimeConfig.defaultRuntime());

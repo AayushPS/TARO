@@ -2,7 +2,6 @@ package org.Aayush.routing.core;
 
 import lombok.Builder;
 import lombok.Value;
-import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.traits.addressing.AddressInput;
 
 /**
@@ -28,10 +27,4 @@ public class RouteRequest {
     Double maxSnapDistance;
     /** Departure time in engine ticks. */
     long departureTicks;
-    /** Deprecated startup-lock hint for the execution algorithm selected at startup. */
-    @Deprecated
-    RoutingAlgorithm algorithm;
-    /** Deprecated startup-lock hint for the heuristic selected at startup. */
-    @Deprecated
-    HeuristicType heuristicType;
 }

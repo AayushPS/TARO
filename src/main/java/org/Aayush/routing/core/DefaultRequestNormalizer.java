@@ -7,8 +7,8 @@ import org.Aayush.routing.execution.ResolvedExecutionProfileContext;
 import java.util.Objects;
 
 /**
- * Default request normalizer that binds request payloads either to a startup-selected
- * execution profile or to the legacy per-request selectors when no startup profile is provided.
+ * Default request normalizer that binds request payloads to the startup-selected
+ * execution profile.
  */
 public final class DefaultRequestNormalizer implements RequestNormalizer {
     /**
@@ -25,13 +25,10 @@ public final class DefaultRequestNormalizer implements RequestNormalizer {
                 request,
                 addressingContext(nonNullContext)
         );
-        ResolvedExecutionProfileContext executionProfileContext = nonNullContext.getResolvedExecutionProfileContext();
-        RoutingAlgorithm algorithm = resolveAlgorithm(request.getAlgorithm(), executionProfileContext);
-        HeuristicType heuristicType = resolveHeuristicType(
-                request.getHeuristicType(),
-                algorithm,
-                executionProfileContext
-        );
+        ResolvedExecutionProfileContext executionProfileContext =
+                requireBoundExecutionProfile(nonNullContext.getResolvedExecutionProfileContext());
+        RoutingAlgorithm algorithm = executionProfileContext.getAlgorithm();
+        HeuristicType heuristicType = resolveHeuristicType(algorithm, executionProfileContext);
         InternalRouteRequest internalRequest = new InternalRouteRequest(
                 addressing.sourceNodeId(),
                 addressing.targetNodeId(),
@@ -64,13 +61,10 @@ public final class DefaultRequestNormalizer implements RequestNormalizer {
                 request,
                 addressingContext(nonNullContext)
         );
-        ResolvedExecutionProfileContext executionProfileContext = nonNullContext.getResolvedExecutionProfileContext();
-        RoutingAlgorithm algorithm = resolveAlgorithm(request.getAlgorithm(), executionProfileContext);
-        HeuristicType heuristicType = resolveHeuristicType(
-                request.getHeuristicType(),
-                algorithm,
-                executionProfileContext
-        );
+        ResolvedExecutionProfileContext executionProfileContext =
+                requireBoundExecutionProfile(nonNullContext.getResolvedExecutionProfileContext());
+        RoutingAlgorithm algorithm = executionProfileContext.getAlgorithm();
+        HeuristicType heuristicType = resolveHeuristicType(algorithm, executionProfileContext);
         InternalMatrixRequest internalRequest = new InternalMatrixRequest(
                 addressing.sourceNodeIds(),
                 addressing.targetNodeIds(),
@@ -101,66 +95,31 @@ public final class DefaultRequestNormalizer implements RequestNormalizer {
         );
     }
 
-    private void validateExecutionHints(
-            RoutingAlgorithm requestedAlgorithm,
-            HeuristicType requestedHeuristicType,
+    private ResolvedExecutionProfileContext requireBoundExecutionProfile(
             ResolvedExecutionProfileContext executionProfileContext
     ) {
-        if (requestedAlgorithm != null && requestedAlgorithm != executionProfileContext.getAlgorithm()) {
+        ResolvedExecutionProfileContext nonNullContext =
+                Objects.requireNonNull(executionProfileContext, "executionProfileContext");
+        if (nonNullContext.getAlgorithm() == null || nonNullContext.getHeuristicType() == null) {
             throw new RouteCoreException(
-                    RouteCore.REASON_REQUEST_EXECUTION_SELECTOR_MISMATCH,
-                    "request algorithm " + requestedAlgorithm
-                            + " does not match startup execution profile " + executionProfileContext.getAlgorithm()
+                    RouteCore.REASON_EXECUTION_CONFIG_REQUIRED,
+                    "request normalization requires a startup execution profile"
             );
         }
-        if (requestedHeuristicType != null && requestedHeuristicType != executionProfileContext.getHeuristicType()) {
-            throw new RouteCoreException(
-                    RouteCore.REASON_REQUEST_EXECUTION_SELECTOR_MISMATCH,
-                    "request heuristicType " + requestedHeuristicType
-                            + " does not match startup execution profile "
-                            + executionProfileContext.getHeuristicType()
-            );
-        }
-    }
-
-    private RoutingAlgorithm resolveAlgorithm(
-            RoutingAlgorithm requestedAlgorithm,
-            ResolvedExecutionProfileContext executionProfileContext
-    ) {
-        if (usesLegacyRequestSelectors(executionProfileContext)) {
-            if (requestedAlgorithm == null) {
-                throw new RouteCoreException(RouteCore.REASON_ALGORITHM_REQUIRED, "algorithm must be provided");
-            }
-            return requestedAlgorithm;
-        }
-
-        validateExecutionHints(requestedAlgorithm, null, executionProfileContext);
-        return executionProfileContext.getAlgorithm();
+        return nonNullContext;
     }
 
     private HeuristicType resolveHeuristicType(
-            HeuristicType requestedHeuristicType,
             RoutingAlgorithm algorithm,
             ResolvedExecutionProfileContext executionProfileContext
     ) {
-        if (usesLegacyRequestSelectors(executionProfileContext)) {
-            if (requestedHeuristicType == null) {
-                throw new RouteCoreException(RouteCore.REASON_HEURISTIC_REQUIRED, "heuristicType must be provided");
-            }
-            if (algorithm == RoutingAlgorithm.DIJKSTRA && requestedHeuristicType != HeuristicType.NONE) {
-                throw new RouteCoreException(
-                        RouteCore.REASON_DIJKSTRA_HEURISTIC_MISMATCH,
-                        "DIJKSTRA requires heuristicType NONE"
-                );
-            }
-            return requestedHeuristicType;
+        HeuristicType heuristicType = executionProfileContext.getHeuristicType();
+        if (algorithm == RoutingAlgorithm.DIJKSTRA && heuristicType != HeuristicType.NONE) {
+            throw new RouteCoreException(
+                    RouteCore.REASON_EXECUTION_PROFILE_INCOMPATIBLE,
+                    "DIJKSTRA execution profile requires heuristicType NONE"
+            );
         }
-
-        validateExecutionHints(null, requestedHeuristicType, executionProfileContext);
-        return executionProfileContext.getHeuristicType();
-    }
-
-    private boolean usesLegacyRequestSelectors(ResolvedExecutionProfileContext executionProfileContext) {
-        return executionProfileContext.getAlgorithm() == null;
+        return heuristicType;
     }
 }

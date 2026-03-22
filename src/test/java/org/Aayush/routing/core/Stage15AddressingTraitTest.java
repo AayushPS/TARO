@@ -2,6 +2,7 @@ package org.Aayush.routing.core;
 
 import com.google.flatbuffers.FlatBufferBuilder;
 import org.Aayush.core.id.IDMapper;
+import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.spatial.SpatialRuntime;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.addressing.AddressInput;
@@ -44,8 +45,6 @@ class Stage15AddressingTraitTest {
                 .sourceAddress(AddressInput.ofExternalId("N0"))
                 .targetAddress(AddressInput.ofExternalId("N4"))
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
 
         assertTrue(response.isReachable());
@@ -67,8 +66,6 @@ class Stage15AddressingTraitTest {
                 .sourceAddress(AddressInput.ofExternalId("N0"))
                 .targetAddress(AddressInput.ofExternalId("N4"))
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
 
         assertTrue(response.isReachable());
@@ -87,8 +84,6 @@ class Stage15AddressingTraitTest {
                 .targetAddress(AddressInput.ofExternalId("N3"))
                 .targetAddress(AddressInput.ofExternalId("N4"))
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
 
         assertEquals(List.of("N0", "N1"), response.getSourceExternalIds());
@@ -111,8 +106,6 @@ class Stage15AddressingTraitTest {
                         .sourceAddress(AddressInput.ofExternalId("UNKNOWN"))
                         .targetAddress(AddressInput.ofExternalId("N4"))
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_UNKNOWN_TYPED_EXTERNAL_NODE, ex.getReasonCode());
@@ -129,8 +122,6 @@ class Stage15AddressingTraitTest {
                 .targetAddress(AddressInput.ofXY(3.95d, 0.0d))
                 .maxSnapDistance(0.10d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
         assertTrue(pass.isReachable());
         assertEquals(List.of("N0", "N1", "N2", "N3", "N4"), pass.getPathExternalNodeIds());
@@ -142,8 +133,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofXY(3.95d, 0.0d))
                         .maxSnapDistance(0.001d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SNAP_THRESHOLD_EXCEEDED, fail.getReasonCode());
@@ -166,8 +155,6 @@ class Stage15AddressingTraitTest {
                 .targetAddress(AddressInput.ofLatLon(12.0039d, 77.0d))
                 .maxSnapDistance(50.0d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
         assertTrue(pass.isReachable());
         assertEquals(List.of("N0", "N1", "N2", "N3", "N4"), pass.getPathExternalNodeIds());
@@ -179,8 +166,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofLatLon(12.0039d, 77.0d))
                         .maxSnapDistance(5.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SNAP_THRESHOLD_EXCEEDED, fail.getReasonCode());
@@ -199,8 +184,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SPATIAL_RUNTIME_UNAVAILABLE, ex.getReasonCode());
@@ -265,8 +248,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_UNSUPPORTED_ADDRESS_TYPE, ex.getReasonCode());
@@ -285,8 +266,6 @@ class Stage15AddressingTraitTest {
                         .targetExternalId("N4")
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MIXED_MODE_DISABLED, mixedDisabled.getReasonCode());
@@ -297,8 +276,6 @@ class Stage15AddressingTraitTest {
                 .allowMixedAddressing(true)
                 .maxSnapDistance(1.0d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
         assertTrue(mixedEnabled.isReachable());
 
@@ -309,8 +286,6 @@ class Stage15AddressingTraitTest {
                         .sourceAddress(AddressInput.ofExternalId("N0"))
                         .targetAddress(AddressInput.ofExternalId("N4"))
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_TYPED_LEGACY_AMBIGUITY, ambiguity.getReasonCode());
@@ -332,8 +307,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
                         .maxSnapDistance(10.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_NON_FINITE_COORDINATES, nonFinite.getReasonCode());
@@ -353,8 +326,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofLatLon(12.0d, 77.0d))
                         .maxSnapDistance(500.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_LAT_LON_RANGE, latLonRange.getReasonCode());
@@ -373,8 +344,6 @@ class Stage15AddressingTraitTest {
                 .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
                 .maxSnapDistance(0.20d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
 
         assertEquals(List.of("N0", "N0"), response.getSourceExternalIds());
@@ -425,8 +394,6 @@ class Stage15AddressingTraitTest {
                 .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, CoordinateStrategyRegistry.STRATEGY_XY))
                 .maxSnapDistance(0.20d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
 
         assertEquals(List.of("N0", "N0"), response.getSourceExternalIds());
@@ -451,8 +418,6 @@ class Stage15AddressingTraitTest {
                 .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
                 .maxSnapDistance(0.0d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
 
         assertTrue(response.isReachable());
@@ -479,8 +444,6 @@ class Stage15AddressingTraitTest {
                         .sourceAddress(malformed)
                         .targetAddress(AddressInput.ofExternalId("N4"))
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MALFORMED_TYPED_PAYLOAD, ex.getReasonCode());
@@ -499,8 +462,6 @@ class Stage15AddressingTraitTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_TYPED_LEGACY_AMBIGUITY, ambiguity.getReasonCode());
@@ -510,8 +471,6 @@ class Stage15AddressingTraitTest {
                 () -> core.matrix(MatrixRequest.builder()
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SOURCE_LIST_REQUIRED, sourceListRequired.getReasonCode());
@@ -523,8 +482,6 @@ class Stage15AddressingTraitTest {
                         .sourceExternalId(" ")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SOURCE_EXTERNAL_ID_REQUIRED, blankLegacySource.getReasonCode());
@@ -535,8 +492,6 @@ class Stage15AddressingTraitTest {
                         .sourceAddresses(Arrays.asList(AddressInput.ofExternalId("N0"), null))
                         .targetAddress(AddressInput.ofExternalId("N4"))
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MALFORMED_TYPED_PAYLOAD, nullTypedSource.getReasonCode());
@@ -555,8 +510,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, CoordinateStrategyRegistry.STRATEGY_LAT_LON))
                         .maxSnapDistance(10.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MALFORMED_TYPED_PAYLOAD, hintMismatch.getReasonCode());
@@ -575,8 +528,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
                         .maxSnapDistance(-1.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_INVALID_MAX_SNAP_DISTANCE, ex.getReasonCode());
@@ -607,8 +558,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, null))
                         .maxSnapDistance(10.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_COORDINATE_STRATEGY_FAILURE, ex.getReasonCode());
@@ -639,8 +588,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofCoordinates(4.0d, 0.0d, null))
                         .maxSnapDistance(10.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_COORDINATE_STRATEGY_FAILURE, ex.getReasonCode());
@@ -665,8 +612,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_UNSUPPORTED_ADDRESS_TYPE, ex.getReasonCode());
@@ -687,8 +632,6 @@ class Stage15AddressingTraitTest {
                         .targetAddress(AddressInput.ofXY(4.0d, 0.0d))
                         .maxSnapDistance(1.0d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_EXTERNAL_MAPPING_FAILED, ex.getReasonCode());
@@ -735,6 +678,7 @@ class Stage15AddressingTraitTest {
                 .nodeIdMapper(mapper)
                 .spatialRuntime(spatialRuntime)
                 .coordinateStrategyRegistry(coordinateStrategyRegistry)
+                .executionRuntimeConfig(ExecutionRuntimeConfig.aStarNone())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(addressingRuntimeConfig)

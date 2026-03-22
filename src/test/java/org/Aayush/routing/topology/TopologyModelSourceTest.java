@@ -1,5 +1,6 @@
 package org.Aayush.routing.topology;
 
+import org.Aayush.routing.profile.ProfileRecurrenceCalibrationStore;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -152,6 +153,44 @@ class TopologyModelSourceTest {
                 .validate());
         assertThrows(IllegalArgumentException.class, () -> coordinateSource().toBuilder()
                 .edge(edge("Ebad", "N0", "N1", 1.0f, 70_000))
+                .build()
+                .validate());
+        assertThrows(IllegalArgumentException.class, () -> coordinateSource().toBuilder()
+                .edge(edge("Ebad", "N0", "N1", 1.0f, 2))
+                .build()
+                .validate());
+        assertThrows(IllegalArgumentException.class, () -> TopologyModelSource.builder()
+                .modelVersion("partial-recurrence-override")
+                .profileTimezone("UTC")
+                .profile(TopologyModelSource.ProfileDefinition.builder()
+                        .profileId(1)
+                        .dayMask(0x1F)
+                        .bucket(1.0f)
+                        .multiplier(1.0f)
+                        .recurringSignalFlavor(ProfileRecurrenceCalibrationStore.SignalFlavor.RECURRING_INCIDENT)
+                        .build())
+                .node(node("N0", 0.0d, 0.0d))
+                .build()
+                .validate());
+        assertDoesNotThrow(() -> TopologyModelSource.builder()
+                .modelVersion("explicit-recurrence-override")
+                .profileTimezone("UTC")
+                .profile(TopologyModelSource.ProfileDefinition.builder()
+                        .profileId(1)
+                        .dayMask(0x1F)
+                        .bucket(1.0f)
+                        .bucket(4.0f)
+                        .multiplier(1.0f)
+                        .recurringSignalFlavor(ProfileRecurrenceCalibrationStore.SignalFlavor.RECURRING_INCIDENT)
+                        .recurringConfidence(0.7f)
+                        .recurringObservationCount(12)
+                        .lastObservedAtTicks(1_234_567L)
+                        .build())
+                .node(node("N0", 0.0d, 0.0d))
+                .build()
+                .validate());
+        assertDoesNotThrow(() -> coordinateSource().toBuilder()
+                .edge(edge("Eneutral", "N0", "N1", 1.0f, 0))
                 .build()
                 .validate());
     }

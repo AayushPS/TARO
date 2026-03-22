@@ -32,6 +32,7 @@ public final class FailureQuarantine {
     public record FailureRecord(
             int subjectId,
             long validUntilTicks,
+            long observedAtTicks,
             String reason,
             String source
     ) {
@@ -57,20 +58,34 @@ public final class FailureQuarantine {
      * Quarantines one edge until the provided absolute expiry tick.
      */
     public void quarantineEdge(int edgeId, long validUntilTicks, String reason, String source) {
+        quarantineEdge(edgeId, validUntilTicks, Long.MIN_VALUE, reason, source);
+    }
+
+    /**
+     * Quarantines one edge until the provided absolute expiry tick with an explicit observation timestamp.
+     */
+    public void quarantineEdge(int edgeId, long validUntilTicks, long observedAtTicks, String reason, String source) {
         if (edgeId < 0) {
             throw new IllegalArgumentException("edgeId must be >= 0");
         }
-        putFailure(edgeFailures, edgeId, validUntilTicks, reason, source);
+        putFailure(edgeFailures, edgeId, validUntilTicks, observedAtTicks, reason, source);
     }
 
     /**
      * Quarantines one node until the provided absolute expiry tick.
      */
     public void quarantineNode(int nodeId, long validUntilTicks, String reason, String source) {
+        quarantineNode(nodeId, validUntilTicks, Long.MIN_VALUE, reason, source);
+    }
+
+    /**
+     * Quarantines one node until the provided absolute expiry tick with an explicit observation timestamp.
+     */
+    public void quarantineNode(int nodeId, long validUntilTicks, long observedAtTicks, String reason, String source) {
         if (nodeId < 0) {
             throw new IllegalArgumentException("nodeId must be >= 0");
         }
-        putFailure(nodeFailures, nodeId, validUntilTicks, reason, source);
+        putFailure(nodeFailures, nodeId, validUntilTicks, observedAtTicks, reason, source);
     }
 
     /**
@@ -127,12 +142,19 @@ public final class FailureQuarantine {
             Map<Integer, FailureRecord> target,
             int subjectId,
             long validUntilTicks,
+            long observedAtTicks,
             String reason,
             String source
     ) {
         lock.lock();
         try {
-            target.put(subjectId, new FailureRecord(subjectId, validUntilTicks, sanitize(reason), sanitize(source)));
+            target.put(subjectId, new FailureRecord(
+                    subjectId,
+                    validUntilTicks,
+                    observedAtTicks,
+                    sanitize(reason),
+                    sanitize(source)
+            ));
             version.incrementAndGet();
         } finally {
             lock.unlock();
@@ -196,6 +218,21 @@ public final class FailureQuarantine {
 
         public int activeNodeFailureCount() {
             return activeNodeFailures.size();
+        }
+
+        /**
+         * Returns the most recent known observation tick across active failures, or {@link Long#MIN_VALUE}
+         * when none of the active failures have explicit freshness metadata.
+         */
+        public long mostRecentObservedAtTicks() {
+            long mostRecent = Long.MIN_VALUE;
+            for (FailureRecord record : activeEdgeFailures.values()) {
+                mostRecent = Math.max(mostRecent, record.observedAtTicks());
+            }
+            for (FailureRecord record : activeNodeFailures.values()) {
+                mostRecent = Math.max(mostRecent, record.observedAtTicks());
+            }
+            return mostRecent;
         }
 
         /**

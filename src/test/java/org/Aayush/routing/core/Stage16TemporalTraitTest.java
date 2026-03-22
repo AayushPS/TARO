@@ -2,6 +2,7 @@ package org.Aayush.routing.core;
 
 import org.Aayush.core.time.TimeUtils;
 import org.Aayush.routing.cost.CostEngine;
+import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
@@ -52,8 +53,6 @@ class Stage16TemporalTraitTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N1")
                 .departureTicks(sundayUtcTicks)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build();
 
         RouteResponse calendar = calendarCore.route(request);
@@ -88,8 +87,6 @@ class Stage16TemporalTraitTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N1")
                 .departureTicks(departureTicks)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build();
 
         RouteResponse utc = calendarUtcCore.route(request);
@@ -111,8 +108,6 @@ class Stage16TemporalTraitTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N1")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_TEMPORAL_RESOLUTION_FAILURE, ex.getReasonCode());
@@ -130,8 +125,6 @@ class Stage16TemporalTraitTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N1")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_TEMPORAL_RESOLUTION_FAILURE, ex.getReasonCode());
@@ -219,6 +212,7 @@ class Stage16TemporalTraitTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(costEngine)
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .executionRuntimeConfig(ExecutionRuntimeConfig.dijkstra())
                 .temporalRuntimeConfig(temporalRuntimeConfig)
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
@@ -299,6 +293,7 @@ class Stage16TemporalTraitTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(createDiscreteEngine(fixture))
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .executionRuntimeConfig(ExecutionRuntimeConfig.dijkstra())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
@@ -313,8 +308,6 @@ class Stage16TemporalTraitTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N1")
                 .departureTicks(departureTicks)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
     }
 

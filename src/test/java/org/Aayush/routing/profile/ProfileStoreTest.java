@@ -86,6 +86,33 @@ class ProfileStoreTest {
     }
 
     @Test
+    @DisplayName("Day-aware interpolation crosses into the next calendar day at the weekly boundary")
+    void testDayAwareInterpolationUsesNextDayBoundaryValue() {
+        ByteBuffer model = buildModelBuffer(
+                new ProfileSpec(12, WEEKDAY_MASK, new float[]{2.0f, 2.0f, 2.0f, 2.0f}, 1.0f)
+        );
+
+        ProfileStore store = ProfileStore.fromFlatBuffer(model.duplicate().order(ByteOrder.LITTLE_ENDIAN));
+
+        assertEquals(1.5f, store.interpolateForDay(12, 4, 3.5), 1e-6f); // Friday -> Saturday neutral fallback
+        assertEquals(1.5f, store.interpolateForDay(12, 6, 3.5), 1e-6f); // Sunday neutral -> Monday active
+        assertEquals(2.0f, store.interpolateForDay(12, 2, 3.25), 1e-6f); // Wednesday stays on active weekdays
+    }
+
+    @Test
+    @DisplayName("Single-bucket day-aware interpolation still crosses into the next calendar day")
+    void testSingleBucketDayAwareInterpolationUsesNextDayBoundaryValue() {
+        ByteBuffer model = buildModelBuffer(
+                new ProfileSpec(13, WEEKDAY_MASK, new float[]{2.0f}, 1.0f)
+        );
+
+        ProfileStore store = ProfileStore.fromFlatBuffer(model.duplicate().order(ByteOrder.LITTLE_ENDIAN));
+
+        assertEquals(1.5f, store.interpolateForDay(13, 4, 0.5), 1e-6f); // Friday -> Saturday neutral fallback
+        assertEquals(1.5f, store.interpolateForDay(13, 6, 0.5), 1e-6f); // Sunday neutral -> Monday active
+    }
+
+    @Test
     @DisplayName("Metadata reports avg/min/max multipliers")
     void testMetadata() {
         ByteBuffer model = buildModelBuffer(
@@ -103,6 +130,51 @@ class ProfileStoreTest {
         assertEquals(1.0f, fallback.avgMultiplier(), 1e-6f);
         assertEquals(1.0f, fallback.minMultiplier(), 1e-6f);
         assertEquals(1.0f, fallback.maxMultiplier(), 1e-6f);
+    }
+
+    @Test
+    @DisplayName("Recurring-pattern metadata exposes persistent, periodic, mixed, and weak recurring posture")
+    void testTemporalPatternMetadata() {
+        ByteBuffer model = buildModelBuffer(
+                new ProfileSpec(21, ALL_DAYS, new float[]{2.0f, 2.0f, 2.0f, 2.0f}, 1.0f),
+                new ProfileSpec(22, ALL_DAYS, new float[]{1.0f, 2.0f, 1.0f, 2.0f}, 1.0f),
+                new ProfileSpec(23, ALL_DAYS, new float[]{1.5f, 2.5f, 1.5f, 2.5f}, 1.0f),
+                new ProfileSpec(24, WEEKDAY_MASK, new float[]{1.0f, 1.08f, 1.0f, 1.08f}, 1.0f)
+        );
+
+        ProfileStore store = ProfileStore.fromFlatBuffer(model.duplicate().order(ByteOrder.LITTLE_ENDIAN));
+
+        assertEquals(
+                ProfileStore.TemporalPatternClass.FULLY_PERSISTENT,
+                store.getTemporalPatternMetadata(21).temporalPatternClass()
+        );
+        assertEquals(
+                ProfileStore.TemporalPatternClass.STRICT_PERIODIC,
+                store.getTemporalPatternMetadata(22).temporalPatternClass()
+        );
+        assertEquals(
+                ProfileStore.RecurringCalibrationPosture.HIGH_CONFIDENCE,
+                store.getTemporalPatternMetadata(22).recurringCalibrationPosture()
+        );
+        assertEquals(
+                ProfileRecurrenceCalibrationStore.SignalFlavor.ROUTINE_PERIODIC,
+                store.getTemporalPatternMetadata(22).recurringSignalFlavor()
+        );
+        assertEquals(
+                ProfileStore.TemporalPatternClass.MIXED_PERSISTENT_AND_PERIODIC,
+                store.getTemporalPatternMetadata(23).temporalPatternClass()
+        );
+
+        ProfileStore.TemporalPatternMetadata weakSignal = store.getTemporalPatternMetadata(24);
+        assertEquals(ProfileStore.TemporalPatternClass.WEAK_SIGNAL_PERIODIC, weakSignal.temporalPatternClass());
+        assertEquals(5, weakSignal.activeDayCount());
+        assertTrue(weakSignal.effectiveWeeklyRelativeRange() >= 0.05f);
+        assertEquals(ProfileStore.RecurringCalibrationPosture.WEAK_SIGNAL_REJECTED, weakSignal.recurringCalibrationPosture());
+        assertEquals(0.0f, weakSignal.recurringConfidence(), 1e-6f);
+
+        assertEquals(ProfileStore.TemporalPatternClass.MISSING, store.getTemporalPatternMetadata(999).temporalPatternClass());
+        assertEquals(ProfileStore.RecurringCalibrationPosture.NO_RECURRING_SIGNAL,
+                store.getTemporalPatternMetadata(999).recurringCalibrationPosture());
     }
 
     @Test

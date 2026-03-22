@@ -26,21 +26,25 @@ import java.util.Objects;
 @ToString
 @Accessors(fluent = true)
 public final class LiveUpdate {
+    private static final long ACTIVE_IMMEDIATELY = Long.MIN_VALUE;
 
     /** Destination edge id for this override. */
     private final int edgeId;
     /** Live speed factor in range {@code [0.0, 1.0]}. */
     private final float speedFactor;
+    /** Absolute inclusive-activation time in engine ticks. */
+    private final long validFromTicks;
     /** Absolute exclusive-expiry time in engine ticks. */
     private final long validUntilTicks;
 
     /**
      * Internal canonical constructor after input validation.
      */
-    private LiveUpdate(int edgeId, float speedFactor, long validUntilTicks) {
-        validate(edgeId, speedFactor);
+    private LiveUpdate(int edgeId, float speedFactor, long validFromTicks, long validUntilTicks) {
+        validate(edgeId, speedFactor, validFromTicks, validUntilTicks);
         this.edgeId = edgeId;
         this.speedFactor = speedFactor;
+        this.validFromTicks = validFromTicks;
         this.validUntilTicks = validUntilTicks;
     }
 
@@ -53,7 +57,20 @@ public final class LiveUpdate {
      * @return immutable live update.
      */
     public static LiveUpdate of(int edgeId, float speedFactor, long validUntilTicks) {
-        return new LiveUpdate(edgeId, speedFactor, validUntilTicks);
+        return new LiveUpdate(edgeId, speedFactor, ACTIVE_IMMEDIATELY, validUntilTicks);
+    }
+
+    /**
+     * Creates a live update with an explicit activation window in engine ticks.
+     *
+     * @param edgeId destination edge id; must be {@code >= 0}.
+     * @param speedFactor live factor in {@code [0.0, 1.0]}.
+     * @param validFromTicks absolute inclusive activation tick.
+     * @param validUntilTicks absolute exclusive expiry tick.
+     * @return immutable live update.
+     */
+    public static LiveUpdate of(int edgeId, float speedFactor, long validFromTicks, long validUntilTicks) {
+        return new LiveUpdate(edgeId, speedFactor, validFromTicks, validUntilTicks);
     }
 
     /**
@@ -76,7 +93,7 @@ public final class LiveUpdate {
             throw new IllegalArgumentException("ttl_ticks must be >= 0");
         }
         long validUntilTicks = Math.addExact(nowTicks, ttlTicks);
-        return new LiveUpdate(edgeId, speedFactor, validUntilTicks);
+        return new LiveUpdate(edgeId, speedFactor, nowTicks, validUntilTicks);
     }
 
     /**
@@ -110,7 +127,7 @@ public final class LiveUpdate {
     /**
      * Validates edge and speed-factor domain constraints.
      */
-    private static void validate(int edgeId, float speedFactor) {
+    private static void validate(int edgeId, float speedFactor, long validFromTicks, long validUntilTicks) {
         if (edgeId < 0) {
             throw new IllegalArgumentException("edge_id must be >= 0");
         }
@@ -119,6 +136,9 @@ public final class LiveUpdate {
         }
         if (speedFactor < 0.0f || speedFactor > 1.0f) {
             throw new IllegalArgumentException("speed_factor must be within [0.0, 1.0]");
+        }
+        if (validUntilTicks <= validFromTicks) {
+            throw new IllegalArgumentException("valid_until_ticks must be greater than valid_from_ticks");
         }
     }
 }

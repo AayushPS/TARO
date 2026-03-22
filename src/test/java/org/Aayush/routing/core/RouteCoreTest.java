@@ -3,6 +3,8 @@ package org.Aayush.routing.core;
 import org.Aayush.core.id.IDMapper;
 import org.Aayush.core.time.TimeUtils;
 import org.Aayush.routing.cost.CostEngine;
+import org.Aayush.routing.execution.ExecutionProfileSpec;
+import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.heuristic.HeuristicConfigurationException;
 import org.Aayush.routing.heuristic.HeuristicFactory;
 import org.Aayush.routing.heuristic.HeuristicType;
@@ -63,8 +65,6 @@ class RouteCoreTest {
                         .sourceExternalId("UNKNOWN")
                         .targetExternalId("N1")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_UNKNOWN_EXTERNAL_NODE, ex.getReasonCode());
@@ -73,18 +73,18 @@ class RouteCoreTest {
     @Test
     @DisplayName("Validation: Dijkstra requires NONE heuristic")
     void testDijkstraHeuristicMismatch() {
-        RouteCore core = createCore(createLinearFixture(), null);
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
-                        .sourceExternalId("N0")
-                        .targetExternalId("N4")
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.EUCLIDEAN)
-                        .build())
+                () -> createCore(
+                        createLinearFixture(),
+                        null,
+                        ExecutionRuntimeConfig.inline(ExecutionProfileSpec.builder()
+                                .algorithm(RoutingAlgorithm.DIJKSTRA)
+                                .heuristicType(HeuristicType.EUCLIDEAN)
+                                .build())
+                )
         );
-        assertEquals(RouteCore.REASON_DIJKSTRA_HEURISTIC_MISMATCH, ex.getReasonCode());
+        assertEquals(RouteCore.REASON_EXECUTION_PROFILE_INCOMPATIBLE, ex.getReasonCode());
     }
 
     @Test
@@ -97,8 +97,6 @@ class RouteCoreTest {
                         .sourceExternalId("   ")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SOURCE_EXTERNAL_ID_REQUIRED, ex.getReasonCode());
@@ -114,43 +112,39 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId(" ")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_TARGET_EXTERNAL_ID_REQUIRED, ex.getReasonCode());
     }
 
     @Test
-    @DisplayName("Validation: route algorithm must be specified")
-    void testRouteAlgorithmRequired() {
+    @DisplayName("Validation: route request inherits startup execution profile")
+    void testRouteRequestInheritsStartupExecutionProfile() {
         RouteCore core = createCore(createLinearFixture(), null);
-        RouteCoreException ex = assertThrows(
-                RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
-                        .sourceExternalId("N0")
-                        .targetExternalId("N4")
-                        .departureTicks(0L)
-                        .heuristicType(HeuristicType.NONE)
-                        .build())
-        );
-        assertEquals(RouteCore.REASON_ALGORITHM_REQUIRED, ex.getReasonCode());
+        RouteResponse response = core.route(RouteRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .build());
+
+        assertTrue(response.isReachable());
+        assertEquals(RoutingAlgorithm.A_STAR, response.getAlgorithm());
+        assertEquals(HeuristicType.NONE, response.getHeuristicType());
     }
 
     @Test
-    @DisplayName("Validation: route heuristicType must be specified")
-    void testRouteHeuristicRequired() {
-        RouteCore core = createCore(createLinearFixture(), null);
-        RouteCoreException ex = assertThrows(
-                RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
-                        .sourceExternalId("N0")
-                        .targetExternalId("N4")
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .build())
-        );
-        assertEquals(RouteCore.REASON_HEURISTIC_REQUIRED, ex.getReasonCode());
+    @DisplayName("Validation: route request can inherit Dijkstra startup execution profile")
+    void testRouteRequestCanInheritDijkstraStartupExecutionProfile() {
+        RouteCore core = createCore(createLinearFixture(), null, ExecutionRuntimeConfig.dijkstra());
+        RouteResponse response = core.route(RouteRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .build());
+
+        assertTrue(response.isReachable());
+        assertEquals(RoutingAlgorithm.DIJKSTRA, response.getAlgorithm());
+        assertEquals(HeuristicType.NONE, response.getHeuristicType());
     }
 
     @Test
@@ -167,8 +161,6 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_INTERNAL_NODE_OUT_OF_BOUNDS, ex.getReasonCode());
@@ -187,8 +179,6 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_EXTERNAL_MAPPING_FAILED, ex.getReasonCode());
@@ -326,8 +316,6 @@ class RouteCoreTest {
                 .sourceExternalId("N2")
                 .targetExternalId("N2")
                 .departureTicks(123L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertTrue(response.isReachable());
@@ -344,8 +332,6 @@ class RouteCoreTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(10L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertTrue(response.isReachable());
@@ -362,8 +348,6 @@ class RouteCoreTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N3")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertFalse(response.isReachable());
@@ -374,26 +358,16 @@ class RouteCoreTest {
     @Test
     @DisplayName("A* and Dijkstra parity for identical snapshot on deterministic graph")
     void testAStarDijkstraParity() {
-        RouteCore core = createCore(createLinearFixture(), null);
-
-        RouteRequest dijkstraRequest = RouteRequest.builder()
+        RouteRequest request = RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build();
+        RouteCore dijkstraCore = createCore(createLinearFixture(), null, ExecutionRuntimeConfig.dijkstra());
+        RouteCore aStarCore = createCore(createLinearFixture(), null, ExecutionRuntimeConfig.aStarNone());
 
-        RouteRequest aStarRequest = RouteRequest.builder()
-                .sourceExternalId("N0")
-                .targetExternalId("N4")
-                .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
-                .build();
-
-        RouteResponse dijkstra = core.route(dijkstraRequest);
-        RouteResponse aStar = core.route(aStarRequest);
+        RouteResponse dijkstra = dijkstraCore.route(request);
+        RouteResponse aStar = aStarCore.route(request);
 
         assertTrue(dijkstra.isReachable());
         assertTrue(aStar.isReachable());
@@ -442,29 +416,36 @@ class RouteCoreTest {
                 CostEngine.TemporalSamplingPolicy.DISCRETE
         );
 
-        RouteCore core = RouteCore.builder()
+        RouteCore dijkstraCore = RouteCore.builder()
                 .edgeGraph(fixture.edgeGraph())
                 .profileStore(fixture.profileStore())
                 .costEngine(discreteCostEngine)
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .executionRuntimeConfig(ExecutionRuntimeConfig.dijkstra())
+                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
+                .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
+                .build();
+        RouteCore aStarCore = RouteCore.builder()
+                .edgeGraph(fixture.edgeGraph())
+                .profileStore(fixture.profileStore())
+                .costEngine(discreteCostEngine)
+                .nodeIdMapper(fixture.nodeIdMapper())
+                .executionRuntimeConfig(ExecutionRuntimeConfig.aStarNone())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
 
-        RouteResponse dijkstraResponse = core.route(RouteRequest.builder()
+        RouteResponse dijkstraResponse = dijkstraCore.route(RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N5")
                 .departureTicks(3_596L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
-        RouteResponse aStarResponse = core.route(RouteRequest.builder()
+        RouteResponse aStarResponse = aStarCore.route(RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N5")
                 .departureTicks(3_596L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertTrue(dijkstraResponse.isReachable());
@@ -495,8 +476,6 @@ class RouteCoreTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.LANDMARK)
                 .build());
 
         assertTrue(response.isReachable());
@@ -548,18 +527,11 @@ class RouteCoreTest {
                 )
         );
 
-        RouteCore core = createCore(fixtureB, wrongStore);
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
-                        .sourceExternalId("N0")
-                        .targetExternalId("N3")
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.LANDMARK)
-                        .build())
+                () -> createCore(fixtureB, wrongStore)
         );
-        assertEquals(RouteCore.REASON_HEURISTIC_CONFIGURATION_FAILED, ex.getReasonCode());
+        assertEquals(RouteCore.REASON_EXECUTION_PROFILE_INCOMPATIBLE, ex.getReasonCode());
         assertTrue(ex.getCause() instanceof HeuristicConfigurationException);
         HeuristicConfigurationException cause = (HeuristicConfigurationException) ex.getCause();
         assertEquals(HeuristicFactory.REASON_LANDMARK_SIGNATURE_MISMATCH, cause.reasonCode());
@@ -568,15 +540,13 @@ class RouteCoreTest {
     @Test
     @DisplayName("Matrix is fully wired and uses Stage 14 native implementation by default for Dijkstra")
     void testMatrixWiringAndNote() {
-        RouteCore core = createCore(createLinearFixture(), null);
+        RouteCore core = createCore(createLinearFixture(), null, ExecutionRuntimeConfig.dijkstra());
         MatrixResponse response = core.matrix(MatrixRequest.builder()
                 .sourceExternalId("N0")
                 .sourceExternalId("N1")
                 .targetExternalId("N3")
                 .targetExternalId("N4")
                 .departureTicks(5L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertEquals(List.of("N0", "N1"), response.getSourceExternalIds());
@@ -600,8 +570,6 @@ class RouteCoreTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
         MatrixExecutionStats baselineStats = core.matrixExecutionStatsContract();
         assertTrue(baselineStats.requestWorkStates() > 0L);
@@ -612,8 +580,6 @@ class RouteCoreTest {
                         .sourceExternalId("UNKNOWN")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_UNKNOWN_EXTERNAL_NODE, ex.getReasonCode());
@@ -634,8 +600,6 @@ class RouteCoreTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertEquals(NativeOneToManyMatrixPlanner.NATIVE_A_STAR_IMPLEMENTATION_NOTE, response.getImplementationNote());
@@ -652,8 +616,6 @@ class RouteCoreTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         float baseline = response.getTotalCosts()[0][0];
@@ -681,8 +643,6 @@ class RouteCoreTest {
                 () -> core.matrix(MatrixRequest.builder()
                         .targetExternalId("N1")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SOURCE_LIST_REQUIRED, sourceEx.getReasonCode());
@@ -692,39 +652,33 @@ class RouteCoreTest {
                 () -> core.matrix(MatrixRequest.builder()
                         .sourceExternalId("N0")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_TARGET_LIST_REQUIRED, targetEx.getReasonCode());
     }
 
     @Test
-    @DisplayName("Matrix validation rejects null algorithm and heuristic")
-    void testMatrixAlgorithmAndHeuristicRequired() {
-        RouteCore core = createCore(createLinearFixture(), null);
+    @DisplayName("Matrix validation inherits startup execution profile")
+    void testMatrixRequestInheritsStartupExecutionProfile() {
+        RouteCore aStarCore = createCore(createLinearFixture(), null);
+        MatrixResponse aStarResponse = aStarCore.matrix(MatrixRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .build());
+        assertTrue(aStarResponse.getReachable()[0][0]);
+        assertEquals(RoutingAlgorithm.A_STAR, aStarResponse.getAlgorithm());
+        assertEquals(HeuristicType.NONE, aStarResponse.getHeuristicType());
 
-        RouteCoreException algorithmEx = assertThrows(
-                RouteCoreException.class,
-                () -> core.matrix(MatrixRequest.builder()
-                        .sourceExternalId("N0")
-                        .targetExternalId("N4")
-                        .departureTicks(0L)
-                        .heuristicType(HeuristicType.NONE)
-                        .build())
-        );
-        assertEquals(RouteCore.REASON_ALGORITHM_REQUIRED, algorithmEx.getReasonCode());
-
-        RouteCoreException heuristicEx = assertThrows(
-                RouteCoreException.class,
-                () -> core.matrix(MatrixRequest.builder()
-                        .sourceExternalId("N0")
-                        .targetExternalId("N4")
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .build())
-        );
-        assertEquals(RouteCore.REASON_HEURISTIC_REQUIRED, heuristicEx.getReasonCode());
+        RouteCore dijkstraCore = createCore(createLinearFixture(), null, ExecutionRuntimeConfig.dijkstra());
+        MatrixResponse dijkstraResponse = dijkstraCore.matrix(MatrixRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .build());
+        assertTrue(dijkstraResponse.getReachable()[0][0]);
+        assertEquals(RoutingAlgorithm.DIJKSTRA, dijkstraResponse.getAlgorithm());
+        assertEquals(HeuristicType.NONE, dijkstraResponse.getHeuristicType());
     }
 
     @Test
@@ -739,8 +693,6 @@ class RouteCoreTest {
                         .sourceExternalId(" ")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SOURCE_EXTERNAL_ID_REQUIRED, blankSourceEx.getReasonCode());
@@ -752,8 +704,6 @@ class RouteCoreTest {
                         .targetExternalId("N4")
                         .targetExternalId("\t")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_TARGET_EXTERNAL_ID_REQUIRED, blankTargetEx.getReasonCode());
@@ -775,8 +725,6 @@ class RouteCoreTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertEquals("custom-planner", response.getImplementationNote());
@@ -805,8 +753,6 @@ class RouteCoreTest {
                 .targetExternalId("N1")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertSame(rawReachable, getMatrixResponseField(response, "reachable"));
@@ -832,8 +778,6 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MATRIX_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
@@ -857,8 +801,6 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MATRIX_NUMERIC_SAFETY_BREACH, ex.getReasonCode());
@@ -877,8 +819,6 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_TRANSITION_RESOLUTION_FAILURE, ex.getReasonCode());
@@ -900,8 +840,6 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_TRANSITION_RESOLUTION_FAILURE, ex.getReasonCode());
@@ -923,35 +861,33 @@ class RouteCoreTest {
                         new int[]{request.sourceNodeId(), request.targetNodeId()}
                 );
 
-        RouteCore core = RouteCore.builder()
+        RouteCore aStarCore = RouteCore.builder()
                 .edgeGraph(fixture.edgeGraph())
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(customAStarPlanner)
+                .executionRuntimeConfig(ExecutionRuntimeConfig.aStarNone())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
                 .build();
 
-        RouteResponse aStarResponse = core.route(RouteRequest.builder()
+        RouteResponse aStarResponse = aStarCore.route(RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(10L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
         assertTrue(aStarResponse.isReachable());
         assertEquals(7.5f, aStarResponse.getTotalCost(), 1e-6f);
         assertEquals(99L, aStarResponse.getArrivalTicks());
         assertEquals(List.of("N0", "N4"), aStarResponse.getPathExternalNodeIds());
 
-        RouteResponse dijkstraResponse = core.route(RouteRequest.builder()
+        RouteCore dijkstraCore = createCore(fixture, null, ExecutionRuntimeConfig.dijkstra());
+        RouteResponse dijkstraResponse = dijkstraCore.route(RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(10L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
         assertTrue(dijkstraResponse.isReachable());
         assertEquals(4.0f, dijkstraResponse.getTotalCost(), 1e-6f);
@@ -976,6 +912,7 @@ class RouteCoreTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(failingPlanner)
+                .executionRuntimeConfig(ExecutionRuntimeConfig.aStarNone())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
@@ -987,8 +924,6 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
@@ -1011,6 +946,7 @@ class RouteCoreTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(failingPlanner)
+                .executionRuntimeConfig(ExecutionRuntimeConfig.aStarNone())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
@@ -1022,8 +958,6 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_NUMERIC_SAFETY_BREACH, ex.getReasonCode());
@@ -1046,6 +980,7 @@ class RouteCoreTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .aStarPlanner(failingPlanner)
+                .executionRuntimeConfig(ExecutionRuntimeConfig.aStarNone())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
@@ -1057,8 +992,6 @@ class RouteCoreTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_PATH_EVALUATION_FAILED, ex.getReasonCode());
@@ -1072,8 +1005,6 @@ class RouteCoreTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(10L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
 
         RouteResponse first = core.route(request);
@@ -1112,15 +1043,11 @@ class RouteCoreTest {
                         .sourceExternalId("N" + query.sourceNodeId())
                         .targetExternalId("N" + query.targetNodeId())
                         .departureTicks(query.departureTicks())
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build());
                 RouteResponse aStar = core.route(RouteRequest.builder()
                         .sourceExternalId("N" + query.sourceNodeId())
                         .targetExternalId("N" + query.targetNodeId())
                         .departureTicks(query.departureTicks())
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(heuristicType)
                         .build());
 
                 assertEquals(
@@ -1171,8 +1098,6 @@ class RouteCoreTest {
                     .sourceExternalId("N0")
                     .targetExternalId("N48")
                     .departureTicks(4_321L)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(heuristicType)
                     .build();
             RouteResponse first = core.route(request);
             RouteResponse second = core.route(request);
@@ -1208,8 +1133,6 @@ class RouteCoreTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
         assertTrue(dijkstra.isReachable());
 
@@ -1218,8 +1141,6 @@ class RouteCoreTest {
                     .sourceExternalId("N0")
                     .targetExternalId("N4")
                     .departureTicks(0L)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(heuristicType)
                     .build());
             assertTrue(aStar.isReachable());
             assertEquals(dijkstra.getTotalCost(), aStar.getTotalCost(), 1e-6f, "cost mismatch for " + heuristicType);
@@ -1229,7 +1150,25 @@ class RouteCoreTest {
     }
 
     private RouteCore createCore(RoutingFixtureFactory.Fixture fixture, LandmarkStore landmarkStore) {
-        return createCore(fixture, landmarkStore, fixture.nodeIdMapper(), fixture.costEngine(), null);
+        ExecutionRuntimeConfig executionRuntimeConfig = landmarkStore == null
+                ? ExecutionRuntimeConfig.aStarNone()
+                : ExecutionRuntimeConfig.aStar(HeuristicType.LANDMARK);
+        return createCore(fixture, landmarkStore, executionRuntimeConfig);
+    }
+
+    private RouteCore createCore(
+            RoutingFixtureFactory.Fixture fixture,
+            LandmarkStore landmarkStore,
+            ExecutionRuntimeConfig executionRuntimeConfig
+    ) {
+        return createCore(
+                fixture,
+                landmarkStore,
+                fixture.nodeIdMapper(),
+                fixture.costEngine(),
+                null,
+                executionRuntimeConfig
+        );
     }
 
     private RouteCore createCoreWithTransitionStrategy(
@@ -1255,6 +1194,7 @@ class RouteCoreTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .executionRuntimeConfig(ExecutionRuntimeConfig.aStarNone())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.edgeBased())
                 .transitionTraitCatalog(transitionTraitCatalog)
@@ -1319,12 +1259,31 @@ class RouteCoreTest {
             CostEngine costEngine,
             MatrixPlanner matrixPlanner
     ) {
+        return createCore(
+                fixture,
+                landmarkStore,
+                mapper,
+                costEngine,
+                matrixPlanner,
+                ExecutionRuntimeConfig.aStarNone()
+        );
+    }
+
+    private RouteCore createCore(
+            RoutingFixtureFactory.Fixture fixture,
+            LandmarkStore landmarkStore,
+            IDMapper mapper,
+            CostEngine costEngine,
+            MatrixPlanner matrixPlanner,
+            ExecutionRuntimeConfig executionRuntimeConfig
+    ) {
         RouteCore.RouteCoreBuilder builder = RouteCore.builder()
                 .edgeGraph(fixture.edgeGraph())
                 .profileStore(fixture.profileStore())
                 .costEngine(costEngine)
                 .nodeIdMapper(mapper)
                 .landmarkStore(landmarkStore)
+                .executionRuntimeConfig(executionRuntimeConfig)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(AddressingRuntimeConfig.defaultRuntime());

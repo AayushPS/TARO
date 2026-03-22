@@ -4,6 +4,8 @@ import lombok.Builder;
 import lombok.Singular;
 import lombok.Value;
 import org.Aayush.core.time.TimeUtils;
+import org.Aayush.routing.profile.ProfileRecurrenceCalibrationStore;
+import org.Aayush.routing.profile.ProfileRecencyCalibrationStore;
 
 import java.util.HashSet;
 import java.util.List;
@@ -16,6 +18,8 @@ import java.util.Set;
 @Value
 @Builder(toBuilder = true)
 public class TopologyModelSource {
+    private static final int NEUTRAL_PROFILE_ID = 0;
+
     @Builder.Default
     TimeUtils.EngineTimeUnit engineTimeUnit = TimeUtils.EngineTimeUnit.SECONDS;
     String modelVersion;
@@ -85,6 +89,14 @@ public class TopologyModelSource {
                 throw new IllegalArgumentException("edge baseWeight must be finite and >= 0: " + edge.getEdgeId());
             }
             validateUnsignedShort(edge.getProfileId(), "edge.profileId");
+            if (edge.getProfileId() != NEUTRAL_PROFILE_ID && !profileIds.contains(edge.getProfileId())) {
+                throw new IllegalArgumentException(
+                        "edge profileId must reference a defined profile or explicit neutral fallback 0: "
+                                + edge.getEdgeId()
+                                + " -> "
+                                + edge.getProfileId()
+                );
+            }
         }
 
         Set<String> turnKeys = new HashSet<>();
@@ -120,6 +132,7 @@ public class TopologyModelSource {
         if (!Float.isFinite(profile.getMultiplier()) || profile.getMultiplier() <= 0.0f) {
             throw new IllegalArgumentException("profile multiplier must be finite and > 0: " + profile.getProfileId());
         }
+        validateRecurrenceCalibration(profile);
         for (int i = 0; i < profile.getBuckets().size(); i++) {
             Float bucket = profile.getBuckets().get(i);
             if (bucket == null || !Float.isFinite(bucket) || bucket <= 0.0f) {
@@ -137,6 +150,34 @@ public class TopologyModelSource {
     private static void validateTurnPenalty(float penaltySeconds, String fieldName) {
         if (Float.isNaN(penaltySeconds) || penaltySeconds < 0.0f || penaltySeconds == Float.NEGATIVE_INFINITY) {
             throw new IllegalArgumentException(fieldName + " must be >= 0 and not NaN/-INF");
+        }
+    }
+
+    private static void validateRecurrenceCalibration(ProfileDefinition profile) {
+        boolean anyRecurrenceOverride = profile.getRecurringSignalFlavor() != null
+                || profile.getRecurringConfidence() != null
+                || profile.getRecurringObservationCount() != null;
+        if (!anyRecurrenceOverride) {
+            return;
+        }
+        if (profile.getRecurringSignalFlavor() == null
+                || profile.getRecurringConfidence() == null
+                || profile.getRecurringObservationCount() == null) {
+            throw new IllegalArgumentException(
+                    "recurrence calibration override requires recurringSignalFlavor, recurringConfidence, and recurringObservationCount: "
+                            + profile.getProfileId()
+            );
+        }
+        if (profile.getRecurringSignalFlavor() == ProfileRecurrenceCalibrationStore.SignalFlavor.NONE) {
+            throw new IllegalArgumentException("explicit recurrence calibration override cannot use NONE flavor: " + profile.getProfileId());
+        }
+        if (!Float.isFinite(profile.getRecurringConfidence())
+                || profile.getRecurringConfidence() < 0.0f
+                || profile.getRecurringConfidence() > 1.0f) {
+            throw new IllegalArgumentException("recurringConfidence must be finite within [0.0, 1.0]: " + profile.getProfileId());
+        }
+        if (profile.getRecurringObservationCount() <= 0) {
+            throw new IllegalArgumentException("recurringObservationCount must be > 0: " + profile.getProfileId());
         }
     }
 
@@ -160,6 +201,10 @@ public class TopologyModelSource {
         @Singular("bucket")
         List<Float> buckets;
         float multiplier;
+        ProfileRecurrenceCalibrationStore.SignalFlavor recurringSignalFlavor;
+        Float recurringConfidence;
+        Integer recurringObservationCount;
+        Long lastObservedAtTicks;
     }
 
     @Value

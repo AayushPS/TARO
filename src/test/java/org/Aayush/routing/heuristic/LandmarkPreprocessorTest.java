@@ -5,6 +5,7 @@ import org.Aayush.routing.core.RouteCore;
 import org.Aayush.routing.core.RouteRequest;
 import org.Aayush.routing.core.RouteResponse;
 import org.Aayush.routing.core.RoutingAlgorithm;
+import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.Aayush.serialization.flatbuffers.taro.model.GraphTopology;
@@ -174,6 +175,7 @@ class LandmarkPreprocessorTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .executionRuntimeConfig(ExecutionRuntimeConfig.dijkstra())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())
@@ -182,16 +184,15 @@ class LandmarkPreprocessorTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N2")
                 .departureTicks(259_200L) // Jan 4, 1970 Sunday 00:00:00 UTC
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertTrue(sundayRoute.isReachable());
-        assertEquals(2.0f, sundayRoute.getTotalCost(), 1e-6f);
+        float expectedSundayCost = 2.0f + (1.0f / RoutingFixtureFactory.BUCKET_SIZE_SECONDS);
+        assertEquals(expectedSundayCost, sundayRoute.getTotalCost(), 1e-6f);
         double sundayLowerBound = store.lowerBound(0, 2);
         assertTrue(
                 sundayLowerBound <= sundayRoute.getTotalCost() + 1e-6d,
-                "Sunday lower bound must not overestimate when day-mask fallback multiplier is 1.0"
+                "Sunday lower bound must stay admissible across single-bucket Sunday-to-Monday interpolation"
         );
     }
 

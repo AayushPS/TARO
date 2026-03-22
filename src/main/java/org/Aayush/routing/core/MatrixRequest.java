@@ -3,7 +3,6 @@ package org.Aayush.routing.core;
 import lombok.Builder;
 import lombok.Singular;
 import lombok.Value;
-import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.traits.addressing.AddressInput;
 
 import java.util.List;
@@ -32,10 +31,4 @@ public class MatrixRequest {
     Double maxSnapDistance;
     /** Shared departure tick applied to each source/target pair. */
     long departureTicks;
-    /** Deprecated startup-lock hint for the execution algorithm selected at startup. */
-    @Deprecated
-    RoutingAlgorithm algorithm;
-    /** Deprecated startup-lock hint for the heuristic selected at startup. */
-    @Deprecated
-    HeuristicType heuristicType;
 }

@@ -72,7 +72,7 @@ class HeuristicAdmissibilityTest {
                         1.0, 1.0,
                         3.0, 1.0
                 },
-                new ProfileSpec(1, WEEKDAY_MASK, new float[]{1.2f}, 1.0f),
+                new ProfileSpec(1, WEEKDAY_MASK, new float[]{1.005f}, 1.0f),
                 new ProfileSpec(2, ALL_DAYS_MASK, new float[]{1.5f}, 1.0f)
         );
 
@@ -113,7 +113,7 @@ class HeuristicAdmissibilityTest {
                 },
                 new int[]{1, 2, 1, 2, 1, 2, 1, 2},
                 coordinates,
-                new ProfileSpec(1, WEEKDAY_MASK, new float[]{1.2f}, 1.0f),
+                new ProfileSpec(1, WEEKDAY_MASK, new float[]{1.005f}, 1.0f),
                 new ProfileSpec(2, ALL_DAYS_MASK, new float[]{1.5f}, 1.0f)
         );
 
@@ -162,7 +162,7 @@ class HeuristicAdmissibilityTest {
                 baseWeights,
                 edgeProfileIds,
                 coordinates,
-                new ProfileSpec(1, WEEKDAY_MASK, new float[]{1.10f}, 1.0f),
+                new ProfileSpec(1, WEEKDAY_MASK, new float[]{1.005f}, 1.0f),
                 new ProfileSpec(2, ALL_DAYS_MASK, new float[]{1.35f}, 1.0f)
         );
 

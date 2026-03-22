@@ -63,9 +63,7 @@ class TopologyReloadPerfTest {
 
     private static MatrixRequest matrixRequest(int index) {
         MatrixRequest.MatrixRequestBuilder builder = MatrixRequest.builder()
-                .departureTicks(0L)
-                .algorithm(org.Aayush.routing.core.RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE);
+                .departureTicks(0L);
         int base = (index * 13) % 256;
         for (int i = 0; i < 3; i++) {
             builder.sourceExternalId("N" + ((base + (i * 7)) % 256));

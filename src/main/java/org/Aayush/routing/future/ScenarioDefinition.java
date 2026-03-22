@@ -16,6 +16,7 @@ public class ScenarioDefinition {
     String scenarioId;
     String label;
     double probability;
+    ScenarioProbabilityAudit probabilityAudit;
     @Singular("explanationTag")
     List<String> explanationTags;
     @Singular("liveUpdate")

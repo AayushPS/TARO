@@ -3,6 +3,8 @@ package org.Aayush.routing.traits.temporal;
 import lombok.Builder;
 import lombok.Value;
 
+import java.time.Duration;
+
 /**
  * Runtime configuration used to bind Stage 16 temporal behavior once at startup.
  */
@@ -28,6 +30,18 @@ public class TemporalRuntimeConfig {
      * <p>This should be the value of {@code metadata.profile_timezone}.</p>
      */
     String modelProfileTimezone;
+
+    /**
+     * Explicit worst-case drift budget tolerated when bucketed temporal execution coarsens continuous time.
+     */
+    @Builder.Default
+    Duration maxDiscretizationDrift = Duration.ofMinutes(30);
+
+    /**
+     * Startup posture when configured bucket width exceeds the drift budget.
+     */
+    @Builder.Default
+    TemporalGranularityLossPolicy granularityLossPolicy = TemporalGranularityLossPolicy.REJECT_EXCESS_DRIFT;
 
     /**
      * Returns convenience runtime config for {@code LINEAR}.

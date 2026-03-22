@@ -89,8 +89,6 @@ final class TopologyTestFixtures {
                 .sourceExternalId(sourceExternalId)
                 .targetExternalId(targetExternalId)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build();
     }
 
@@ -99,8 +97,6 @@ final class TopologyTestFixtures {
                 .sourceExternalId(sourceExternalId)
                 .targetExternalId(targetExternalId)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build();
     }
 
@@ -120,7 +116,8 @@ final class TopologyTestFixtures {
 
     static ScenarioBundleResolver strictQuarantineResolver() {
         return (ScenarioBundleRequest request,
-                org.Aayush.routing.graph.EdgeGraph edgeGraph,
+                org.Aayush.routing.cost.CostEngine baseCostEngine,
+                org.Aayush.routing.traits.temporal.ResolvedTemporalContext temporalContext,
                 TopologyVersion topologyVersion,
                 FailureQuarantine.Snapshot quarantineSnapshot,
                 Clock clock) -> {
@@ -130,7 +127,7 @@ final class TopologyTestFixtures {
                     .probability(1.0d)
                     .explanationTags(quarantineSnapshot.explanationTags());
             if (quarantineSnapshot.hasActiveFailures()) {
-                scenario.liveUpdates(quarantineSnapshot.toLiveUpdates(edgeGraph));
+                scenario.liveUpdates(quarantineSnapshot.toLiveUpdates(baseCostEngine.edgeGraph()));
             }
             return ScenarioBundle.builder()
                     .scenarioBundleId("bundle-" + topologyVersion.getTopologyVersion())

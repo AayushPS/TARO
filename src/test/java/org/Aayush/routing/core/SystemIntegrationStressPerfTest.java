@@ -60,15 +60,11 @@ class SystemIntegrationStressPerfTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N483")
                 .departureTicks(1_778_313_600L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         RouteRequest typedRouteRequest = RouteRequest.builder()
                 .sourceAddress(AddressInput.ofExternalId("N20"))
                 .targetAddress(AddressInput.ofExternalId("N460"))
                 .departureTicks(1_778_313_600L + 17L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         MatrixRequest nativeMatrixRequest = buildMatrixRequest(22 * 22, 6, 10, 1_778_313_600L, false);
         MatrixRequest compatibilityMatrixRequest = buildMatrixRequest(22 * 22, 4, 6, 1_778_313_600L + 31L, true);
@@ -172,15 +168,11 @@ class SystemIntegrationStressPerfTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N399")
                 .departureTicks(1_778_314_000L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         RouteRequest typedRouteRequest = RouteRequest.builder()
                 .sourceAddress(AddressInput.ofExternalId("N19"))
                 .targetAddress(AddressInput.ofExternalId("N378"))
                 .departureTicks(1_778_314_000L + 9L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         MatrixRequest nativeMatrixRequest = buildMatrixRequest(20 * 20, 6, 8, 1_778_314_000L + 17L, false);
         MatrixRequest compatibilityMatrixRequest = buildMatrixRequest(20 * 20, 4, 6, 1_778_314_000L + 31L, true);
@@ -354,8 +346,6 @@ class SystemIntegrationStressPerfTest {
                 .targetAddress(AddressInput.ofXY(17.05d, 17.05d))
                 .maxSnapDistance(0.20d)
                 .departureTicks(1_778_315_000L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         RouteResponse nativeReachableRoute = nativeCore.route(reachableCoordinateRoute);
         RouteResponse pairwiseReachableRoute = pairwiseCore.route(reachableCoordinateRoute);
@@ -367,8 +357,6 @@ class SystemIntegrationStressPerfTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N331")
                 .departureTicks(1_778_315_031L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         RouteResponse nativeUnreachableRoute = nativeCore.route(unreachableRoute);
         RouteResponse pairwiseUnreachableRoute = pairwiseCore.route(unreachableRoute);
@@ -388,8 +376,6 @@ class SystemIntegrationStressPerfTest {
                 .targetExternalId("N331")
                 .targetExternalId("N200")
                 .departureTicks(1_778_315_047L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         MatrixResponse nativeMatrixResponse = nativeCore.matrix(nativeMatrixRequest);
         MatrixResponse pairwiseMatrixResponse = pairwiseCore.matrix(nativeMatrixRequest);
@@ -413,8 +399,6 @@ class SystemIntegrationStressPerfTest {
                 .allowMixedAddressing(true)
                 .maxSnapDistance(0.20d)
                 .departureTicks(1_778_315_063L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         MatrixResponse nativeCompatibilityResponse = nativeCore.matrix(compatibilityMatrixRequest);
         MatrixResponse pairwiseCompatibilityResponse = pairwiseCore.matrix(compatibilityMatrixRequest);
@@ -503,9 +487,7 @@ class SystemIntegrationStressPerfTest {
             boolean aStarCompatibilityMode
     ) {
         MatrixRequest.MatrixRequestBuilder builder = MatrixRequest.builder()
-                .departureTicks(departureTicks)
-                .algorithm(aStarCompatibilityMode ? RoutingAlgorithm.A_STAR : RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE);
+                .departureTicks(departureTicks);
 
         for (int i = 0; i < sourceCount; i++) {
             int nodeId = (i * 37 + 3) % nodeCount;

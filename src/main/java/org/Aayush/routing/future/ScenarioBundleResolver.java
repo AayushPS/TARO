@@ -1,8 +1,9 @@
 package org.Aayush.routing.future;
 
-import org.Aayush.routing.graph.EdgeGraph;
+import org.Aayush.routing.cost.CostEngine;
 import org.Aayush.routing.topology.FailureQuarantine;
 import org.Aayush.routing.topology.TopologyVersion;
+import org.Aayush.routing.traits.temporal.ResolvedTemporalContext;
 
 import java.time.Clock;
 
@@ -13,7 +14,8 @@ import java.time.Clock;
 public interface ScenarioBundleResolver {
     ScenarioBundle resolve(
             ScenarioBundleRequest request,
-            EdgeGraph edgeGraph,
+            CostEngine baseCostEngine,
+            ResolvedTemporalContext temporalContext,
             TopologyVersion topologyVersion,
             FailureQuarantine.Snapshot quarantineSnapshot,
             Clock clock

@@ -60,7 +60,8 @@ public final class FutureRouteEvaluator {
         FailureQuarantine.Snapshot quarantineSnapshot = nonNullSnapshot.getFailureQuarantine().snapshot(departureTicks);
         ScenarioBundle scenarioBundle = scenarioBundleResolver.resolve(
                 nonNullRequest,
-                routeCore.edgeGraphContract(),
+                routeCore.costEngineContract(),
+                routeCore.temporalContextContract(),
                 nonNullSnapshot.getTopologyVersion(),
                 quarantineSnapshot,
                 clock
@@ -521,7 +522,11 @@ public final class FutureRouteEvaluator {
                 baseCostEngine.turnCostMap(),
                 baseCostEngine.engineTimeUnit(),
                 baseCostEngine.bucketSizeSeconds(),
-                baseCostEngine.temporalSamplingPolicy()
+                baseCostEngine.temporalSamplingPolicy(),
+                edgeId -> "edge " + edgeId,
+                baseCostEngine.profileValidationMode(),
+                baseCostEngine.recurrenceCalibrationStore(),
+                baseCostEngine.recencyCalibrationStore()
         );
     }
 
@@ -545,30 +550,7 @@ public final class FutureRouteEvaluator {
             TopologyRuntimeSnapshot snapshot,
             FailureQuarantine.Snapshot quarantineSnapshot
     ) {
-        ScenarioBundle nonNullBundle = Objects.requireNonNull(bundle, "scenarioBundle");
-        if (nonNullBundle.getScenarios() == null || nonNullBundle.getScenarios().isEmpty()) {
-            throw new IllegalArgumentException("scenarioBundle must contain at least one scenario");
-        }
-        if (!Objects.equals(nonNullBundle.getTopologyVersion(), snapshot.getTopologyVersion())) {
-            throw new IllegalArgumentException("scenarioBundle topologyVersion must match active topology snapshot");
-        }
-        if (!Objects.equals(nonNullBundle.getQuarantineSnapshotId(), quarantineSnapshot.snapshotId())) {
-            throw new IllegalArgumentException("scenarioBundle quarantineSnapshotId must match captured quarantine snapshot");
-        }
-
-        double totalProbability = 0.0d;
-        for (ScenarioDefinition scenario : nonNullBundle.getScenarios()) {
-            if (scenario.getScenarioId() == null || scenario.getScenarioId().isBlank()) {
-                throw new IllegalArgumentException("scenarioId must be non-blank");
-            }
-            if (!Double.isFinite(scenario.getProbability()) || scenario.getProbability() <= 0.0d) {
-                throw new IllegalArgumentException("scenario probability must be finite and > 0");
-            }
-            totalProbability += scenario.getProbability();
-        }
-        if (Math.abs(totalProbability - 1.0d) > PROBABILITY_TOLERANCE) {
-            throw new IllegalArgumentException("scenario probabilities must sum to 1.0 within tolerance");
-        }
+        FutureScenarioSupport.validateScenarioBundle(bundle, snapshot, quarantineSnapshot);
     }
 
     private CandidateRoute findCandidate(List<CandidateRoute> candidates, RouteCandidateKey key) {

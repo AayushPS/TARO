@@ -1,5 +1,6 @@
 package org.Aayush.routing.core;
 
+import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.testutil.TemporalTestContexts;
@@ -26,16 +27,12 @@ class NativeOneToManyMatrixPlannerTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(10L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         MatrixResponse matrix = core.matrix(MatrixRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(10L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertTrue(route.isReachable());
@@ -55,8 +52,6 @@ class NativeOneToManyMatrixPlannerTest {
                 .targetExternalId("N3")
                 .targetExternalId("N3")
                 .departureTicks(7L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertTrue(response.getReachable()[0][0]);
@@ -82,8 +77,6 @@ class NativeOneToManyMatrixPlannerTest {
                 .targetExternalId("N3")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build();
 
         MatrixResponse first = core.matrix(request);
@@ -97,13 +90,11 @@ class NativeOneToManyMatrixPlannerTest {
     @Test
     @DisplayName("A* matrix requests use native one-to-many path for bounded target sets")
     void testAStarNativePath() {
-        RouteCore core = createCore(createLinearFixture());
+        RouteCore core = createCore(createLinearFixture(), ExecutionRuntimeConfig.aStarNone());
         MatrixResponse response = core.matrix(MatrixRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build());
 
         assertTrue(response.getReachable()[0][0]);
@@ -220,11 +211,19 @@ class NativeOneToManyMatrixPlannerTest {
     }
 
     private RouteCore createCore(RoutingFixtureFactory.Fixture fixture) {
+        return createCore(fixture, ExecutionRuntimeConfig.dijkstra());
+    }
+
+    private RouteCore createCore(
+            RoutingFixtureFactory.Fixture fixture,
+            ExecutionRuntimeConfig executionRuntimeConfig
+    ) {
         return RouteCore.builder()
                 .edgeGraph(fixture.edgeGraph())
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .executionRuntimeConfig(executionRuntimeConfig)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())

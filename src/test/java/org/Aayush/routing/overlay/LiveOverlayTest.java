@@ -27,6 +27,7 @@ class LiveOverlayTest {
         assertThrows(IllegalArgumentException.class, () -> LiveUpdate.of(1, Float.NaN, 100));
         assertThrows(IllegalArgumentException.class, () -> LiveUpdate.of(1, Float.POSITIVE_INFINITY, 100));
         assertThrows(IllegalArgumentException.class, () -> LiveUpdate.of(1, Float.NEGATIVE_INFINITY, 100));
+        assertThrows(IllegalArgumentException.class, () -> LiveUpdate.of(1, 0.5f, 100, 100));
 
         LiveUpdate blocked = LiveUpdate.of(10, 0.0f, 200);
         assertEquals(0.0f, blocked.speedFactor());
@@ -122,6 +123,20 @@ class LiveOverlayTest {
         assertEquals(LiveOverlay.LookupState.EXPIRED, expired.state());
         assertEquals(LiveOverlay.LookupState.EXPIRED, overlay.lookup(2, 30).state());
         assertEquals(2, overlay.size(), "Lookup should not mutate overlay state");
+    }
+
+    @Test
+    @DisplayName("Scheduled updates stay neutral before validFrom and activate only inside their window")
+    void testScheduledWindowSemantics() {
+        LiveOverlay overlay = new LiveOverlay(16);
+
+        assertTrue(overlay.upsert(LiveUpdate.of(7, 0.5f, 20L, 40L), 0L));
+
+        assertEquals(LiveOverlay.LookupState.SCHEDULED, overlay.lookup(7, 10L).state());
+        assertEquals(1.0f, overlay.lookup(7, 10L).livePenaltyMultiplier(), 1e-6f);
+        assertEquals(LiveOverlay.LookupState.ACTIVE, overlay.lookup(7, 20L).state());
+        assertEquals(LiveOverlay.LookupState.ACTIVE, overlay.lookup(7, 39L).state());
+        assertEquals(LiveOverlay.LookupState.EXPIRED, overlay.lookup(7, 40L).state());
     }
 
     @Test

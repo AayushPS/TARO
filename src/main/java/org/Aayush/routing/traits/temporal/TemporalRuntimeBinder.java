@@ -111,6 +111,12 @@ public final class TemporalRuntimeBinder {
             );
         }
 
+        long maxDiscretizationDriftSeconds = validateMaxDiscretizationDriftSeconds(nonNullConfig);
+        TemporalGranularityLossPolicy granularityLossPolicy = Objects.requireNonNull(
+                nonNullConfig.getGranularityLossPolicy(),
+                "granularityLossPolicy"
+        );
+
         TemporalOffsetCache offsetCache = null;
         if (TemporalTimezonePolicyRegistry.POLICY_MODEL_TIMEZONE.equals(timezonePolicyId)) {
             offsetCache = new TemporalOffsetCache(zoneId);
@@ -123,6 +129,8 @@ public final class TemporalRuntimeBinder {
                 .timezonePolicyId(timezonePolicyId)
                 .zoneId(zoneId == null ? null : zoneId.getId())
                 .dayMaskAware(strategy.dayMaskAware())
+                .maxDiscretizationDriftSeconds(maxDiscretizationDriftSeconds)
+                .granularityLossPolicy(granularityLossPolicy)
                 .resolver(resolver)
                 .build();
         TemporalTelemetry telemetry = TemporalTelemetry.builder()
@@ -136,6 +144,18 @@ public final class TemporalRuntimeBinder {
                 .temporalContextResolver(resolver)
                 .temporalTelemetry(telemetry)
                 .build();
+    }
+
+    private static long validateMaxDiscretizationDriftSeconds(TemporalRuntimeConfig runtimeConfig) {
+        Objects.requireNonNull(runtimeConfig.getMaxDiscretizationDrift(), "maxDiscretizationDrift");
+        long driftSeconds = runtimeConfig.getMaxDiscretizationDrift().toSeconds();
+        if (driftSeconds <= 0L) {
+            throw new RouteCoreException(
+                    RouteCore.REASON_TEMPORAL_CONFIG_INCOMPATIBLE,
+                    "maxDiscretizationDrift must be a positive whole-second duration"
+            );
+        }
+        return driftSeconds;
     }
 
     private static String normalizeRequiredId(String id, String reasonCode, String message) {

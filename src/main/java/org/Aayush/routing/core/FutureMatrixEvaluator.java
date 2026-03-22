@@ -49,7 +49,8 @@ public final class FutureMatrixEvaluator {
         FailureQuarantine.Snapshot quarantineSnapshot = nonNullSnapshot.getFailureQuarantine().snapshot(departureTicks);
         ScenarioBundle scenarioBundle = scenarioBundleResolver.resolve(
                 nonNullRequest,
-                routeCore.edgeGraphContract(),
+                routeCore.costEngineContract(),
+                routeCore.temporalContextContract(),
                 nonNullSnapshot.getTopologyVersion(),
                 quarantineSnapshot,
                 clock

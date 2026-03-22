@@ -49,7 +49,7 @@ class FutureRouteServiceTest {
                 .failureQuarantine(new FailureQuarantine("quarantine-topo-1"))
                 .build();
 
-        ScenarioBundleResolver resolver = (request, edgeGraph, resolvedTopologyVersion, quarantineSnapshot, clock) ->
+        ScenarioBundleResolver resolver = (request, baseCostEngine, temporalContext, resolvedTopologyVersion, quarantineSnapshot, clock) ->
                 ScenarioBundle.builder()
                         .scenarioBundleId("bundle-1")
                         .generatedAt(FIXED_CLOCK.instant())
@@ -122,7 +122,7 @@ class FutureRouteServiceTest {
                 .failureQuarantine(new FailureQuarantine("quarantine-topo-compromise"))
                 .build();
 
-        ScenarioBundleResolver resolver = (request, edgeGraph, resolvedTopologyVersion, quarantineSnapshot, clock) ->
+        ScenarioBundleResolver resolver = (request, baseCostEngine, temporalContext, resolvedTopologyVersion, quarantineSnapshot, clock) ->
                 ScenarioBundle.builder()
                         .scenarioBundleId("bundle-compromise")
                         .generatedAt(FIXED_CLOCK.instant())

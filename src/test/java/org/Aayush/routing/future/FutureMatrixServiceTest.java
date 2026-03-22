@@ -48,7 +48,7 @@ class FutureMatrixServiceTest {
                 .failureQuarantine(new FailureQuarantine("quarantine-topo-1"))
                 .build();
 
-        ScenarioBundleResolver resolver = (request, edgeGraph, resolvedTopologyVersion, quarantineSnapshot, clock) ->
+        ScenarioBundleResolver resolver = (request, baseCostEngine, temporalContext, resolvedTopologyVersion, quarantineSnapshot, clock) ->
                 ScenarioBundle.builder()
                         .scenarioBundleId("bundle-matrix-1")
                         .generatedAt(FIXED_CLOCK.instant())

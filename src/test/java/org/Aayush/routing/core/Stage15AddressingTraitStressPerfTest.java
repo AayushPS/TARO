@@ -119,8 +119,6 @@ class Stage15AddressingTraitStressPerfTest {
                 .allowMixedAddressing(true)
                 .maxSnapDistance(0.25d)
                 .departureTicks(17L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
 
         RouteResponse baseline = core.route(request);
@@ -189,8 +187,6 @@ class Stage15AddressingTraitStressPerfTest {
                 .targetAddress(coordinateAddressForNode(targetNodeId, cols))
                 .maxSnapDistance(0.25d)
                 .departureTicks(departureTicks)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build();
     }
 
@@ -206,9 +202,7 @@ class Stage15AddressingTraitStressPerfTest {
 
         MatrixRequest.MatrixRequestBuilder builder = MatrixRequest.builder()
                 .maxSnapDistance(0.25d)
-                .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE);
+                .departureTicks(0L);
 
         for (int i = 0; i < 24; i++) {
             int node = sourceNodes[i % sourceNodes.length];

@@ -2,6 +2,7 @@ package org.Aayush.routing.core;
 
 import org.Aayush.core.time.TimeUtils;
 import org.Aayush.routing.cost.CostEngine;
+import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.overlay.LiveOverlay;
 import org.Aayush.routing.overlay.LiveUpdate;
@@ -252,8 +253,6 @@ class Stage13PrimitiveGuardrailTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
@@ -306,6 +305,7 @@ class Stage13PrimitiveGuardrailTest {
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
+                .executionRuntimeConfig(ExecutionRuntimeConfig.dijkstra())
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(AddressingRuntimeConfig.defaultRuntime())

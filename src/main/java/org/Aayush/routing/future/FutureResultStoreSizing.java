@@ -127,8 +127,6 @@ final class FutureResultStoreSizing {
         size += addressInput(request.getTargetAddress());
         size += boolBox(request.getAllowMixedAddressing());
         size += number(request.getMaxSnapDistance());
-        size += enumBytes(request.getAlgorithm());
-        size += enumBytes(request.getHeuristicType());
         return size;
     }
 
@@ -147,8 +145,6 @@ final class FutureResultStoreSizing {
                 .sum();
         size += boolBox(request.getAllowMixedAddressing());
         size += number(request.getMaxSnapDistance());
-        size += enumBytes(request.getAlgorithm());
-        size += enumBytes(request.getHeuristicType());
         return size;
     }
 
@@ -188,10 +184,23 @@ final class FutureResultStoreSizing {
         long size = OBJECT_HEADER_BYTES + Double.BYTES;
         size += string(scenarioDefinition.getScenarioId());
         size += string(scenarioDefinition.getLabel());
+        size += scenarioProbabilityAudit(scenarioDefinition.getProbabilityAudit());
         size += stringList(scenarioDefinition.getExplanationTags());
         size += listOverhead(scenarioDefinition.getLiveUpdates()) + scenarioDefinition.getLiveUpdates().stream()
                 .mapToLong(FutureResultStoreSizing::liveUpdate)
                 .sum();
+        return size;
+    }
+
+    private static long scenarioProbabilityAudit(ScenarioProbabilityAudit audit) {
+        if (audit == null) {
+            return 0L;
+        }
+        long size = OBJECT_HEADER_BYTES + 4 * Double.BYTES;
+        size += string(audit.getPolicyId());
+        size += string(audit.getEvidenceSource());
+        size += boxedLong(audit.getObservedAtTicks());
+        size += boxedLong(audit.getEvidenceAgeTicks());
         return size;
     }
 
@@ -313,6 +322,10 @@ final class FutureResultStoreSizing {
     }
 
     private static long number(Number value) {
+        return value == null ? 0L : OBJECT_HEADER_BYTES + Long.BYTES;
+    }
+
+    private static long boxedLong(Long value) {
         return value == null ? 0L : OBJECT_HEADER_BYTES + Long.BYTES;
     }
 }

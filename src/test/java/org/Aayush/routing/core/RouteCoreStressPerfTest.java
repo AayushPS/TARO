@@ -51,8 +51,6 @@ class RouteCoreStressPerfTest {
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(i)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build());
             assertTrue(response.getArrivalTicks() >= response.getDepartureTicks());
             assertTrue(response.getTotalCost() >= 0.0f || response.getTotalCost() == Float.POSITIVE_INFINITY);
@@ -73,8 +71,6 @@ class RouteCoreStressPerfTest {
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(0L)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build());
         }
         long start = System.nanoTime();
@@ -85,8 +81,6 @@ class RouteCoreStressPerfTest {
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(0L)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build());
         }
         long elapsed = System.nanoTime() - start;
@@ -103,8 +97,6 @@ class RouteCoreStressPerfTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N143")
                 .departureTicks(10L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
 
         RouteResponse baseline = core.route(request);
@@ -164,8 +156,6 @@ class RouteCoreStressPerfTest {
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(departureTicks)
-                    .algorithm(RoutingAlgorithm.DIJKSTRA)
-                    .heuristicType(HeuristicType.NONE)
                     .build();
             RouteResponse dijkstra = core.route(dijkstraRequest);
 
@@ -174,8 +164,6 @@ class RouteCoreStressPerfTest {
                         .sourceExternalId("N" + source)
                         .targetExternalId("N" + target)
                         .departureTicks(departureTicks)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(heuristicType)
                         .build());
 
                 assertEquals(
@@ -213,8 +201,6 @@ class RouteCoreStressPerfTest {
                     .sourceExternalId("N" + (i % 400))
                     .targetExternalId("N" + ((i * 11) % 400))
                     .departureTicks(i)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.LANDMARK)
                     .build());
         }
 
@@ -224,8 +210,6 @@ class RouteCoreStressPerfTest {
                     .sourceExternalId("N" + (i % 400))
                     .targetExternalId("N" + ((i * 19) % 400))
                     .departureTicks(i)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.LANDMARK)
                     .build());
         }
         long elapsed = System.nanoTime() - start;
@@ -242,8 +226,6 @@ class RouteCoreStressPerfTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N195")
                 .departureTicks(15L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.LANDMARK)
                 .build();
 
         RouteResponse baseline = core.route(request);
@@ -328,15 +310,11 @@ class RouteCoreStressPerfTest {
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(nowTicks)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build();
             RouteRequest dijkstraRequest = RouteRequest.builder()
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(nowTicks)
-                    .algorithm(RoutingAlgorithm.DIJKSTRA)
-                    .heuristicType(HeuristicType.NONE)
                     .build();
 
             RouteResponse aStarFirst = core.route(aStarRequest);
@@ -567,8 +545,6 @@ class RouteCoreStressPerfTest {
                 .targetExternalId("N159")
                 .targetExternalId("N195")
                 .departureTicks(22L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build();
 
         MatrixResponse baseline = core.matrix(request);
@@ -1004,9 +980,7 @@ class RouteCoreStressPerfTest {
             HeuristicType heuristicType
     ) {
         MatrixRequest.MatrixRequestBuilder builder = MatrixRequest.builder()
-                .departureTicks(query.departureTicks())
-                .algorithm(algorithm)
-                .heuristicType(heuristicType);
+                .departureTicks(query.departureTicks());
         for (int sourceNodeId : query.sourceNodeIds()) {
             builder.sourceExternalId("N" + sourceNodeId);
         }
@@ -1024,8 +998,6 @@ class RouteCoreStressPerfTest {
                     .sourceExternalId("N" + query.sourceNodeId())
                     .targetExternalId("N" + query.targetNodeId())
                     .departureTicks(query.departureTicks())
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build());
         }
     }
@@ -1055,8 +1027,6 @@ class RouteCoreStressPerfTest {
                     .sourceExternalId("N" + query.sourceNodeId())
                     .targetExternalId("N" + query.targetNodeId())
                     .departureTicks(query.departureTicks())
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build());
             outcomes[i] = new QueryOutcome(
                     response.isReachable(),

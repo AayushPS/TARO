@@ -41,61 +41,47 @@ class ExecutionProfileRouteCoreTest {
     }
 
     @Test
-    @DisplayName("Deprecated per-request execution selectors must match startup execution profile")
-    void testPerRequestExecutionSelectorsMustMatchStartupProfile() {
-        RouteCore core = createCore(ExecutionRuntimeConfig.dijkstra());
+    @DisplayName("Startup execution profile is required")
+    void testExecutionRuntimeConfigIsRequired() {
+        RoutingFixtureFactory.Fixture fixture = createFixture();
 
-        RouteCoreException routeEx = assertThrows(
+        RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
-                () -> core.route(RouteRequest.builder()
-                        .sourceExternalId("N0")
-                        .targetExternalId("N4")
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
-                        .build())
+                () -> RouteCore.builder()
+                        .edgeGraph(fixture.edgeGraph())
+                        .profileStore(fixture.profileStore())
+                        .costEngine(fixture.costEngine())
+                        .nodeIdMapper(fixture.nodeIdMapper())
+                        .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
+                        .transitionRuntimeConfig(TransitionRuntimeConfig.edgeBased())
+                        .addressingRuntimeConfig(AddressingRuntimeConfig.defaultRuntime())
+                        .build()
         );
-        assertEquals(RouteCore.REASON_REQUEST_EXECUTION_SELECTOR_MISMATCH, routeEx.getReasonCode());
-
-        RouteCoreException matrixEx = assertThrows(
-                RouteCoreException.class,
-                () -> core.matrix(MatrixRequest.builder()
-                        .sourceExternalId("N0")
-                        .targetExternalId("N4")
-                        .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
-                        .build())
-        );
-        assertEquals(RouteCore.REASON_REQUEST_EXECUTION_SELECTOR_MISMATCH, matrixEx.getReasonCode());
+        assertEquals(RouteCore.REASON_EXECUTION_CONFIG_REQUIRED, ex.getReasonCode());
     }
 
     @Test
-    @DisplayName("Legacy per-request execution selectors remain supported without startup execution profile")
-    void testLegacyPerRequestExecutionSelectorsRemainSupported() {
-        RoutingFixtureFactory.Fixture fixture = createFixture();
-        RouteCore core = RouteCore.builder()
-                .edgeGraph(fixture.edgeGraph())
-                .profileStore(fixture.profileStore())
-                .costEngine(fixture.costEngine())
-                .nodeIdMapper(fixture.nodeIdMapper())
-                .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
-                .transitionRuntimeConfig(TransitionRuntimeConfig.edgeBased())
-                .addressingRuntimeConfig(AddressingRuntimeConfig.defaultRuntime())
-                .build();
+    @DisplayName("Dijkstra startup execution profile governs request execution")
+    void testDijkstraStartupProfileGovernRequestExecution() {
+        RouteCore core = createCore(ExecutionRuntimeConfig.dijkstra());
 
-        RouteResponse response = core.route(RouteRequest.builder()
+        RouteResponse routeResponse = core.route(RouteRequest.builder()
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
-                        .build()
-        );
+                .build());
+        MatrixResponse matrixResponse = core.matrix(MatrixRequest.builder()
+                .sourceExternalId("N0")
+                .targetExternalId("N4")
+                .departureTicks(0L)
+                .build());
 
-        assertTrue(response.isReachable());
-        assertEquals(RoutingAlgorithm.A_STAR, response.getAlgorithm());
-        assertEquals(HeuristicType.NONE, response.getHeuristicType());
+        assertTrue(routeResponse.isReachable());
+        assertEquals(RoutingAlgorithm.DIJKSTRA, routeResponse.getAlgorithm());
+        assertEquals(HeuristicType.NONE, routeResponse.getHeuristicType());
+        assertTrue(matrixResponse.getReachable()[0][0]);
+        assertEquals(RoutingAlgorithm.DIJKSTRA, matrixResponse.getAlgorithm());
+        assertEquals(HeuristicType.NONE, matrixResponse.getHeuristicType());
     }
 
     private RouteCore createCore(ExecutionRuntimeConfig executionRuntimeConfig) {

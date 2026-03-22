@@ -43,8 +43,6 @@ class Stage16TemporalTraitStressPerfTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N4")
                 .departureTicks(departureTicks)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         RouteResponse baseline = core.route(request);
 
@@ -100,8 +98,6 @@ class Stage16TemporalTraitStressPerfTest {
                 .targetExternalId("N3")
                 .targetExternalId("N4")
                 .departureTicks(1_778_313_600L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         MatrixResponse baseline = core.matrix(request);
 
@@ -254,8 +250,6 @@ class Stage16TemporalTraitStressPerfTest {
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(departureBaseTicks + i)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build());
             assertTrue(response.getArrivalTicks() >= response.getDepartureTicks());
             assertTrue(response.getTotalCost() >= 0.0f || response.getTotalCost() == Float.POSITIVE_INFINITY);
@@ -275,9 +269,7 @@ class Stage16TemporalTraitStressPerfTest {
 
     private MatrixRequest buildMatrixPerfRequest(int nodeCount, int sourceCount, int targetCount, long departureTicks) {
         MatrixRequest.MatrixRequestBuilder builder = MatrixRequest.builder()
-                .departureTicks(departureTicks)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE);
+                .departureTicks(departureTicks);
         for (int i = 0; i < sourceCount; i++) {
             builder.sourceExternalId("N" + ((i * 31) % nodeCount));
         }

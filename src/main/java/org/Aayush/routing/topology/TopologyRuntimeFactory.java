@@ -8,10 +8,16 @@ import org.Aayush.routing.heuristic.LandmarkArtifact;
 import org.Aayush.routing.heuristic.LandmarkPreprocessor;
 import org.Aayush.routing.heuristic.LandmarkStore;
 import org.Aayush.routing.overlay.LiveOverlay;
+import org.Aayush.routing.profile.ProfileRecurrenceCalibrationStore;
+import org.Aayush.routing.profile.ProfileRecencyCalibrationStore;
 import org.Aayush.routing.profile.ProfileStore;
 import org.Aayush.routing.spatial.SpatialRuntime;
+import org.Aayush.routing.traits.temporal.TemporalGranularityLossPolicy;
+import org.Aayush.routing.traits.temporal.TemporalTraitCatalog;
 
 import java.nio.ByteOrder;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -51,6 +57,7 @@ public final class TopologyRuntimeFactory {
         TopologyIndexLayout candidateLayout = TopologyIndexLayout.fromSource(nonNullSource);
         TopologyIncidentIndex incidentIndex = TopologyIncidentIndex.fromLayout(candidateLayout);
         CompiledTopologyModel compiled = modelCompiler.compile(nonNullSource);
+        validateTemporalGranularityContract(nonNullSource);
 
         EdgeGraph edgeGraph = EdgeGraph.fromFlatBuffer(compiled.getModelBuffer().duplicate().order(ByteOrder.LITTLE_ENDIAN));
         ProfileStore profileStore = ProfileStore.fromFlatBuffer(compiled.getModelBuffer().duplicate().order(ByteOrder.LITTLE_ENDIAN));
@@ -64,7 +71,11 @@ public final class TopologyRuntimeFactory {
                 turnCostMap,
                 nonNullSource.getEngineTimeUnit(),
                 runtimeTemplate.getBucketSizeSeconds(),
-                runtimeTemplate.getTemporalSamplingPolicy()
+                runtimeTemplate.getTemporalSamplingPolicy(),
+                edgeId -> "edge '" + candidateLayout.edgeId(edgeId) + "'",
+                profileValidationMode(),
+                buildRecurrenceCalibrationStore(nonNullSource),
+                buildRecencyCalibrationStore(nonNullSource)
         );
 
         SpatialRuntime spatialRuntime = compiled.isCoordinatesEnabled() && runtimeTemplate.isSpatialEnabled()
@@ -153,7 +164,13 @@ public final class TopologyRuntimeFactory {
             String edgeId = previousLayout.edgeId(record.subjectId());
             Integer candidateEdgeIndex = candidateLayout.findEdgeIndex(edgeId);
             if (candidateEdgeIndex != null) {
-                quarantine.quarantineEdge(candidateEdgeIndex, record.validUntilTicks(), record.reason(), record.source());
+                quarantine.quarantineEdge(
+                        candidateEdgeIndex,
+                        record.validUntilTicks(),
+                        record.observedAtTicks(),
+                        record.reason(),
+                        record.source()
+                );
             }
         }
         for (FailureQuarantine.FailureRecord record : activeFailures.activeNodeFailures().values()) {
@@ -163,9 +180,87 @@ public final class TopologyRuntimeFactory {
             String nodeId = previousLayout.nodeId(record.subjectId());
             Integer candidateNodeIndex = candidateLayout.findNodeIndex(nodeId);
             if (candidateNodeIndex != null) {
-                quarantine.quarantineNode(candidateNodeIndex, record.validUntilTicks(), record.reason(), record.source());
+                quarantine.quarantineNode(
+                        candidateNodeIndex,
+                        record.validUntilTicks(),
+                        record.observedAtTicks(),
+                        record.reason(),
+                        record.source()
+                );
             }
         }
         return quarantine;
+    }
+
+    private CostEngine.ProfileValidationMode profileValidationMode() {
+        if (runtimeTemplate.getTemporalRuntimeConfig() != null
+                && TemporalTraitCatalog.TRAIT_CALENDAR.equals(runtimeTemplate.getTemporalRuntimeConfig().getTemporalTraitId())) {
+            return CostEngine.ProfileValidationMode.DAY_MASK_AWARE_WEEKLY;
+        }
+        return CostEngine.ProfileValidationMode.DAILY_ONLY;
+    }
+
+    private ProfileRecurrenceCalibrationStore buildRecurrenceCalibrationStore(TopologyModelSource source) {
+        Map<Integer, ProfileRecurrenceCalibrationStore.ProfileRecurrenceCalibration> calibrationByProfileId = new HashMap<>();
+        for (TopologyModelSource.ProfileDefinition profile : source.getProfiles()) {
+            if (profile.getRecurringSignalFlavor() == null) {
+                continue;
+            }
+            calibrationByProfileId.put(
+                    profile.getProfileId(),
+                    new ProfileRecurrenceCalibrationStore.ProfileRecurrenceCalibration(
+                            profile.getRecurringObservationCount(),
+                            profile.getRecurringConfidence(),
+                            profile.getRecurringSignalFlavor(),
+                            ProfileRecurrenceCalibrationStore.CalibrationSource.EXPLICIT_SOURCE
+                    )
+            );
+        }
+        return calibrationByProfileId.isEmpty()
+                ? ProfileRecurrenceCalibrationStore.empty()
+                : new ProfileRecurrenceCalibrationStore(calibrationByProfileId);
+    }
+
+    private ProfileRecencyCalibrationStore buildRecencyCalibrationStore(TopologyModelSource source) {
+        Map<Integer, ProfileRecencyCalibrationStore.ProfileRecencyCalibration> calibrationByProfileId = new HashMap<>();
+        for (TopologyModelSource.ProfileDefinition profile : source.getProfiles()) {
+            if (profile.getLastObservedAtTicks() == null) {
+                continue;
+            }
+            calibrationByProfileId.put(
+                    profile.getProfileId(),
+                    new ProfileRecencyCalibrationStore.ProfileRecencyCalibration(
+                            profile.getLastObservedAtTicks(),
+                            ProfileRecencyCalibrationStore.CalibrationSource.EXPLICIT_SOURCE
+                    )
+            );
+        }
+        return calibrationByProfileId.isEmpty()
+                ? ProfileRecencyCalibrationStore.empty()
+                : new ProfileRecencyCalibrationStore(calibrationByProfileId);
+    }
+
+    private void validateTemporalGranularityContract(TopologyModelSource source) {
+        if (runtimeTemplate.getTemporalRuntimeConfig() == null) {
+            return;
+        }
+        long driftBudgetSeconds = runtimeTemplate.getTemporalRuntimeConfig().getMaxDiscretizationDrift().toSeconds();
+        long driftBudgetTicks = Math.multiplyExact(driftBudgetSeconds, source.getEngineTimeUnit().ticksPerSecond());
+        long bucketTicks = Math.multiplyExact(runtimeTemplate.getBucketSizeSeconds(), source.getEngineTimeUnit().ticksPerSecond());
+        long worstCaseDriftTicks = (bucketTicks + 1L) / 2L;
+        if (runtimeTemplate.getTemporalRuntimeConfig().getGranularityLossPolicy() == TemporalGranularityLossPolicy.REJECT_EXCESS_DRIFT
+                && worstCaseDriftTicks > driftBudgetTicks) {
+            throw new IllegalArgumentException(
+                    "bucketSizeSeconds="
+                            + runtimeTemplate.getBucketSizeSeconds()
+                            + " exceeds temporal drift budget "
+                            + driftBudgetSeconds
+                            + "s under "
+                            + TemporalGranularityLossPolicy.REJECT_EXCESS_DRIFT
+                            + " (worst-case discretization drift="
+                            + worstCaseDriftTicks
+                            + " ticks)"
+            );
+        }
     }
 }

@@ -1,5 +1,6 @@
 package org.Aayush.routing.core;
 
+import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.heuristic.HeuristicType;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
@@ -100,8 +101,6 @@ class Stage14PrimitiveGuardrailTest {
                         .targetExternalId("N1")
                         .targetExternalId("N2")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MATRIX_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
@@ -121,8 +120,6 @@ class Stage14PrimitiveGuardrailTest {
                         .sourceExternalId("N1")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MATRIX_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
@@ -141,8 +138,6 @@ class Stage14PrimitiveGuardrailTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MATRIX_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
@@ -155,7 +150,7 @@ class Stage14PrimitiveGuardrailTest {
         System.setProperty(PROP_MAX_STAGE13_SETTLED, "1");
         System.setProperty(PROP_MAX_NATIVE_A_STAR_TARGETS, "1");
         System.setProperty(PROP_A_STAR_BATCH_TARGETS, "1");
-        RouteCore core = createCore(createLinearFixture());
+        RouteCore core = createCore(createLinearFixture(), null, ExecutionRuntimeConfig.aStarNone());
 
         RouteCoreException ex = assertThrows(
                 RouteCoreException.class,
@@ -164,8 +159,6 @@ class Stage14PrimitiveGuardrailTest {
                         .targetExternalId("N3")
                         .targetExternalId("N4")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_MATRIX_SEARCH_BUDGET_EXCEEDED, ex.getReasonCode());
@@ -173,16 +166,25 @@ class Stage14PrimitiveGuardrailTest {
     }
 
     private RouteCore createCore(RoutingFixtureFactory.Fixture fixture) {
-        return createCore(fixture, null);
+        return createCore(fixture, null, ExecutionRuntimeConfig.dijkstra());
     }
 
     private RouteCore createCore(RoutingFixtureFactory.Fixture fixture, MatrixPlanner matrixPlanner) {
+        return createCore(fixture, matrixPlanner, ExecutionRuntimeConfig.dijkstra());
+    }
+
+    private RouteCore createCore(
+            RoutingFixtureFactory.Fixture fixture,
+            MatrixPlanner matrixPlanner,
+            ExecutionRuntimeConfig executionRuntimeConfig
+    ) {
         return RouteCore.builder()
                 .edgeGraph(fixture.edgeGraph())
                 .profileStore(fixture.profileStore())
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .matrixPlanner(matrixPlanner)
+                .executionRuntimeConfig(executionRuntimeConfig)
                 .temporalRuntimeConfig(TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.defaultRuntime())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.defaultRuntime())

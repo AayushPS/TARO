@@ -4,6 +4,7 @@ import org.Aayush.routing.cost.CostEngine;
 import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.future.ScenarioBundle;
 import org.Aayush.routing.future.ScenarioDefinition;
+import org.Aayush.routing.future.ScenarioProbabilityAudit;
 import org.Aayush.routing.overlay.LiveUpdate;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.topology.FailureQuarantine;
@@ -34,8 +35,6 @@ class FutureScenarioSupportTest {
                         .sourceExternalId("N0")
                         .targetExternalId("N2")
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build()
         );
         CostEngine base = routeCore.costEngineContract();
@@ -100,6 +99,7 @@ class FutureScenarioSupportTest {
                         .scenarioId("baseline")
                         .label("baseline")
                         .probability(1.0d)
+                        .probabilityAudit(validAudit(1.0d))
                         .build())
                 .build();
 
@@ -159,6 +159,45 @@ class FutureScenarioSupportTest {
                 snapshot,
                 quarantineSnapshot
         ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("bad-audit")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("baseline")
+                                .label("baseline")
+                                .probability(1.0d)
+                                .probabilityAudit(validAudit(0.9d))
+                                .build())
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+    }
+
+    @Test
+    @DisplayName("Scenario bundle validation rejects malformed probability audits")
+    void testValidateScenarioBundleRejectsMalformedAudits() {
+        TopologyRuntimeSnapshot snapshot = snapshot();
+        FailureQuarantine.Snapshot quarantineSnapshot = snapshot.getFailureQuarantine().snapshot(0L);
+
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit(" ", "test", null, null, 0.5d, 0.75d, 1.0d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", " ", null, null, 0.5d, 0.75d, 1.0d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, null, -0.1d, 0.75d, 1.0d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, null, 1.1d, 0.75d, 1.0d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, null, 0.5d, -0.1d, 1.0d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, null, 0.5d, 1.1d, 1.0d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, null, 0.5d, 0.75d, -0.1d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, null, 0.5d, 0.75d, 1.1d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, null, 0.5d, 0.75d, 1.0d, 0.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, null, 0.5d, 0.75d, 1.0d, 1.1d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", 10L, null, 0.5d, 0.75d, 1.0d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, 10L, 0.5d, 0.75d, 1.0d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", 10L, -1L, 0.5d, 0.75d, 1.0d, 1.0d));
     }
 
     private ScenarioBundle bundleWithOneScenario(
@@ -179,6 +218,57 @@ class FutureScenarioSupportTest {
                         .label("label")
                         .probability(probability)
                         .build())
+                .build();
+    }
+
+    private void assertInvalidAudit(
+            TopologyRuntimeSnapshot snapshot,
+            FailureQuarantine.Snapshot quarantineSnapshot,
+            ScenarioProbabilityAudit audit
+    ) {
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("invalid-audit")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("baseline")
+                                .label("baseline")
+                                .probability(1.0d)
+                                .probabilityAudit(audit)
+                                .build())
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+    }
+
+    private ScenarioProbabilityAudit validAudit(double adjustedProbability) {
+        return audit("b4-recency-v1", "test", null, null, 0.5d, 0.75d, 1.0d, adjustedProbability);
+    }
+
+    private ScenarioProbabilityAudit audit(
+            String policyId,
+            String evidenceSource,
+            Long observedAtTicks,
+            Long evidenceAgeTicks,
+            double freshnessWeight,
+            double horizonWeight,
+            double baseProbability,
+            double adjustedProbability
+    ) {
+        return ScenarioProbabilityAudit.builder()
+                .policyId(policyId)
+                .evidenceSource(evidenceSource)
+                .observedAtTicks(observedAtTicks)
+                .evidenceAgeTicks(evidenceAgeTicks)
+                .freshnessWeight(freshnessWeight)
+                .horizonWeight(horizonWeight)
+                .baseProbability(baseProbability)
+                .adjustedProbability(adjustedProbability)
                 .build();
     }
 

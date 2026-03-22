@@ -180,15 +180,11 @@ class Stage17TransitionTraitStressPerfTest {
                 .sourceExternalId("N0")
                 .targetExternalId("N255")
                 .departureTicks(1_778_313_600L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         RouteRequest nodeRouteRequest = RouteRequest.builder()
                 .sourceExternalId("N9")
                 .targetExternalId("N244")
                 .departureTicks(1_778_313_711L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(HeuristicType.NONE)
                 .build();
         MatrixRequest edgeMatrixRequest = buildMatrixRequest(fixture.edgeGraph().nodeCount(), 8, 8, 1_778_313_900L);
         MatrixRequest nodeMatrixRequest = buildMatrixRequest(fixture.edgeGraph().nodeCount(), 7, 7, 1_778_314_200L);
@@ -291,29 +287,21 @@ class Stage17TransitionTraitStressPerfTest {
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(nowTicks)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build();
             RouteRequest edgeDijkstraRequest = RouteRequest.builder()
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(nowTicks)
-                    .algorithm(RoutingAlgorithm.DIJKSTRA)
-                    .heuristicType(HeuristicType.NONE)
                     .build();
             RouteRequest nodeAStarRequest = RouteRequest.builder()
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(nowTicks + 1L)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build();
             RouteRequest nodeDijkstraRequest = RouteRequest.builder()
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(nowTicks + 1L)
-                    .algorithm(RoutingAlgorithm.DIJKSTRA)
-                    .heuristicType(HeuristicType.NONE)
                     .build();
 
             RouteResponse edgeAStarFirst = edgeCore.route(edgeAStarRequest);
@@ -360,8 +348,6 @@ class Stage17TransitionTraitStressPerfTest {
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(departureBaseTicks + i)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build());
             assertTrue(response.getArrivalTicks() >= response.getDepartureTicks());
             assertTrue(response.getTotalCost() >= 0.0f || response.getTotalCost() == Float.POSITIVE_INFINITY);
@@ -387,8 +373,6 @@ class Stage17TransitionTraitStressPerfTest {
                     .sourceExternalId("N" + source)
                     .targetExternalId("N" + target)
                     .departureTicks(departureBaseTicks + i)
-                    .algorithm(RoutingAlgorithm.A_STAR)
-                    .heuristicType(HeuristicType.NONE)
                     .build();
             RouteResponse edge = edgeCore.route(request);
             RouteResponse node = nodeCore.route(request);
@@ -460,9 +444,7 @@ class Stage17TransitionTraitStressPerfTest {
 
     private MatrixRequest buildMatrixRequest(int nodeCount, int sourceCount, int targetCount, long departureTicks) {
         MatrixRequest.MatrixRequestBuilder builder = MatrixRequest.builder()
-                .departureTicks(departureTicks)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(HeuristicType.NONE);
+                .departureTicks(departureTicks);
         for (int i = 0; i < sourceCount; i++) {
             builder.sourceExternalId("N" + ((i * 31 + 5) % nodeCount));
         }

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.ZoneId;
+import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,6 +33,27 @@ class TemporalRuntimeBinderTest {
                 )
         );
         assertEquals(RouteCore.REASON_TEMPORAL_CONFIG_REQUIRED, ex.getReasonCode());
+    }
+
+    @Test
+    @DisplayName("Non-positive discretization drift budget is rejected")
+    void testNonPositiveDiscretizationDriftRejected() {
+        TemporalRuntimeBinder binder = new TemporalRuntimeBinder();
+        RouteCoreException ex = assertThrows(
+                RouteCoreException.class,
+                () -> binder.bind(
+                        TemporalRuntimeConfig.builder()
+                                .temporalTraitId(TemporalTraitCatalog.TRAIT_CALENDAR)
+                                .timezonePolicyId(TemporalTimezonePolicyRegistry.POLICY_UTC)
+                                .maxDiscretizationDrift(Duration.ZERO)
+                                .build(),
+                        TemporalTraitCatalog.defaultCatalog(),
+                        TemporalStrategyRegistry.defaultRegistry(),
+                        TemporalTimezonePolicyRegistry.defaultRegistry(),
+                        TemporalPolicy.defaults()
+                )
+        );
+        assertEquals(RouteCore.REASON_TEMPORAL_CONFIG_INCOMPATIBLE, ex.getReasonCode());
     }
 
     @Test

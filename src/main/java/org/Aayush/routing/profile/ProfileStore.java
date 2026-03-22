@@ -44,10 +44,38 @@ public final class ProfileStore {
      */
     private static final int ALL_DAYS_MASK = 0x7F;
     /**
+     * Relative weekly-range threshold below which recurring signal is treated as too weak to trust.
+     */
+    private static final float WEAK_RECURRING_RANGE_THRESHOLD = 0.05f;
+    /**
+     * Relative weekly-range threshold that marks a recurring signal as strong enough for release gating.
+     */
+    private static final float STRONG_RECURRING_RANGE_THRESHOLD = 0.20f;
+    /**
+     * Distance from the neutral multiplier used to identify an always-on persistent baseline.
+     */
+    private static final float PERSISTENT_BASELINE_DISTANCE_FROM_NEUTRAL = 0.10f;
+    /**
      * Reusable metadata object for fallback path (missing profile id).
      */
     private static final ProfileMetadata DEFAULT_METADATA =
             new ProfileMetadata(DEFAULT_MULTIPLIER, DEFAULT_MULTIPLIER, DEFAULT_MULTIPLIER);
+    /**
+     * Reusable recurring-pattern metadata for missing-profile fallback.
+     */
+    private static final TemporalPatternMetadata DEFAULT_TEMPORAL_PATTERN_METADATA =
+            new TemporalPatternMetadata(
+                    0,
+                    DEFAULT_MULTIPLIER,
+                    DEFAULT_MULTIPLIER,
+                    DEFAULT_MULTIPLIER,
+                    0.0f,
+                    TemporalPatternClass.MISSING,
+                    0,
+                    0.0f,
+                    RecurringCalibrationPosture.NO_RECURRING_SIGNAL,
+                    ProfileRecurrenceCalibrationStore.SignalFlavor.NONE
+            );
 
     /**
      * Dense profile storage indexed by profile id.
@@ -70,6 +98,10 @@ public final class ProfileStore {
      */
     private final boolean[] presentProfileId;
     /**
+     * Recurring-pattern diagnostics by profile id.
+     */
+    private final TemporalPatternMetadata[] temporalPatternMetadataByProfileId;
+    /**
      * Number of loaded profiles in this store (not max profile id).
      */
     private final int profileCount;
@@ -79,12 +111,14 @@ public final class ProfileStore {
             int[] dayMaskByProfileId,
             ProfileMetadata[] metadataByProfileId,
             boolean[] presentProfileId,
+            TemporalPatternMetadata[] temporalPatternMetadataByProfileId,
             int profileCount
     ) {
         this.bucketMultipliersByProfileId = bucketMultipliersByProfileId;
         this.dayMaskByProfileId = dayMaskByProfileId;
         this.metadataByProfileId = metadataByProfileId;
         this.presentProfileId = presentProfileId;
+        this.temporalPatternMetadataByProfileId = temporalPatternMetadataByProfileId;
         this.profileCount = profileCount;
     }
 
@@ -101,6 +135,14 @@ public final class ProfileStore {
      */
     public boolean hasProfile(int profileId) {
         return isKnownProfile(profileId);
+    }
+
+    /**
+     * @param profileId internal profile id.
+     * @return true when the profile is active on all seven days.
+     */
+    public boolean isAllDaysActive(int profileId) {
+        return isKnownProfile(profileId) && dayMaskByProfileId[profileId] == ALL_DAYS_MASK;
     }
 
     /**
@@ -137,7 +179,7 @@ public final class ProfileStore {
         if (!isKnownProfile(profileId)) {
             return false;
         }
-        return (dayMaskByProfileId[profileId] & dayBit(dayOfWeek)) != 0;
+        return isActiveOnDayUnchecked(profileId, dayOfWeek);
     }
 
     /**
@@ -177,11 +219,8 @@ public final class ProfileStore {
         if (bucketIdx < 0) {
             throw new IllegalArgumentException("bucketIdx must be >= 0");
         }
-        int selectedProfile = selectProfileForDay(profileId, dayOfWeek);
-        if (selectedProfile == DEFAULT_PROFILE_ID) {
-            return DEFAULT_MULTIPLIER;
-        }
-        return getMultiplier(selectedProfile, bucketIdx);
+        validateDayOfWeek(dayOfWeek);
+        return getKnownProfileMultiplierForDay(profileId, dayOfWeek, bucketIdx);
     }
 
     /**
@@ -217,11 +256,33 @@ public final class ProfileStore {
      */
     public float interpolateForDay(int profileId, int dayOfWeek, double fractionalBucket) {
         validateFractionalBucket(fractionalBucket);
-        int selectedProfile = selectProfileForDay(profileId, dayOfWeek);
-        if (selectedProfile == DEFAULT_PROFILE_ID) {
+        validateDayOfWeek(dayOfWeek);
+        if (!isKnownProfile(profileId)) {
             return DEFAULT_MULTIPLIER;
         }
-        return interpolate(selectedProfile, fractionalBucket);
+
+        float[] buckets = bucketMultipliersByProfileId[profileId];
+        double wrapped = fractionalBucket % buckets.length;
+        if (wrapped < 0.0d) {
+            wrapped += buckets.length;
+        }
+
+        int lower = (int) wrapped;
+        double fraction = wrapped - lower;
+        float lowerValue = getKnownProfileMultiplierForDay(profileId, dayOfWeek, lower);
+        if (fraction == 0.0d) {
+            return lowerValue;
+        }
+
+        int upperBucket = lower + 1;
+        int upperDay = dayOfWeek;
+        if (upperBucket == buckets.length) {
+            upperBucket = 0;
+            upperDay = nextDayOfWeek(dayOfWeek);
+        }
+
+        float upperValue = getKnownProfileMultiplierForDay(profileId, upperDay, upperBucket);
+        return (float) (lowerValue + (upperValue - lowerValue) * fraction);
     }
 
     /**
@@ -236,6 +297,23 @@ public final class ProfileStore {
             return DEFAULT_METADATA;
         }
         return metadataByProfileId[profileId];
+    }
+
+    /**
+     * Returns recurring-pattern diagnostics for one profile.
+     *
+     * <p>This is a release-gate artifact used by the B3 temporal competency tests.
+     * It deliberately exposes when periodic signal is too weak to trust instead of
+     * flattening that shape into the aggregate avg/min/max metadata.</p>
+     *
+     * @param profileId internal profile id.
+     * @return recurring-pattern diagnostics, or a neutral missing-profile descriptor.
+     */
+    public TemporalPatternMetadata getTemporalPatternMetadata(int profileId) {
+        if (!isKnownProfile(profileId)) {
+            return DEFAULT_TEMPORAL_PATTERN_METADATA;
+        }
+        return temporalPatternMetadataByProfileId[profileId];
     }
 
     /**
@@ -294,6 +372,7 @@ public final class ProfileStore {
         int[] dayMaskByProfileId = new int[maxProfileId + 1];
         ProfileMetadata[] metadataByProfileId = new ProfileMetadata[maxProfileId + 1];
         boolean[] presentProfileId = new boolean[maxProfileId + 1];
+        TemporalPatternMetadata[] temporalPatternMetadataByProfileId = new TemporalPatternMetadata[maxProfileId + 1];
 
         int loadedProfiles = 0;
 
@@ -345,6 +424,8 @@ public final class ProfileStore {
             dayMaskByProfileId[profileId] = dayMask;
             metadataByProfileId[profileId] =
                     new ProfileMetadata((float) (sum / bucketCount), min, max);
+            temporalPatternMetadataByProfileId[profileId] =
+                    buildTemporalPatternMetadata(dayMask, buckets, metadataByProfileId[profileId]);
             presentProfileId[profileId] = true;
             loadedProfiles++;
         }
@@ -354,6 +435,7 @@ public final class ProfileStore {
                 dayMaskByProfileId,
                 metadataByProfileId,
                 presentProfileId,
+                temporalPatternMetadataByProfileId,
                 loadedProfiles
         );
     }
@@ -372,6 +454,55 @@ public final class ProfileStore {
     ) { }
 
     /**
+     * Classification for recurring temporal signal strength.
+     */
+    public enum TemporalPatternClass {
+        FULLY_PERSISTENT,
+        STRICT_PERIODIC,
+        MIXED_PERSISTENT_AND_PERIODIC,
+        WEAK_SIGNAL_PERIODIC,
+        MISSING
+    }
+
+    /**
+     * Explicit posture for how much recurring signal the artifact believes it has retained.
+     */
+    public enum RecurringCalibrationPosture {
+        NO_RECURRING_SIGNAL,
+        WEAK_SIGNAL_REJECTED,
+        LOW_CONFIDENCE,
+        MEDIUM_CONFIDENCE,
+        HIGH_CONFIDENCE
+    }
+
+    /**
+     * B3 recurring-pattern diagnostics published at artifact load time.
+     *
+     * @param activeDayCount number of active days in the profile mask.
+     * @param effectiveWeeklyMeanMultiplier mean multiplier after inactive-day neutral fallback.
+     * @param effectiveWeeklyMinMultiplier minimum multiplier after inactive-day neutral fallback.
+     * @param effectiveWeeklyMaxMultiplier maximum multiplier after inactive-day neutral fallback.
+     * @param effectiveWeeklyRelativeRange normalized weekly spread used for weak/strong signal gating.
+     * @param temporalPatternClass recurring-pattern classification.
+     * @param recurringSupportWindowCount count of recurring weekly windows materially supporting the pattern.
+     * @param recurringConfidence derived recurring confidence in {@code [0,1]} for fallback calibration.
+     * @param recurringCalibrationPosture explicit confidence posture for serving-time calibration.
+     * @param recurringSignalFlavor derived recurring signal flavor used when no source override exists.
+     */
+    public record TemporalPatternMetadata(
+            int activeDayCount,
+            float effectiveWeeklyMeanMultiplier,
+            float effectiveWeeklyMinMultiplier,
+            float effectiveWeeklyMaxMultiplier,
+            float effectiveWeeklyRelativeRange,
+            TemporalPatternClass temporalPatternClass,
+            int recurringSupportWindowCount,
+            float recurringConfidence,
+            RecurringCalibrationPosture recurringCalibrationPosture,
+            ProfileRecurrenceCalibrationStore.SignalFlavor recurringSignalFlavor
+    ) { }
+
+    /**
      * Creates an empty store with deterministic fallback behavior.
      */
     private static ProfileStore empty() {
@@ -380,6 +511,7 @@ public final class ProfileStore {
                 new int[0],
                 new ProfileMetadata[0],
                 new boolean[0],
+                new TemporalPatternMetadata[0],
                 0
         );
     }
@@ -413,10 +545,45 @@ public final class ProfileStore {
     }
 
     /**
+     * Fast day-mask check for already-validated inputs.
+     */
+    private boolean isActiveOnDayUnchecked(int profileId, int dayOfWeek) {
+        return (dayMaskByProfileId[profileId] & dayBit(dayOfWeek)) != 0;
+    }
+
+    /**
+     * Day-aware bucket lookup for a known or missing profile.
+     */
+    private float getKnownProfileMultiplierForDay(int profileId, int dayOfWeek, int bucketIdx) {
+        if (!isKnownProfile(profileId)) {
+            return DEFAULT_MULTIPLIER;
+        }
+
+        float[] buckets = bucketMultipliersByProfileId[profileId];
+        if (bucketIdx >= buckets.length) {
+            throw new IllegalArgumentException(
+                    "bucketIdx out of bounds for profile " + profileId + ": " + bucketIdx +
+                            " [0, " + buckets.length + ")"
+            );
+        }
+        if (!isActiveOnDayUnchecked(profileId, dayOfWeek)) {
+            return DEFAULT_MULTIPLIER;
+        }
+        return buckets[bucketIdx];
+    }
+
+    /**
      * Converts day index to bit position (Mon=bit0 ... Sun=bit6).
      */
     private static int dayBit(int dayOfWeek) {
         return 1 << dayOfWeek;
+    }
+
+    /**
+     * Advances day index in the canonical Mon..Sun domain.
+     */
+    private static int nextDayOfWeek(int dayOfWeek) {
+        return (dayOfWeek + 1) % DAYS_PER_WEEK;
     }
 
     /**
@@ -465,5 +632,132 @@ public final class ProfileStore {
         float lowerValue = buckets[lower];
         float upperValue = buckets[upper];
         return (float) (lowerValue + (upperValue - lowerValue) * fraction);
+    }
+
+    /**
+     * Builds recurring-pattern diagnostics from loaded profile stats.
+     */
+    private static TemporalPatternMetadata buildTemporalPatternMetadata(int dayMask, float[] buckets, ProfileMetadata metadata) {
+        int activeDayCount = Integer.bitCount(dayMask & ALL_DAYS_MASK);
+        float weeklyMean = (
+                (metadata.avgMultiplier() * activeDayCount)
+                        + (DEFAULT_MULTIPLIER * (DAYS_PER_WEEK - activeDayCount))
+        ) / (float) DAYS_PER_WEEK;
+        float weeklyMin = activeDayCount == DAYS_PER_WEEK
+                ? metadata.minMultiplier()
+                : Math.min(metadata.minMultiplier(), DEFAULT_MULTIPLIER);
+        float weeklyMax = activeDayCount == DAYS_PER_WEEK
+                ? metadata.maxMultiplier()
+                : Math.max(metadata.maxMultiplier(), DEFAULT_MULTIPLIER);
+        float weeklyRelativeRange = (weeklyMax - weeklyMin) / Math.max(DEFAULT_MULTIPLIER, weeklyMean);
+
+        boolean persistentBaseline =
+                weeklyMin >= DEFAULT_MULTIPLIER + PERSISTENT_BASELINE_DISTANCE_FROM_NEUTRAL
+                        || weeklyMax <= DEFAULT_MULTIPLIER - PERSISTENT_BASELINE_DISTANCE_FROM_NEUTRAL;
+
+        TemporalPatternClass patternClass;
+        if (weeklyRelativeRange >= STRONG_RECURRING_RANGE_THRESHOLD) {
+            patternClass = persistentBaseline
+                    ? TemporalPatternClass.MIXED_PERSISTENT_AND_PERIODIC
+                    : TemporalPatternClass.STRICT_PERIODIC;
+        } else if (weeklyRelativeRange >= WEAK_RECURRING_RANGE_THRESHOLD) {
+            patternClass = TemporalPatternClass.WEAK_SIGNAL_PERIODIC;
+        } else {
+            patternClass = TemporalPatternClass.FULLY_PERSISTENT;
+        }
+
+        int recurringSupportWindowCount = recurringSupportWindowCount(
+                buckets,
+                metadata.avgMultiplier(),
+                activeDayCount,
+                weeklyRelativeRange
+        );
+        float recurringConfidence = recurringConfidence(
+                weeklyRelativeRange,
+                activeDayCount,
+                recurringSupportWindowCount,
+                patternClass
+        );
+        RecurringCalibrationPosture recurringCalibrationPosture = recurringCalibrationPosture(patternClass, recurringConfidence);
+        ProfileRecurrenceCalibrationStore.SignalFlavor recurringSignalFlavor =
+                recurringCalibrationPosture == RecurringCalibrationPosture.NO_RECURRING_SIGNAL
+                        || recurringCalibrationPosture == RecurringCalibrationPosture.WEAK_SIGNAL_REJECTED
+                        ? ProfileRecurrenceCalibrationStore.SignalFlavor.NONE
+                        : ProfileRecurrenceCalibrationStore.SignalFlavor.ROUTINE_PERIODIC;
+
+        return new TemporalPatternMetadata(
+                activeDayCount,
+                weeklyMean,
+                weeklyMin,
+                weeklyMax,
+                weeklyRelativeRange,
+                patternClass,
+                recurringSupportWindowCount,
+                recurringConfidence,
+                recurringCalibrationPosture,
+                recurringSignalFlavor
+        );
+    }
+
+    private static int recurringSupportWindowCount(
+            float[] buckets,
+            float meanMultiplier,
+            int activeDayCount,
+            float weeklyRelativeRange
+    ) {
+        if (weeklyRelativeRange < WEAK_RECURRING_RANGE_THRESHOLD) {
+            return 0;
+        }
+        float deviationThreshold = Math.max(0.02f, meanMultiplier * 0.05f);
+        int recurringBucketCount = 0;
+        for (float bucket : buckets) {
+            if (Math.abs(bucket - meanMultiplier) >= deviationThreshold) {
+                recurringBucketCount++;
+            }
+        }
+        if (recurringBucketCount == 0) {
+            recurringBucketCount = 1;
+        }
+        return recurringBucketCount * Math.max(1, activeDayCount);
+    }
+
+    private static float recurringConfidence(
+            float weeklyRelativeRange,
+            int activeDayCount,
+            int recurringSupportWindowCount,
+            TemporalPatternClass patternClass
+    ) {
+        if (patternClass == TemporalPatternClass.MISSING
+                || patternClass == TemporalPatternClass.FULLY_PERSISTENT) {
+            return 0.0f;
+        }
+        if (patternClass == TemporalPatternClass.WEAK_SIGNAL_PERIODIC) {
+            return 0.0f;
+        }
+
+        float rangeScore = Math.min(1.0f, weeklyRelativeRange / Math.max(STRONG_RECURRING_RANGE_THRESHOLD, 1.0e-6f));
+        float activeDayScore = Math.min(1.0f, activeDayCount / (float) DAYS_PER_WEEK);
+        float supportScore = Math.min(1.0f, recurringSupportWindowCount / 14.0f);
+        return Math.min(1.0f, (0.45f * rangeScore) + (0.25f * activeDayScore) + (0.30f * supportScore));
+    }
+
+    private static RecurringCalibrationPosture recurringCalibrationPosture(
+            TemporalPatternClass patternClass,
+            float recurringConfidence
+    ) {
+        if (patternClass == TemporalPatternClass.MISSING
+                || patternClass == TemporalPatternClass.FULLY_PERSISTENT) {
+            return RecurringCalibrationPosture.NO_RECURRING_SIGNAL;
+        }
+        if (patternClass == TemporalPatternClass.WEAK_SIGNAL_PERIODIC) {
+            return RecurringCalibrationPosture.WEAK_SIGNAL_REJECTED;
+        }
+        if (recurringConfidence >= 0.80f) {
+            return RecurringCalibrationPosture.HIGH_CONFIDENCE;
+        }
+        if (recurringConfidence >= 0.55f) {
+            return RecurringCalibrationPosture.MEDIUM_CONFIDENCE;
+        }
+        return RecurringCalibrationPosture.LOW_CONFIDENCE;
     }
 }

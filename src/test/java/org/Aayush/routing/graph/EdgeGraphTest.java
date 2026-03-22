@@ -343,10 +343,6 @@ class EdgeGraphTest {
         assertEquals(12.5, spatialGraph.getNodeX(0), 0.0001);
         assertEquals(77.5, spatialGraph.getNodeY(0), 0.0001);
 
-        // Deprecated methods check
-        assertEquals(12.5, spatialGraph.getNodeLat(0), 0.0001);
-        assertEquals(77.5, spatialGraph.getNodeLon(0), 0.0001);
-
         assertEquals("(12.500000, 77.500000)", spatialGraph.getNodeCoordinate(0).toString());
     }
 
@@ -413,8 +409,8 @@ class EdgeGraphTest {
     }
 
     @Test
-    @DisplayName("Req: Legacy Array Traversal")
-    void testLegacyArrayTraversal() {
+    @DisplayName("Req: Outgoing edge range traversal")
+    void testOutgoingEdgeRangeTraversal() {
         // Same setup: 0 -> 1 -> (2, 3)
         EdgeGraph graph = createGraph(
                 3, 3,
@@ -424,11 +420,11 @@ class EdgeGraphTest {
                 new float[]{0,0,0}, new short[]{0,0,0}, null
         );
 
-        // Get outgoing edges from target of Edge 0 (which is Node 1)
-        int[] edges = graph.getOutgoingEdges(0);
-        assertEquals(2, edges.length);
-        assertEquals(1, edges[0]);
-        assertEquals(2, edges[1]);
+        long range = graph.getOutgoingEdgeRange(0);
+        int start = (int) (range >>> 32);
+        int end = (int) range;
+        assertEquals(1, start);
+        assertEquals(3, end);
     }
 
     @Test

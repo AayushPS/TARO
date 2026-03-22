@@ -2,6 +2,7 @@ package org.Aayush.routing.core;
 
 import com.google.flatbuffers.FlatBufferBuilder;
 import org.Aayush.core.id.IDMapper;
+import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.spatial.SpatialRuntime;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.traits.addressing.AddressInput;
@@ -48,8 +49,6 @@ class Stage18TraitRegistryTest {
                 .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
                 .maxSnapDistance(0.20d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
         assertTrue(routeResponse.isReachable());
         assertEquals(List.of("N0", "N1", "N2", "N3", "N4"), routeResponse.getPathExternalNodeIds());
@@ -59,8 +58,6 @@ class Stage18TraitRegistryTest {
                 .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
                 .maxSnapDistance(0.20d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.DIJKSTRA)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
         assertEquals(4.0f, matrixResponse.getTotalCosts()[0][0], 1e-6f);
 
@@ -88,8 +85,6 @@ class Stage18TraitRegistryTest {
                         .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
                         .maxSnapDistance(0.20d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.A_STAR)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_UNSUPPORTED_ADDRESS_TYPE, routeMismatch.getReasonCode());
@@ -101,8 +96,6 @@ class Stage18TraitRegistryTest {
                         .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
                         .maxSnapDistance(0.20d)
                         .departureTicks(0L)
-                        .algorithm(RoutingAlgorithm.DIJKSTRA)
-                        .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                         .build())
         );
         assertEquals(RouteCore.REASON_UNSUPPORTED_ADDRESS_TYPE, matrixMismatch.getReasonCode());
@@ -141,6 +134,7 @@ class Stage18TraitRegistryTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .spatialRuntime(buildSpatialRuntimeFromCoordinates(fixture.edgeGraph(), linearXyCoordinates()))
+                .executionRuntimeConfig(ExecutionRuntimeConfig.aStarNone())
                 .addressingRuntimeConfig(org.Aayush.routing.traits.addressing.AddressingRuntimeConfig.xyRuntime())
                 .temporalRuntimeConfig(org.Aayush.routing.traits.temporal.TemporalRuntimeConfig.calendarUtc())
                 .transitionRuntimeConfig(org.Aayush.routing.traits.transition.TransitionRuntimeConfig.edgeBased())
@@ -151,8 +145,6 @@ class Stage18TraitRegistryTest {
                 .targetAddress(AddressInput.ofXY(3.99d, 0.0d))
                 .maxSnapDistance(0.20d)
                 .departureTicks(0L)
-                .algorithm(RoutingAlgorithm.A_STAR)
-                .heuristicType(org.Aayush.routing.heuristic.HeuristicType.NONE)
                 .build());
 
         assertTrue(response.isReachable());
@@ -173,6 +165,7 @@ class Stage18TraitRegistryTest {
                 .costEngine(fixture.costEngine())
                 .nodeIdMapper(fixture.nodeIdMapper())
                 .spatialRuntime(spatialRuntime)
+                .executionRuntimeConfig(ExecutionRuntimeConfig.aStarNone())
                 .traitBundleRuntimeConfig(traitBundleRuntimeConfig)
                 .traitBundleRegistry(traitBundleRegistry)
                 .build();

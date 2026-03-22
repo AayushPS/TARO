@@ -36,7 +36,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * <ul>
  * <li>{@code speedFactor == 0.0f}: blocked edge ({@code +INF} penalty multiplier).</li>
  * <li>{@code 0 < speedFactor <= 1.0}: active slowdown with multiplier {@code 1/speedFactor}.</li>
- * <li>Missing/expired override: neutral multiplier {@code 1.0f}.</li>
+     * <li>Missing, not-yet-active, or expired override: neutral multiplier {@code 1.0f}.</li>
  * </ul>
  */
 public final class LiveOverlay {
@@ -47,6 +47,8 @@ public final class LiveOverlay {
     public enum LookupState {
         /** No live override exists for this edge id. */
         MISSING,
+        /** An override exists but is scheduled to activate in the future. */
+        SCHEDULED,
         /** An override exists but is already expired for the queried {@code nowTicks}. */
         EXPIRED,
         /** The edge is explicitly blocked ({@code speedFactor == 0.0f}). */
@@ -98,7 +100,7 @@ public final class LiveOverlay {
          */
         public float livePenaltyMultiplier() {
             return switch (state) {
-                case MISSING, EXPIRED -> 1.0f;
+                case MISSING, SCHEDULED, EXPIRED -> 1.0f;
                 case BLOCKED -> Float.POSITIVE_INFINITY;
                 case ACTIVE -> 1.0f / speedFactor;
             };
@@ -125,6 +127,7 @@ public final class LiveOverlay {
     }
 
     private static final LookupResult MISSING_RESULT = new LookupResult(LookupState.MISSING, Float.NaN);
+    private static final LookupResult SCHEDULED_RESULT = new LookupResult(LookupState.SCHEDULED, Float.NaN);
     private static final LookupResult EXPIRED_RESULT = new LookupResult(LookupState.EXPIRED, Float.NaN);
     private static final LookupResult BLOCKED_RESULT = new LookupResult(LookupState.BLOCKED, 0.0f);
 
@@ -146,6 +149,7 @@ public final class LiveOverlay {
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
     private static final class Entry {
         private final float speedFactor;
+        private final long validFromTicks;
         private final long validUntilTicks;
     }
 
@@ -205,6 +209,9 @@ public final class LiveOverlay {
             return MISSING_RESULT;
         }
 
+        if (nowTicks < entry.validFromTicks) {
+            return SCHEDULED_RESULT;
+        }
         if (entry.validUntilTicks <= nowTicks) {
             return EXPIRED_RESULT;
         }
@@ -239,7 +246,12 @@ public final class LiveOverlay {
                 if (value.validUntilTicks <= nowTicks) {
                     continue;
                 }
-                snapshot.add(LiveUpdate.of(entry.getKey(), value.speedFactor, value.validUntilTicks));
+                snapshot.add(LiveUpdate.of(
+                        entry.getKey(),
+                        value.speedFactor,
+                        value.validFromTicks,
+                        value.validUntilTicks
+                ));
             }
         } finally {
             writeLock.unlock();
@@ -338,7 +350,7 @@ public final class LiveOverlay {
                 }
 
                 int edgeId = update.edgeId();
-                Entry newEntry = new Entry(update.speedFactor(), update.validUntilTicks());
+                Entry newEntry = new Entry(update.speedFactor(), update.validFromTicks(), update.validUntilTicks());
 
                 if (entries.containsKey(edgeId)) {
                     entries.put(edgeId, newEntry);
