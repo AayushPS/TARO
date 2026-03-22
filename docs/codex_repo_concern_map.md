@@ -1,6 +1,6 @@
 # TARO Codebase Concern Map for Future Codex Sessions
 
-Status date: 2026-03-21
+Status date: 2026-03-22
 Purpose: help future Codex sessions quickly find the right package, file, and doc for a given TARO concern.
 
 ## 1. Read these docs first when architecture matters
@@ -9,11 +9,13 @@ TARO's architecture intent is documented on disk and should be read before answe
 
 | Concern | Read first | Why |
 |---|---|---|
-| Latest overall direction | `docs/taro_v13_architecture_plan.md` | Current top-level direction for topology evolution, failure quarantine, and atomic reload |
+| Latest staged roadmap | `docs/taro_v14_stagewise_breakdown.md` | Canonical phase/stage sequencing reference integrating v11 foundations with v12/v13 serving and topology work |
+| Latest operational architecture | `docs/taro_v13_architecture_plan.md` | Current top-level direction for topology evolution, failure quarantine, and atomic reload |
 | Future-aware routing products | `docs/taro_v12_architecture_plan.md` | Defines expected ETA, robust/P90, top-K alternatives, and retained-result serving |
 | Offline-learning baseline | `docs/taro_v11_architecture_plan.md` | Explains the v11 builder/runtime split that v12/v13 sit on top of |
 | v11 implementation sequencing | `docs/taro_v11_implementation_guide.md` | Useful when the question is about what the original v11 rollout intended |
-| Requirement contracts and stage dependencies | `docs/taro_v11_single_source_of_truth.md` and `docs/taro_v11_ssot_stagewise_breakdown.md` | Best source for stage numbers, contracts, and equivalence classes |
+| Requirement contracts and current stage dependencies | `docs/taro_v14_stagewise_breakdown.md` and `docs/taro_v11_single_source_of_truth.md` | Best source for current stage numbers, closure rules, and requirement contracts |
+| Historical v11-only stage numbering | `docs/taro_v11_ssot_stagewise_breakdown.md` | Use only when legacy stage-number mapping is required |
 | What actually landed for v12/v13 in this repo | `docs/taro_v12_v13_migration_report.md` | Current implementation tracker for the v12/v13 additions now in code |
 | Stage 18 closeout details | `docs/stage18_delta_report.md` | Best reference for Stage 18 bundle/runtime binding closure |
 | Runtime immutability and lock posture | `docs/trait_runtime_lock_audit_report.md` | Useful for startup-lock and no-request-time-switching questions |
@@ -22,7 +24,10 @@ Important note:
 
 - `README.md` still says v12 scenario-aware serving and v13 topology runtime are not implemented.
 - The codebase and `docs/taro_v12_v13_migration_report.md` show that substantial v12/v13 foundations have already landed.
+- `docs/taro_v14_stagewise_breakdown.md` is now the canonical staged roadmap; the old v11 stagewise breakdown remains historical.
 - For current-state questions, trust the migration report and code over the stale README status bullets.
+- The repo still contains some compatibility and legacy-shaped paths that may no longer be canonical under v14.
+- Future dev sessions should classify touched code as canonical, compatibility-only, stale, or dead-before-investing effort, and should prefer pruning or isolating non-canonical paths when correctness and roadmap alignment allow it.
 
 ## 2. Current repo shape in one screen
 
@@ -188,6 +193,11 @@ Use this table as the quickest way to find the correct code area.
 
 This section is partly direct observation and partly inference from the repo shape.
 
+Current roadmap note:
+
+- use `docs/taro_v14_stagewise_breakdown.md` for current phase/stage sequencing and closure rules
+- use the table below only when you need to relate the current repo back to the older v11 stage numbering
+
 | Stage / layer | Current repo status | Evidence |
 |---|---|---|
 | v11 Stage 1: ID translation | Implemented | `core.id`, `FastUtilIDMapper`, tests |
@@ -221,7 +231,8 @@ This section is partly direct observation and partly inference from the repo sha
 
 ## 7. Practical guidance for future Codex work
 
-- If the question mentions "latest plan", start with `docs/taro_v13_architecture_plan.md`.
+- If the question mentions stages, roadmap order, or implementation sequence, start with `docs/taro_v14_stagewise_breakdown.md`, then pull in v13/v12 architecture detail as needed.
+- If the question mentions the latest staged roadmap or roadmap order, start with `docs/taro_v14_stagewise_breakdown.md`; if it asks for the latest architecture plan specifically, pair that with `docs/taro_v13_architecture_plan.md`.
 - If the task is about route correctness, start with `RouteCore`, `CostEngine`, and the relevant trait binder before touching planners.
 - If the task is about matrix behavior, check whether the request is on the native path or the compatibility fallback path before debugging anything deeper.
 - If the task mentions "future", inspect both `routing.future` and the evaluator in `routing.core`; the contracts and the logic are intentionally split.

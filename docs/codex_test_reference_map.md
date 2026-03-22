@@ -1,6 +1,6 @@
 # TARO Test Reference Map for Future Codex Sessions
 
-Status date: 2026-03-21
+Status date: 2026-03-22
 Purpose: map the current test corpus to the concerns it protects, so future chats can quickly choose the right evidence and regression suite.
 
 ## 1. Test lanes and how they run
@@ -150,6 +150,9 @@ These are not test suites themselves, but many important tests depend on them.
 | `src/test/java/org/Aayush/routing/topology/FailureQuarantineTest.java` | node/edge quarantine expansion into live updates and explanation tags | `@Tag("integration")`; best v13 fast-path suite |
 | `src/test/java/org/Aayush/routing/topology/TopologyModelCompilerTest.java` | balanced KD rebuild shape and nearest-node parity against brute force after builder compilation | quickest spatial rebuild regression suite |
 | `src/test/java/org/Aayush/routing/topology/TopologyModelSourceTest.java` | source-topology validation for coordinate posture, profiles, edges, and turn-cost contracts | focused source-validation suite |
+| `src/test/java/org/Aayush/routing/topology/PersistentBaselineProfileTest.java` | constant and noisy persistent temporal baselines plus direction-specific cost asymmetry surviving compile/load | first focused B2 persistence/asymmetry suite; `@Tag("smoke")` |
+| `src/test/java/org/Aayush/routing/topology/ProfileFifoRepairGateTest.java` | startup rejection of FIFO-violating directed edge profiles and acceptance of boundary-neutral FIFO cases | first focused B2 FIFO gate suite; `@Tag("smoke")` |
+| `src/test/java/org/Aayush/routing/topology/ProfileContractPerfTest.java` | directed-edge profile-contract validation throughput on a large topology | focused B2 startup-validator perf guard; `@Tag("perf")` |
 | `src/test/java/org/Aayush/routing/topology/StructuralChangeApplierTest.java` | typed structural changes, coordinate/profile/turn updates, and node-removal incident-edge cleanup | core change-set application behavior |
 | `src/test/java/org/Aayush/routing/topology/TopologyPublicationServiceTest.java` | validate-only publication, atomic publication integrated with future services, quarantine carry-over across reload, and removed-subject quarantine drop | `@Tag("integration")`; best publication-path suite |
 | `src/test/java/org/Aayush/routing/topology/TopologyReloadCoordinatorTest.java` | retained-result invalidation vs retention across reloads | `@Tag("integration")`; reload compatibility behavior |
@@ -178,6 +181,7 @@ These are not test suites themselves, but many important tests depend on them.
 | heuristics | `HeuristicFactoryTest`, `HeuristicAdmissibilityTest`, `GeometryHeuristicTest`, `GeometryDistanceTest`, `LandmarkHeuristicProviderTest`, landmark suites |
 | future-aware v12 logic | `FutureRouteObjectivePlannerTest`, `FutureScenarioSupportTest`, `DefaultScenarioBundleResolverTest`, `FutureRouteServiceTest`, `FutureMatrixServiceTest`, `InMemoryEphemeralResultStoreTest`, `TopologyReloadCoordinatorTest` |
 | topology publication / reload | `TopologyModelSourceTest`, `StructuralChangeApplierTest`, `TopologyModelCompilerTest`, `TopologyPublicationServiceTest`, `TopologyReloadSmokeTest`, `FailureQuarantineTest` |
+| temporal profile integrity / B2 gates | `PersistentBaselineProfileTest`, `ProfileFifoRepairGateTest`, `ProfileContractPerfTest`, `CostEngineTest`, `ProfileStoreTest`, `TopologyModelSourceTest` |
 | schema / generated model contracts | `ModelContractValidatorTest`, `TaroModelTest`, `EdgeGraphTest`, `ProfileStoreTest`, `TurnCostMapTest` |
 
 ## 5. Practical notes for future chats

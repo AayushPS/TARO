@@ -1,11 +1,17 @@
 # TARO v11 SSOT: Stage-Wise Breakdown (28 Stages)
 
-Status: Proposed Structured Baseline  
+Status: Historical v11-only structured baseline (superseded as the canonical staged roadmap on 2026-03-22 by `docs/taro_v14_stagewise_breakdown.md`)
 Date: 2026-02-07  
 Companion Documents:
 - `docs/taro_v11_single_source_of_truth.md`
 - `docs/taro_v11_architecture_plan.md`
 - `ResearchData/taro_architecture_refined.pdf`
+
+Historical note:
+
+- This document remains the original v11-only stage breakdown.
+- It predates v12 future-aware serving, v13 topology evolution, and the paper-driven temporal competency gates adopted in `docs/taro_v14_stagewise_breakdown.md`.
+- Use this file for legacy crosswalks and historical stage intent, not as the current canonical staged roadmap.
 
 ## 1. Purpose
 
