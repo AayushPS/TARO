@@ -2,6 +2,7 @@ package org.Aayush.routing.future;
 
 import org.Aayush.core.time.TimeUtils;
 import org.Aayush.routing.cost.CostEngine;
+import org.Aayush.routing.core.MatrixRequest;
 import org.Aayush.routing.core.RouteRequest;
 import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.graph.EdgeGraph;
@@ -12,6 +13,7 @@ import org.Aayush.routing.profile.ProfileRecencyCalibrationStore;
 import org.Aayush.routing.profile.ProfileStore;
 import org.Aayush.routing.testutil.TemporalTestContexts;
 import org.Aayush.routing.topology.CompiledTopologyModel;
+import org.Aayush.routing.topology.FailureQuarantine;
 import org.Aayush.routing.topology.TopologyModelCompiler;
 import org.Aayush.routing.topology.TopologyModelSource;
 import org.Aayush.routing.topology.TopologyRuntimeFactory;
@@ -35,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -207,6 +210,190 @@ class DefaultScenarioBundleResolverHardeningTest {
         assertTrue(scenario.getExplanationTags().contains("recurrent_confidence_high"));
     }
 
+    @Test
+    @DisplayName("Node quarantine structural priors match equivalent direct edge quarantines")
+    void testNodeQuarantineStructuralPriorMatchesEquivalentEdgeQuarantines() {
+        long departureTicks = departureTicks();
+        long validUntilTicks = departureTicks + Duration.ofHours(2).toSeconds();
+        TopologyModelSource source = flatLineSource();
+
+        ScenarioBundle nodeBundle = resolve(
+                source,
+                "N0",
+                "N2",
+                departureTicks,
+                TemporalTestContexts.calendarUtc(),
+                CostEngine.TemporalSamplingPolicy.INTERPOLATED,
+                snapshot -> snapshot.getFailureQuarantine().quarantineNode(1, validUntilTicks, departureTicks - 60L, "node_down", "ops")
+        );
+        ScenarioBundle edgeBundle = resolve(
+                source,
+                "N0",
+                "N2",
+                departureTicks,
+                TemporalTestContexts.calendarUtc(),
+                CostEngine.TemporalSamplingPolicy.INTERPOLATED,
+                snapshot -> {
+                    snapshot.getFailureQuarantine().quarantineEdge(0, validUntilTicks, departureTicks - 60L, "edge_down", "ops");
+                    snapshot.getFailureQuarantine().quarantineEdge(1, validUntilTicks, departureTicks - 60L, "edge_down", "ops");
+                }
+        );
+
+        ScenarioDefinition nodeIncident = incidentPersists(nodeBundle);
+        ScenarioDefinition edgeIncident = incidentPersists(edgeBundle);
+        assertEquals(edgeIncident.getProbability(), nodeIncident.getProbability(), 1.0e-9d);
+        assertEquals(
+                edgeIncident.getLiveUpdates().stream().map(LiveUpdate::edgeId).toList(),
+                nodeIncident.getLiveUpdates().stream().map(LiveUpdate::edgeId).toList()
+        );
+        assertNotNull(nodeIncident.getProbabilityAudit().getStructuralPriorAudit());
+        assertNotNull(edgeIncident.getProbabilityAudit().getStructuralPriorAudit());
+        assertEquals(
+                edgeIncident.getProbabilityAudit().getStructuralPriorAudit().getNormalizedDegreeScore(),
+                nodeIncident.getProbabilityAudit().getStructuralPriorAudit().getNormalizedDegreeScore(),
+                1.0e-9d
+        );
+        assertEquals(
+                edgeIncident.getProbabilityAudit().getStructuralPriorAudit().getAppliedAdjustment(),
+                nodeIncident.getProbabilityAudit().getStructuralPriorAudit().getAppliedAdjustment(),
+                1.0e-9d
+        );
+    }
+
+    @Test
+    @DisplayName("Route and matrix requests with the same horizon materialize the same bundle identity")
+    void testRouteAndMatrixRequestsShareBundleIdentity() {
+        long departureTicks = departureTicks();
+        TopologyModelSource source = singleEdgePeriodicSource(
+                1,
+                4.0f,
+                0.80f,
+                20,
+                ProfileRecurrenceCalibrationStore.SignalFlavor.ROUTINE_PERIODIC,
+                departureTicks - 60L
+        );
+        TopologyRuntimeSnapshot snapshot = snapshot(source);
+        CostEngine costEngine = costEngine(source, CostEngine.TemporalSamplingPolicy.INTERPOLATED);
+        FailureQuarantine.Snapshot quarantineSnapshot = snapshot.getFailureQuarantine().snapshot(departureTicks);
+        DefaultScenarioBundleResolver resolver = new DefaultScenarioBundleResolver();
+
+        ScenarioBundle routeBundle = resolver.resolve(
+                FutureRouteRequest.builder()
+                        .routeRequest(RouteRequest.builder()
+                                .sourceExternalId("N0")
+                                .targetExternalId("N1")
+                                .departureTicks(departureTicks)
+                                .build())
+                        .horizonTicks(Duration.ofHours(2).toSeconds())
+                        .resultTtl(Duration.ofMinutes(10))
+                        .build(),
+                costEngine,
+                TemporalTestContexts.calendarUtc(),
+                snapshot.getTopologyVersion(),
+                quarantineSnapshot,
+                FIXED_CLOCK
+        );
+        ScenarioBundle matrixBundle = resolver.resolve(
+                FutureMatrixRequest.builder()
+                        .matrixRequest(MatrixRequest.builder()
+                                .sourceExternalId("N0")
+                                .targetExternalId("N1")
+                                .departureTicks(departureTicks)
+                                .build())
+                        .horizonTicks(Duration.ofHours(2).toSeconds())
+                        .resultTtl(Duration.ofMinutes(10))
+                        .build(),
+                costEngine,
+                TemporalTestContexts.calendarUtc(),
+                snapshot.getTopologyVersion(),
+                quarantineSnapshot,
+                FIXED_CLOCK
+        );
+
+        assertEquals(routeBundle.getScenarioBundleId(), matrixBundle.getScenarioBundleId());
+        assertEquals(
+                routeBundle.getScenarios().stream().map(ScenarioDefinition::getProbability).toList(),
+                matrixBundle.getScenarios().stream().map(ScenarioDefinition::getProbability).toList()
+        );
+    }
+
+    @Test
+    @DisplayName("Bundle identity changes when the quarantine snapshot changes")
+    void testBundleIdentityChangesWhenQuarantineSnapshotChanges() {
+        long departureTicks = departureTicks();
+        TopologyModelSource source = flatLineSource();
+        TopologyRuntimeSnapshot snapshot = snapshot(source);
+        CostEngine costEngine = costEngine(source, CostEngine.TemporalSamplingPolicy.INTERPOLATED);
+        DefaultScenarioBundleResolver resolver = new DefaultScenarioBundleResolver();
+
+        ScenarioBundle baseline = resolver.resolve(
+                FutureRouteRequest.builder()
+                        .routeRequest(RouteRequest.builder()
+                                .sourceExternalId("N0")
+                                .targetExternalId("N2")
+                                .departureTicks(departureTicks)
+                                .build())
+                        .horizonTicks(Duration.ofHours(2).toSeconds())
+                        .resultTtl(Duration.ofMinutes(10))
+                        .build(),
+                costEngine,
+                TemporalTestContexts.calendarUtc(),
+                snapshot.getTopologyVersion(),
+                snapshot.getFailureQuarantine().snapshot(departureTicks),
+                FIXED_CLOCK
+        );
+
+        snapshot.getFailureQuarantine().quarantineEdge(
+                0,
+                departureTicks + Duration.ofHours(2).toSeconds(),
+                departureTicks - 60L,
+                "edge_down",
+                "ops"
+        );
+
+        ScenarioBundle quarantined = resolver.resolve(
+                FutureRouteRequest.builder()
+                        .routeRequest(RouteRequest.builder()
+                                .sourceExternalId("N0")
+                                .targetExternalId("N2")
+                                .departureTicks(departureTicks)
+                                .build())
+                        .horizonTicks(Duration.ofHours(2).toSeconds())
+                        .resultTtl(Duration.ofMinutes(10))
+                        .build(),
+                costEngine,
+                TemporalTestContexts.calendarUtc(),
+                snapshot.getTopologyVersion(),
+                snapshot.getFailureQuarantine().snapshot(departureTicks),
+                FIXED_CLOCK
+        );
+
+        assertNotEquals(baseline.getScenarioBundleId(), quarantined.getScenarioBundleId());
+    }
+
+    @Test
+    @DisplayName("Dense recurring fields stay bounded to the shipped update budget")
+    void testDenseRecurringFieldCapsScenarioUpdates() {
+        long departureTicks = departureTicks();
+        TopologyModelSource source = denseRecurringSource(96, departureTicks - 60L);
+
+        ScenarioBundle bundle = resolve(
+                source,
+                "N0",
+                "N96",
+                departureTicks,
+                TemporalTestContexts.calendarUtc(),
+                CostEngine.TemporalSamplingPolicy.INTERPOLATED,
+                null
+        );
+
+        assertEquals(2, bundle.getScenarios().size());
+        ScenarioDefinition scenario = bundle.getScenarios().get(1);
+        assertEquals("periodic_peak", scenario.getScenarioId());
+        assertEquals(64, scenario.getLiveUpdates().size());
+        assertEquals(1.0d, bundle.getScenarios().stream().mapToDouble(ScenarioDefinition::getProbability).sum(), 1.0e-9d);
+    }
+
     private ScenarioDefinition incidentPersists(ScenarioBundle bundle) {
         return bundle.getScenarios().getFirst();
     }
@@ -355,6 +542,45 @@ class DefaultScenarioBundleResolverHardeningTest {
                 .node(node("N1", 1.0d))
                 .edge(edge("E01", "N0", "N1", 1.0f, 1))
                 .build();
+    }
+
+    private TopologyModelSource flatLineSource() {
+        return TopologyModelSource.builder()
+                .modelVersion("hardening-flat-line")
+                .profileTimezone("UTC")
+                .profile(TopologyModelSource.ProfileDefinition.builder()
+                        .profileId(1)
+                        .dayMask(0x7F)
+                        .bucket(1.0f)
+                        .multiplier(1.0f)
+                        .build())
+                .node(node("N0", 0.0d))
+                .node(node("N1", 1.0d))
+                .node(node("N2", 2.0d))
+                .edge(edge("E01", "N0", "N1", 1.0f, 1))
+                .edge(edge("E12", "N1", "N2", 1.0f, 1))
+                .build();
+    }
+
+    private TopologyModelSource denseRecurringSource(int edgeCount, long lastObservedAtTicks) {
+        TopologyModelSource.TopologyModelSourceBuilder builder = TopologyModelSource.builder()
+                .modelVersion("dense-recurring-" + edgeCount)
+                .profileTimezone("UTC")
+                .profile(explicitPeriodicProfile(
+                        1,
+                        4.0f,
+                        0.85f,
+                        48,
+                        ProfileRecurrenceCalibrationStore.SignalFlavor.ROUTINE_PERIODIC,
+                        lastObservedAtTicks
+                ));
+        for (int i = 0; i <= edgeCount; i++) {
+            builder.node(node("N" + i, i));
+        }
+        for (int i = 0; i < edgeCount; i++) {
+            builder.edge(edge("E" + i, "N" + i, "N" + (i + 1), 1.0f + (i % 5), 1));
+        }
+        return builder.build();
     }
 
     private TopologyModelSource.ProfileDefinition explicitPeriodicProfile(

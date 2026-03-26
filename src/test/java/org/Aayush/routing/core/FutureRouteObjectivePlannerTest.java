@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("Future Route Objective Planner Tests")
@@ -124,6 +125,64 @@ class FutureRouteObjectivePlannerTest {
         RouteShape robustShape = RouteShape.fromRouteResponse(routeCore.buildRouteResponse(normalized, robustPlan));
         assertEquals(List.of("N0", "N3", "N4"), expectedShape.getPathExternalNodeIds());
         assertEquals(List.of("N0", "N3", "N4"), robustShape.getPathExternalNodeIds());
+    }
+
+    @Test
+    @DisplayName("Equal aggregate objectives break ties by lower arrival then terminal edge")
+    void testEqualAggregateObjectivesPreferLowerArrival() {
+        RoutingFixtureFactory.Fixture fixture = tieBreakFixture();
+        RouteCore routeCore = createRouteCore(fixture, ExecutionRuntimeConfig.dijkstra());
+        RequestNormalizer.NormalizedRouteRequest normalized = routeCore.normalizeRouteRequest(
+                RouteRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N2")
+                        .departureTicks(0L)
+                        .build()
+        );
+
+        FutureRouteObjectivePlanner planner = new FutureRouteObjectivePlanner();
+        InternalRoutePlan plan = planner.compute(
+                routeCore,
+                normalized.getInternalRequest(),
+                List.of(new FutureRouteObjectivePlanner.ScenarioCostSurface(1.0d, routeCore.costEngineContract())),
+                FutureRouteObjectivePlanner.ObjectiveMode.EXPECTED_ETA
+        );
+
+        RouteShape shape = RouteShape.fromRouteResponse(routeCore.buildRouteResponse(normalized, plan));
+        assertEquals(List.of("N0", "N2"), shape.getPathExternalNodeIds());
+        assertEquals(3L, plan.arrivalTicks());
+        assertArrayEquals(new int[]{1}, plan.edgePath());
+    }
+
+    @Test
+    @DisplayName("Budget overflow surfaces the deterministic label reason code")
+    void testBudgetOverflowReportsLabelReasonCode() {
+        RoutingFixtureFactory.Fixture fixture = compromiseFixture();
+        RouteCore routeCore = createRouteCore(fixture, ExecutionRuntimeConfig.dijkstra());
+        RequestNormalizer.NormalizedRouteRequest normalized = routeCore.normalizeRouteRequest(
+                RouteRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .build()
+        );
+
+        FutureRouteObjectivePlanner planner = new FutureRouteObjectivePlanner(
+                SearchBudget.of(SearchBudget.UNBOUNDED, 1, SearchBudget.UNBOUNDED),
+                new PathEvaluator()
+        );
+
+        SearchBudget.BudgetExceededException ex = assertThrows(
+                SearchBudget.BudgetExceededException.class,
+                () -> planner.compute(
+                        routeCore,
+                        normalized.getInternalRequest(),
+                        List.of(new FutureRouteObjectivePlanner.ScenarioCostSurface(1.0d, routeCore.costEngineContract())),
+                        FutureRouteObjectivePlanner.ObjectiveMode.EXPECTED_ETA
+                )
+        );
+
+        assertEquals(SearchBudget.REASON_LABEL_EXCEEDED, ex.reasonCode());
     }
 
     @Test
@@ -299,6 +358,28 @@ class FutureRouteObjectivePlannerTest {
                         1.0d, 1.0d,
                         1.0d, 0.0d,
                         1.0d, -1.0d,
+                        2.0d, 0.0d
+                },
+                new RoutingFixtureFactory.ProfileSpec(
+                        1,
+                        RoutingFixtureFactory.ALL_DAYS_MASK,
+                        new float[]{1.0f},
+                        1.0f
+                )
+        );
+    }
+
+    private static RoutingFixtureFactory.Fixture tieBreakFixture() {
+        return RoutingFixtureFactory.createFixture(
+                3,
+                new int[]{0, 2, 3, 3},
+                new int[]{1, 2, 2},
+                new int[]{0, 0, 1},
+                new float[]{1.1f, 3.0f, 1.9f},
+                new int[]{1, 1, 1},
+                new double[]{
+                        0.0d, 0.0d,
+                        1.0d, 0.0d,
                         2.0d, 0.0d
                 },
                 new RoutingFixtureFactory.ProfileSpec(

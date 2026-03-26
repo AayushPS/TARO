@@ -12,8 +12,6 @@ import org.Aayush.routing.future.ScenarioBundleResolver;
 import org.Aayush.routing.future.ScenarioDefinition;
 import org.Aayush.routing.future.ScenarioRouteSelection;
 import org.Aayush.routing.future.RouteSelectionProvenance;
-import org.Aayush.routing.overlay.LiveOverlay;
-import org.Aayush.routing.overlay.LiveUpdate;
 import org.Aayush.routing.topology.FailureQuarantine;
 import org.Aayush.routing.topology.TopologyRuntimeSnapshot;
 
@@ -36,6 +34,8 @@ public final class FutureRouteEvaluator {
     private static final double PROBABILITY_TOLERANCE = 1.0e-6d;
     private static final double DISTINCT_PATH_OVERLAP_THRESHOLD = 0.85d;
     private static final float DISTINCT_EXPECTED_COST_TOLERANCE = 1.0f;
+    private static final double ETA_BAND_LOWER_PERCENTILE = 0.10d;
+    private static final double ETA_BAND_UPPER_PERCENTILE = 0.90d;
 
     private final ScenarioBundleResolver scenarioBundleResolver;
     private final Clock clock;
@@ -53,68 +53,33 @@ public final class FutureRouteEvaluator {
         this.objectivePlanner = new FutureRouteObjectivePlanner();
     }
 
+    /**
+     * Stage C4 - alternatives, explanation, and confidence.
+     * Satisfies closure criterion: explanation and confidence fields remain consistent with
+     * scenario probabilities and aggregate objectives.
+     */
     public FutureRouteResultSet evaluate(TopologyRuntimeSnapshot snapshot, FutureRouteRequest request) {
         TopologyRuntimeSnapshot nonNullSnapshot = Objects.requireNonNull(snapshot, "snapshot");
         FutureRouteRequest nonNullRequest = Objects.requireNonNull(request, "request");
         validateRequest(nonNullRequest);
 
-        RouteCore routeCore = nonNullSnapshot.getRouteCore();
-        RequestNormalizer.NormalizedRouteRequest normalized = routeCore.normalizeRouteRequest(nonNullRequest.getRouteRequest());
-        long departureTicks = normalized.getInternalRequest().departureTicks();
-        FailureQuarantine.Snapshot quarantineSnapshot = nonNullSnapshot.getFailureQuarantine().snapshot(departureTicks);
-        ScenarioBundle scenarioBundle = scenarioBundleResolver.resolve(
-                nonNullRequest,
-                routeCore.costEngineContract(),
-                routeCore.temporalContextContract(),
-                nonNullSnapshot.getTopologyVersion(),
-                quarantineSnapshot,
-                clock
+        ResolvedRouteScenarioRequest resolved = resolveScenarioRequest(nonNullSnapshot, nonNullRequest);
+        RouteScenarioExecution scenarioExecution = executeScenarios(
+                resolved.routeCore(),
+                resolved.normalized(),
+                resolved.scenarioBundle()
         );
-        validateScenarioBundle(scenarioBundle, nonNullSnapshot, quarantineSnapshot);
-
-        ArrayList<EvaluatedScenario> evaluatedScenarios = new ArrayList<>(scenarioBundle.getScenarios().size());
-        ArrayList<CandidateRoute> candidates = new ArrayList<>();
-        Set<String> scenarioOptimalSignatures = new HashSet<>();
-        int scenarioOptimalRouteCount = 0;
-        ArrayList<FutureRouteObjectivePlanner.ScenarioCostSurface> scenarioCostSurfaces =
-                new ArrayList<>(scenarioBundle.getScenarios().size());
-        for (ScenarioDefinition scenario : scenarioBundle.getScenarios()) {
-            CostEngine scenarioCostEngine = buildScenarioCostEngine(
-                    routeCore.costEngineContract(),
-                    departureTicks,
-                    scenario.getLiveUpdates()
-            );
-            InternalRoutePlan plan = routeCore.computeInternal(normalized.getInternalRequest(), scenarioCostEngine);
-            RouteResponse response = routeCore.buildRouteResponse(normalized, plan);
-            evaluatedScenarios.add(new EvaluatedScenario(scenario, scenarioCostEngine, plan, response));
-            scenarioCostSurfaces.add(new FutureRouteObjectivePlanner.ScenarioCostSurface(
-                    scenario.getProbability(),
-                    scenarioCostEngine
-            ));
-            if (plan.reachable()) {
-                scenarioOptimalRouteCount++;
-                RouteCandidateKey key = RouteCandidateKey.fromPlan(plan);
-                scenarioOptimalSignatures.add(key.signature());
-                if (findCandidate(candidates, key) == null) {
-                    candidates.add(new CandidateRoute(
-                            key,
-                            plan.edgePath(),
-                            response,
-                            scenario.getScenarioId(),
-                            scenario.getLabel(),
-                            scenario.getExplanationTags()
-                    ));
-                }
-            }
-        }
 
         Instant createdAt = clock.instant();
-        Instant expiresAt = createdAt.plus(nonNullRequest.getResultTtl());
+        Instant expiresAt = createdAt.plus(resolved.request().getResultTtl());
+        ArrayList<CandidateRoute> candidates = new ArrayList<>(scenarioExecution.scenarioOptimalCandidates());
+        Set<String> scenarioOptimalSignatures = new HashSet<>(scenarioExecution.scenarioOptimalSignatures());
+        List<EvaluatedScenario> evaluatedScenarios = scenarioExecution.evaluatedScenarios();
         if (candidates.isEmpty()) {
-            ScenarioRouteSelection unreachable = buildUnreachableSelection(normalized);
+            ScenarioRouteSelection unreachable = buildUnreachableSelection(resolved.normalized());
             CandidateDensityCalibrationReport densityCalibrationReport = buildDensityCalibrationReport(
-                    scenarioBundle.getScenarios().size(),
-                    scenarioOptimalRouteCount,
+                    resolved.scenarioBundle().getScenarios().size(),
+                    scenarioExecution.scenarioOptimalRouteCount(),
                     scenarioOptimalSignatures.size(),
                     0,
                     false,
@@ -122,10 +87,10 @@ public final class FutureRouteEvaluator {
                     0
             );
             return buildResultSet(
-                    nonNullRequest,
-                    nonNullSnapshot,
-                    quarantineSnapshot,
-                    scenarioBundle,
+                    resolved.request(),
+                    resolved.snapshot(),
+                    resolved.quarantineSnapshot(),
+                    resolved.scenarioBundle(),
                     createdAt,
                     expiresAt,
                     densityCalibrationReport,
@@ -137,23 +102,23 @@ public final class FutureRouteEvaluator {
         }
 
         InternalRoutePlan expectedPlan = objectivePlanner.compute(
-                routeCore,
-                normalized.getInternalRequest(),
-                scenarioCostSurfaces,
+                resolved.routeCore(),
+                resolved.normalized().getInternalRequest(),
+                scenarioExecution.scenarioCostSurfaces(),
                 FutureRouteObjectivePlanner.ObjectiveMode.EXPECTED_ETA
         );
         InternalRoutePlan robustPlan = objectivePlanner.compute(
-                routeCore,
-                normalized.getInternalRequest(),
-                scenarioCostSurfaces,
+                resolved.routeCore(),
+                resolved.normalized().getInternalRequest(),
+                scenarioExecution.scenarioCostSurfaces(),
                 FutureRouteObjectivePlanner.ObjectiveMode.ROBUST_P90
         );
-        addAggregateCandidate(candidates, routeCore, normalized, expectedPlan);
-        addAggregateCandidate(candidates, routeCore, normalized, robustPlan);
+        addAggregateCandidate(candidates, resolved.routeCore(), resolved.normalized(), expectedPlan);
+        addAggregateCandidate(candidates, resolved.routeCore(), resolved.normalized(), robustPlan);
 
         ArrayList<ScoredCandidate> scoredCandidates = new ArrayList<>(candidates.size());
         for (CandidateRoute candidate : candidates) {
-            scoredCandidates.add(scoreCandidate(candidate, evaluatedScenarios, normalized, scenarioOptimalSignatures));
+            scoredCandidates.add(scoreCandidate(candidate, evaluatedScenarios, resolved.normalized(), scenarioOptimalSignatures));
         }
 
         ScoredCandidate expectedRoute = resolveWinner(
@@ -174,12 +139,12 @@ public final class FutureRouteEvaluator {
         );
         List<ScenarioRouteSelection> alternatives = selectAlternatives(
                 scoredCandidates,
-                nonNullRequest.getTopKAlternatives(),
+                resolved.request().getTopKAlternatives(),
                 List.of(expectedRoute, robustRoute)
         );
         CandidateDensityCalibrationReport densityCalibrationReport = buildDensityCalibrationReport(
-                scenarioBundle.getScenarios().size(),
-                scenarioOptimalRouteCount,
+                resolved.scenarioBundle().getScenarios().size(),
+                scenarioExecution.scenarioOptimalRouteCount(),
                 scenarioOptimalSignatures.size(),
                 candidates.size(),
                 isAggregateOnlyWinner(expectedPlan, scenarioOptimalSignatures),
@@ -188,10 +153,10 @@ public final class FutureRouteEvaluator {
         );
 
         return buildResultSet(
-                nonNullRequest,
-                nonNullSnapshot,
-                quarantineSnapshot,
-                scenarioBundle,
+                resolved.request(),
+                resolved.snapshot(),
+                resolved.quarantineSnapshot(),
+                resolved.scenarioBundle(),
                 createdAt,
                 expiresAt,
                 densityCalibrationReport,
@@ -199,6 +164,87 @@ public final class FutureRouteEvaluator {
                 robustRoute.selection(),
                 alternatives,
                 toScenarioResults(evaluatedScenarios)
+        );
+    }
+
+    private ResolvedRouteScenarioRequest resolveScenarioRequest(
+            TopologyRuntimeSnapshot snapshot,
+            FutureRouteRequest request
+    ) {
+        RouteCore routeCore = snapshot.getRouteCore();
+        RequestNormalizer.NormalizedRouteRequest normalized = routeCore.normalizeRouteRequest(request.getRouteRequest());
+        long departureTicks = normalized.getInternalRequest().departureTicks();
+        FailureQuarantine.Snapshot quarantineSnapshot = snapshot.getFailureQuarantine().snapshot(departureTicks);
+        ScenarioBundle scenarioBundle = scenarioBundleResolver.resolve(
+                request,
+                routeCore.costEngineContract(),
+                routeCore.temporalContextContract(),
+                snapshot.getTopologyVersion(),
+                quarantineSnapshot,
+                clock
+        );
+        validateScenarioBundle(scenarioBundle, snapshot, quarantineSnapshot);
+        return new ResolvedRouteScenarioRequest(
+                snapshot,
+                request,
+                routeCore,
+                normalized,
+                quarantineSnapshot,
+                scenarioBundle
+        );
+    }
+
+    private RouteScenarioExecution executeScenarios(
+            RouteCore routeCore,
+            RequestNormalizer.NormalizedRouteRequest normalized,
+            ScenarioBundle scenarioBundle
+    ) {
+        long departureTicks = normalized.getInternalRequest().departureTicks();
+        ArrayList<EvaluatedScenario> evaluatedScenarios = new ArrayList<>(scenarioBundle.getScenarios().size());
+        ArrayList<FutureRouteObjectivePlanner.ScenarioCostSurface> scenarioCostSurfaces =
+                new ArrayList<>(scenarioBundle.getScenarios().size());
+        ArrayList<CandidateRoute> scenarioOptimalCandidates = new ArrayList<>();
+        Set<String> scenarioOptimalSignatures = new HashSet<>();
+        int scenarioOptimalRouteCount = 0;
+
+        for (ScenarioDefinition scenario : scenarioBundle.getScenarios()) {
+            CostEngine scenarioCostEngine = FutureScenarioSupport.buildScenarioCostEngine(
+                    routeCore.costEngineContract(),
+                    departureTicks,
+                    scenario.getLiveUpdates()
+            );
+            InternalRoutePlan plan = routeCore.computeInternal(normalized.getInternalRequest(), scenarioCostEngine);
+            RouteResponse response = routeCore.buildRouteResponse(normalized, plan);
+            evaluatedScenarios.add(new EvaluatedScenario(scenario, scenarioCostEngine, plan, response));
+            scenarioCostSurfaces.add(new FutureRouteObjectivePlanner.ScenarioCostSurface(
+                    scenario.getProbability(),
+                    scenarioCostEngine
+            ));
+            if (!plan.reachable()) {
+                continue;
+            }
+
+            scenarioOptimalRouteCount++;
+            RouteCandidateKey key = RouteCandidateKey.fromPlan(plan);
+            scenarioOptimalSignatures.add(key.signature());
+            if (findCandidate(scenarioOptimalCandidates, key) == null) {
+                scenarioOptimalCandidates.add(new CandidateRoute(
+                        key,
+                        plan.edgePath(),
+                        response,
+                        scenario.getScenarioId(),
+                        scenario.getLabel(),
+                        scenario.getExplanationTags()
+                ));
+            }
+        }
+
+        return new RouteScenarioExecution(
+                List.copyOf(evaluatedScenarios),
+                List.copyOf(scenarioCostSurfaces),
+                List.copyOf(scenarioOptimalCandidates),
+                Set.copyOf(scenarioOptimalSignatures),
+                scenarioOptimalRouteCount
         );
     }
 
@@ -224,7 +270,11 @@ public final class FutureRouteEvaluator {
                 .minArrivalTicks(Long.MAX_VALUE)
                 .maxArrivalTicks(Long.MAX_VALUE)
                 .optimalityProbability(0.0d)
+                .expectedRegret(Float.POSITIVE_INFINITY)
+                .etaBandLowerArrivalTicks(Long.MAX_VALUE)
+                .etaBandUpperArrivalTicks(Long.MAX_VALUE)
                 .dominantScenarioId("unreachable")
+                .dominantScenarioProbability(0.0d)
                 .dominantScenarioLabel("unreachable")
                 .routeSelectionProvenance(RouteSelectionProvenance.UNREACHABLE)
                 .build();
@@ -347,6 +397,7 @@ public final class FutureRouteEvaluator {
         ArrayList<ScoredCandidate> ranked = new ArrayList<>(scoredCandidates);
         ranked.sort(Comparator
                 .comparingDouble((ScoredCandidate candidate) -> -candidate.selection().getOptimalityProbability())
+                .thenComparingDouble(candidate -> candidate.selection().getExpectedRegret())
                 .thenComparingDouble(candidate -> candidate.selection().getExpectedCost())
                 .thenComparingDouble(candidate -> candidate.selection().getP90Cost())
                 .thenComparing(ScoredCandidate::signature));
@@ -419,7 +470,9 @@ public final class FutureRouteEvaluator {
         String dominantScenarioId = candidate.dominantScenarioId();
         String dominantScenarioLabel = candidate.dominantScenarioLabel();
         double dominantProbability = -1.0d;
+        double dominantScenarioProbability = 0.0d;
         double optimalityProbability = 0.0d;
+        double weightedRegret = 0.0d;
         List<String> selectedExplanationTags = candidate.explanationTags();
         double bestFallbackProbability = -1.0d;
         double bestFallbackRegret = Double.POSITIVE_INFINITY;
@@ -428,6 +481,8 @@ public final class FutureRouteEvaluator {
             boolean optimalForScenario = candidate.key().equals(RouteCandidateKey.fromPlan(evaluatedScenario.plan()));
             CandidateScenarioSample sample = evaluateCandidateInScenario(candidate, evaluatedScenario, normalized);
             samples.add(sample);
+            double regret = scenarioRegret(sample, evaluatedScenario.plan());
+            weightedRegret = weightedRegret(weightedRegret, sample.probability(), regret);
             if (optimalForScenario) {
                 if (optimalityProbability == 0.0d) {
                     dominantProbability = -1.0d;
@@ -435,22 +490,24 @@ public final class FutureRouteEvaluator {
                 optimalityProbability += evaluatedScenario.scenario().getProbability();
                 if (evaluatedScenario.scenario().getProbability() > dominantProbability) {
                     dominantProbability = evaluatedScenario.scenario().getProbability();
+                    dominantScenarioProbability = evaluatedScenario.scenario().getProbability();
                     dominantScenarioId = evaluatedScenario.scenario().getScenarioId();
                     dominantScenarioLabel = evaluatedScenario.scenario().getLabel();
                     selectedExplanationTags = evaluatedScenario.scenario().getExplanationTags();
                 }
             } else if (optimalityProbability == 0.0d) {
                 double scenarioProbability = evaluatedScenario.scenario().getProbability();
-                double regret = scenarioRegret(sample, evaluatedScenario.plan());
                 if (scenarioProbability > bestFallbackProbability + PROBABILITY_TOLERANCE) {
                     bestFallbackProbability = scenarioProbability;
                     bestFallbackRegret = regret;
+                    dominantScenarioProbability = scenarioProbability;
                     dominantScenarioId = evaluatedScenario.scenario().getScenarioId();
                     dominantScenarioLabel = evaluatedScenario.scenario().getLabel();
                     selectedExplanationTags = evaluatedScenario.scenario().getExplanationTags();
                 } else if (Math.abs(scenarioProbability - bestFallbackProbability) <= PROBABILITY_TOLERANCE
                         && regret < bestFallbackRegret) {
                     bestFallbackRegret = regret;
+                    dominantScenarioProbability = scenarioProbability;
                     dominantScenarioId = evaluatedScenario.scenario().getScenarioId();
                     dominantScenarioLabel = evaluatedScenario.scenario().getLabel();
                     selectedExplanationTags = evaluatedScenario.scenario().getExplanationTags();
@@ -465,6 +522,9 @@ public final class FutureRouteEvaluator {
         float maxCost = maxCost(samples);
         long minArrivalTicks = minArrival(samples);
         long maxArrivalTicks = maxArrival(samples);
+        float expectedRegret = weightedRegret(weightedRegret);
+        long etaBandLowerArrivalTicks = percentileArrival(samples, ETA_BAND_LOWER_PERCENTILE);
+        long etaBandUpperArrivalTicks = percentileArrival(samples, ETA_BAND_UPPER_PERCENTILE);
         RouteSelectionProvenance routeSelectionProvenance = scenarioOptimalSignatures.contains(candidate.key().signature())
                 ? RouteSelectionProvenance.SCENARIO_OPTIMAL
                 : RouteSelectionProvenance.AGGREGATE_OBJECTIVE;
@@ -479,7 +539,11 @@ public final class FutureRouteEvaluator {
                 .minArrivalTicks(minArrivalTicks)
                 .maxArrivalTicks(maxArrivalTicks)
                 .optimalityProbability(optimalityProbability)
+                .expectedRegret(expectedRegret)
+                .etaBandLowerArrivalTicks(etaBandLowerArrivalTicks)
+                .etaBandUpperArrivalTicks(etaBandUpperArrivalTicks)
                 .dominantScenarioId(dominantScenarioId)
+                .dominantScenarioProbability(dominantScenarioProbability)
                 .dominantScenarioLabel(dominantScenarioLabel)
                 .routeSelectionProvenance(routeSelectionProvenance)
                 .explanationTags(selectedExplanationTags)
@@ -543,10 +607,7 @@ public final class FutureRouteEvaluator {
             }
             weighted += sample.probability() * sample.cost();
         }
-        if (!Double.isFinite(weighted) || weighted > Float.MAX_VALUE) {
-            return Float.POSITIVE_INFINITY;
-        }
-        return (float) weighted;
+        return weightedRegret(weighted);
     }
 
     private float percentileCost(List<CandidateScenarioSample> samples, double percentile) {
@@ -566,6 +627,25 @@ public final class FutureRouteEvaluator {
             }
         }
         return sorted.get(sorted.size() - 1).cost();
+    }
+
+    private long percentileArrival(List<CandidateScenarioSample> samples, double percentile) {
+        ArrayList<CandidateScenarioSample> sorted = new ArrayList<>(samples);
+        sorted.sort(Comparator.comparingLong(CandidateScenarioSample::arrivalTicks));
+
+        double totalProbability = 0.0d;
+        for (CandidateScenarioSample sample : sorted) {
+            totalProbability += sample.probability();
+        }
+        double threshold = percentile * totalProbability;
+        double cumulative = 0.0d;
+        for (CandidateScenarioSample sample : sorted) {
+            cumulative += sample.probability();
+            if (cumulative + PROBABILITY_TOLERANCE >= threshold) {
+                return sample.arrivalTicks();
+            }
+        }
+        return sorted.get(sorted.size() - 1).arrivalTicks();
     }
 
     private float minCost(List<CandidateScenarioSample> samples) {
@@ -608,28 +688,21 @@ public final class FutureRouteEvaluator {
         return max;
     }
 
-    private CostEngine buildScenarioCostEngine(
-            CostEngine baseCostEngine,
-            long departureTicks,
-            List<LiveUpdate> scenarioUpdates
-    ) {
-        LiveOverlay scenarioOverlay = baseCostEngine.liveOverlay().copyActiveSnapshot(departureTicks);
-        if (scenarioUpdates != null && !scenarioUpdates.isEmpty()) {
-            scenarioOverlay.applyBatch(scenarioUpdates, departureTicks);
+    private double weightedRegret(double currentWeightedRegret, double probability, double regret) {
+        if (probability <= 0.0d) {
+            return currentWeightedRegret;
         }
-        return new CostEngine(
-                baseCostEngine.edgeGraph(),
-                baseCostEngine.profileStore(),
-                scenarioOverlay,
-                baseCostEngine.turnCostMap(),
-                baseCostEngine.engineTimeUnit(),
-                baseCostEngine.bucketSizeSeconds(),
-                baseCostEngine.temporalSamplingPolicy(),
-                edgeId -> "edge " + edgeId,
-                baseCostEngine.profileValidationMode(),
-                baseCostEngine.recurrenceCalibrationStore(),
-                baseCostEngine.recencyCalibrationStore()
-        );
+        if (!Double.isFinite(regret)) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return currentWeightedRegret + (probability * regret);
+    }
+
+    private float weightedRegret(double weightedRegret) {
+        if (!Double.isFinite(weightedRegret) || weightedRegret > Float.MAX_VALUE) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return (float) weightedRegret;
     }
 
     private void validateRequest(FutureRouteRequest request) {
@@ -709,6 +782,25 @@ public final class FutureRouteEvaluator {
             CostEngine costEngine,
             InternalRoutePlan plan,
             RouteResponse routeResponse
+    ) {
+    }
+
+    private record ResolvedRouteScenarioRequest(
+            TopologyRuntimeSnapshot snapshot,
+            FutureRouteRequest request,
+            RouteCore routeCore,
+            RequestNormalizer.NormalizedRouteRequest normalized,
+            FailureQuarantine.Snapshot quarantineSnapshot,
+            ScenarioBundle scenarioBundle
+    ) {
+    }
+
+    private record RouteScenarioExecution(
+            List<EvaluatedScenario> evaluatedScenarios,
+            List<FutureRouteObjectivePlanner.ScenarioCostSurface> scenarioCostSurfaces,
+            List<CandidateRoute> scenarioOptimalCandidates,
+            Set<String> scenarioOptimalSignatures,
+            int scenarioOptimalRouteCount
     ) {
     }
 

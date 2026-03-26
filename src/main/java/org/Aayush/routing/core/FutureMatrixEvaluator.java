@@ -43,20 +43,49 @@ public final class FutureMatrixEvaluator {
         FutureMatrixRequest nonNullRequest = Objects.requireNonNull(request, "request");
         validateRequest(nonNullRequest);
 
-        RouteCore routeCore = nonNullSnapshot.getRouteCore();
-        RequestNormalizer.NormalizedMatrixRequest normalized = routeCore.normalizeMatrixRequest(nonNullRequest.getMatrixRequest());
+        ResolvedMatrixScenarioRequest resolved = resolveScenarioRequest(nonNullSnapshot, nonNullRequest);
+        List<EvaluatedScenario> evaluatedScenarios = executeScenarios(
+                resolved.routeCore(),
+                resolved.normalized(),
+                resolved.scenarioBundle()
+        );
+        Instant createdAt = clock.instant();
+        return buildResultSet(resolved, evaluatedScenarios, createdAt);
+    }
+
+    private ResolvedMatrixScenarioRequest resolveScenarioRequest(
+            TopologyRuntimeSnapshot snapshot,
+            FutureMatrixRequest request
+    ) {
+        RouteCore routeCore = snapshot.getRouteCore();
+        RequestNormalizer.NormalizedMatrixRequest normalized = routeCore.normalizeMatrixRequest(request.getMatrixRequest());
         long departureTicks = normalized.getInternalRequest().departureTicks();
-        FailureQuarantine.Snapshot quarantineSnapshot = nonNullSnapshot.getFailureQuarantine().snapshot(departureTicks);
+        FailureQuarantine.Snapshot quarantineSnapshot = snapshot.getFailureQuarantine().snapshot(departureTicks);
         ScenarioBundle scenarioBundle = scenarioBundleResolver.resolve(
-                nonNullRequest,
+                request,
                 routeCore.costEngineContract(),
                 routeCore.temporalContextContract(),
-                nonNullSnapshot.getTopologyVersion(),
+                snapshot.getTopologyVersion(),
                 quarantineSnapshot,
                 clock
         );
-        FutureScenarioSupport.validateScenarioBundle(scenarioBundle, nonNullSnapshot, quarantineSnapshot);
+        FutureScenarioSupport.validateScenarioBundle(scenarioBundle, snapshot, quarantineSnapshot);
+        return new ResolvedMatrixScenarioRequest(
+                snapshot,
+                request,
+                routeCore,
+                normalized,
+                quarantineSnapshot,
+                scenarioBundle
+        );
+    }
 
+    private List<EvaluatedScenario> executeScenarios(
+            RouteCore routeCore,
+            RequestNormalizer.NormalizedMatrixRequest normalized,
+            ScenarioBundle scenarioBundle
+    ) {
+        long departureTicks = normalized.getInternalRequest().departureTicks();
         ArrayList<EvaluatedScenario> evaluatedScenarios = new ArrayList<>(scenarioBundle.getScenarios().size());
         for (ScenarioDefinition scenario : scenarioBundle.getScenarios()) {
             CostEngine scenarioCostEngine = FutureScenarioSupport.buildScenarioCostEngine(
@@ -68,17 +97,23 @@ public final class FutureMatrixEvaluator {
             MatrixResponse response = RouteCoreMatrixSupport.buildResponse(normalized, matrixPlan);
             evaluatedScenarios.add(new EvaluatedScenario(scenario, matrixPlan, response));
         }
+        return List.copyOf(evaluatedScenarios);
+    }
 
-        Instant createdAt = clock.instant();
+    private FutureMatrixResultSet buildResultSet(
+            ResolvedMatrixScenarioRequest resolved,
+            List<EvaluatedScenario> evaluatedScenarios,
+            Instant createdAt
+    ) {
         return FutureMatrixResultSet.builder()
                 .resultSetId(UUID.randomUUID().toString())
                 .createdAt(createdAt)
-                .expiresAt(createdAt.plus(nonNullRequest.getResultTtl()))
-                .request(nonNullRequest)
-                .topologyVersion(nonNullSnapshot.getTopologyVersion())
-                .quarantineSnapshotId(quarantineSnapshot.snapshotId())
-                .scenarioBundle(scenarioBundle)
-                .aggregate(aggregate(normalized, evaluatedScenarios))
+                .expiresAt(createdAt.plus(resolved.request().getResultTtl()))
+                .request(resolved.request())
+                .topologyVersion(resolved.snapshot().getTopologyVersion())
+                .quarantineSnapshotId(resolved.quarantineSnapshot().snapshotId())
+                .scenarioBundle(resolved.scenarioBundle())
+                .aggregate(aggregate(resolved.normalized(), evaluatedScenarios))
                 .scenarioResults(toScenarioResults(evaluatedScenarios))
                 .build();
     }
@@ -249,6 +284,16 @@ public final class FutureMatrixEvaluator {
             ScenarioDefinition scenario,
             MatrixPlan plan,
             MatrixResponse matrixResponse
+    ) {
+    }
+
+    private record ResolvedMatrixScenarioRequest(
+            TopologyRuntimeSnapshot snapshot,
+            FutureMatrixRequest request,
+            RouteCore routeCore,
+            RequestNormalizer.NormalizedMatrixRequest normalized,
+            FailureQuarantine.Snapshot quarantineSnapshot,
+            ScenarioBundle scenarioBundle
     ) {
     }
 

@@ -17,4 +17,5 @@ public class ScenarioProbabilityAudit {
     double horizonWeight;
     double baseProbability;
     double adjustedProbability;
+    ScenarioStructuralPriorAudit structuralPriorAudit;
 }

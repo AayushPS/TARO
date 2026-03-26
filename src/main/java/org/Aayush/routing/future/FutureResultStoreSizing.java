@@ -202,6 +202,16 @@ final class FutureResultStoreSizing {
         size += string(audit.getEvidenceSource());
         size += boxedLong(audit.getObservedAtTicks());
         size += boxedLong(audit.getEvidenceAgeTicks());
+        size += scenarioStructuralPriorAudit(audit.getStructuralPriorAudit());
+        return size;
+    }
+
+    private static long scenarioStructuralPriorAudit(ScenarioStructuralPriorAudit audit) {
+        if (audit == null) {
+            return 0L;
+        }
+        long size = OBJECT_HEADER_BYTES + (4L * Double.BYTES) + Integer.BYTES;
+        size += string(audit.getPolicyId());
         return size;
     }
 
@@ -209,7 +219,7 @@ final class FutureResultStoreSizing {
         if (selection == null) {
             return 0L;
         }
-        long size = OBJECT_HEADER_BYTES + 6 * Float.BYTES + 2 * Long.BYTES + Double.BYTES;
+        long size = OBJECT_HEADER_BYTES + 6L * Float.BYTES + 4L * Long.BYTES + 2L * Double.BYTES;
         size += routeShape(selection.getRoute());
         size += string(selection.getDominantScenarioId());
         size += string(selection.getDominantScenarioLabel());

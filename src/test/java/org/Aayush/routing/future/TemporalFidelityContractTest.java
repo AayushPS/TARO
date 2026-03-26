@@ -1,6 +1,8 @@
 package org.Aayush.routing.future;
 
+import org.Aayush.routing.core.FutureMatrixEvaluator;
 import org.Aayush.routing.core.FutureRouteEvaluator;
+import org.Aayush.routing.core.MatrixRequest;
 import org.Aayush.routing.core.RouteRequest;
 import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.overlay.LiveUpdate;
@@ -152,6 +154,37 @@ class TemporalFidelityContractTest {
         assertTrue(resultSet.getCandidateDensityCalibrationReport().isRobustRouteAggregateOnly());
     }
 
+    @Test
+    @DisplayName("Route and matrix scenario execution preserve bundle order and scenario divergence for the same departure")
+    void testRouteAndMatrixScenarioExecutionStayAligned() {
+        TopologyRuntimeSnapshot snapshot = snapshot(scenarioExecutionContractSource(), "c2-temporal-scenario-execution");
+        FutureRouteService routeService = new FutureRouteService(
+                new FutureRouteEvaluator(scenarioExecutionContractResolver(), FIXED_CLOCK),
+                new InMemoryEphemeralRouteResultStore(FIXED_CLOCK)
+        );
+        FutureMatrixService matrixService = new FutureMatrixService(
+                new FutureMatrixEvaluator(scenarioExecutionContractResolver(), FIXED_CLOCK),
+                new InMemoryEphemeralMatrixResultStore(FIXED_CLOCK)
+        );
+
+        FutureRouteResultSet routeResult = routeService.evaluate(snapshot, requestAt("N0", "N3", "2026-03-23T08:00:00Z"));
+        FutureMatrixResultSet matrixResult = matrixService.evaluate(snapshot, matrixRequestAt("N0", "N3", "2026-03-23T08:00:00Z"));
+
+        assertEquals(
+                List.of("blocked_branch", "baseline"),
+                routeResult.getScenarioResults().stream().map(FutureRouteScenarioResult::getScenarioId).toList()
+        );
+        assertEquals(
+                routeResult.getScenarioResults().stream().map(FutureRouteScenarioResult::getScenarioId).toList(),
+                matrixResult.getScenarioResults().stream().map(FutureMatrixScenarioResult::getScenarioId).toList()
+        );
+        assertEquals(routeResult.getScenarioBundle().getScenarioBundleId(), matrixResult.getScenarioBundle().getScenarioBundleId());
+        assertEquals(List.of("N0", "N2", "N3"), routeResult.getScenarioResults().get(0).getRoute().getPathExternalNodeIds());
+        assertEquals(3.0f, matrixResult.getScenarioResults().get(0).getMatrix().getTotalCosts()[0][0], 0.0001f);
+        assertEquals(List.of("N0", "N1", "N3"), routeResult.getScenarioResults().get(1).getRoute().getPathExternalNodeIds());
+        assertEquals(2.0f, matrixResult.getScenarioResults().get(1).getMatrix().getTotalCosts()[0][0], 0.0001f);
+    }
+
     private ScenarioBundleResolver periodicContractResolver() {
         return (request, baseCostEngine, temporalContext, topologyVersion, quarantineSnapshot, clock) -> {
             Instant now = clock.instant();
@@ -225,6 +258,32 @@ class TemporalFidelityContractTest {
         };
     }
 
+    private ScenarioBundleResolver scenarioExecutionContractResolver() {
+        return (request, baseCostEngine, temporalContext, topologyVersion, quarantineSnapshot, clock) -> {
+            long validUntilTicks = request.getDepartureTicks() + request.getHorizonTicks();
+            return ScenarioBundle.builder()
+                    .scenarioBundleId("scenario-execution-" + request.getDepartureTicks())
+                    .generatedAt(clock.instant())
+                    .validUntil(clock.instant().plus(Duration.ofMinutes(15)))
+                    .horizonTicks(request.getHorizonTicks())
+                    .topologyVersion(topologyVersion)
+                    .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                    .scenario(ScenarioDefinition.builder()
+                            .scenarioId("blocked_branch")
+                            .label("blocked_branch")
+                            .probability(0.3d)
+                            .explanationTag("blocked_branch")
+                            .liveUpdate(LiveUpdate.of(2, 0.0f, validUntilTicks))
+                            .build())
+                    .scenario(ScenarioDefinition.builder()
+                            .scenarioId("baseline")
+                            .label("baseline")
+                            .probability(0.7d)
+                            .build())
+                    .build();
+        };
+    }
+
     private FutureRouteRequest requestAt(String departureIsoInstant) {
         return requestAt("N0", "N3", departureIsoInstant);
     }
@@ -239,6 +298,18 @@ class TemporalFidelityContractTest {
                 .horizonTicks(Duration.ofHours(2).toSeconds())
                 .resultTtl(Duration.ofMinutes(15))
                 .topKAlternatives(2)
+                .build();
+    }
+
+    private FutureMatrixRequest matrixRequestAt(String sourceExternalId, String targetExternalId, String departureIsoInstant) {
+        return FutureMatrixRequest.builder()
+                .matrixRequest(MatrixRequest.builder()
+                        .sourceExternalId(sourceExternalId)
+                        .targetExternalId(targetExternalId)
+                        .departureTicks(Instant.parse(departureIsoInstant).getEpochSecond())
+                        .build())
+                .horizonTicks(Duration.ofHours(2).toSeconds())
+                .resultTtl(Duration.ofMinutes(15))
                 .build();
     }
 
@@ -317,6 +388,22 @@ class TemporalFidelityContractTest {
                 .edge(edge("E14", "N1", "N4", 5.0f, 1))
                 .edge(edge("E24", "N2", "N4", 5.0f, 1))
                 .edge(edge("E34", "N3", "N4", 20.0f, 1))
+                .build();
+    }
+
+    private TopologyModelSource scenarioExecutionContractSource() {
+        return TopologyModelSource.builder()
+                .modelVersion("c2-scenario-execution-source")
+                .profileTimezone("UTC")
+                .profile(flatProfile(1, 1.0f))
+                .node(node("N0", 0.0d, 0.0d))
+                .node(node("N1", 1.0d, 0.0d))
+                .node(node("N2", 1.0d, 1.0d))
+                .node(node("N3", 2.0d, 0.0d))
+                .edge(edge("E01", "N0", "N1", 1.0f, 1))
+                .edge(edge("E02", "N0", "N2", 2.0f, 1))
+                .edge(edge("E13", "N1", "N3", 1.0f, 1))
+                .edge(edge("E23", "N2", "N3", 1.0f, 1))
                 .build();
     }
 

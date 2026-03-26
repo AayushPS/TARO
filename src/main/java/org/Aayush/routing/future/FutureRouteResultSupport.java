@@ -174,12 +174,35 @@ final class FutureRouteResultSupport {
         if (nonNullSelection.getRouteSelectionProvenance() == null) {
             throw new IllegalArgumentException(fieldName + ".routeSelectionProvenance must be non-null");
         }
+        validateBoundedProbability(fieldName + ".optimalityProbability", nonNullSelection.getOptimalityProbability());
+        validateBoundedProbability(fieldName + ".dominantScenarioProbability", nonNullSelection.getDominantScenarioProbability());
+        validateNonNegativeMetric(fieldName + ".expectedRegret", nonNullSelection.getExpectedRegret());
+        validateEtaBand(fieldName, nonNullSelection);
         if (nonNullSelection.getRoute().isReachable()) {
             if (nonNullSelection.getRouteSelectionProvenance() == RouteSelectionProvenance.UNREACHABLE) {
                 throw new IllegalArgumentException(fieldName + " reachable route cannot use UNREACHABLE provenance");
             }
+            requireNonBlank(nonNullSelection.getDominantScenarioId(), fieldName + ".dominantScenarioId");
+            requireNonBlank(nonNullSelection.getDominantScenarioLabel(), fieldName + ".dominantScenarioLabel");
+            if (!(nonNullSelection.getDominantScenarioProbability() > 0.0d)) {
+                throw new IllegalArgumentException(fieldName + ".dominantScenarioProbability must be > 0 for reachable selections");
+            }
         } else if (nonNullSelection.getRouteSelectionProvenance() != RouteSelectionProvenance.UNREACHABLE) {
             throw new IllegalArgumentException(fieldName + " unreachable route must use UNREACHABLE provenance");
+        } else {
+            if (nonNullSelection.getOptimalityProbability() != 0.0d) {
+                throw new IllegalArgumentException(fieldName + " unreachable route must have zero optimalityProbability");
+            }
+            if (nonNullSelection.getDominantScenarioProbability() != 0.0d) {
+                throw new IllegalArgumentException(fieldName + " unreachable route must have zero dominantScenarioProbability");
+            }
+            if (!Float.isInfinite(nonNullSelection.getExpectedRegret())) {
+                throw new IllegalArgumentException(fieldName + " unreachable route must use infinite expectedRegret");
+            }
+            if (nonNullSelection.getEtaBandLowerArrivalTicks() != Long.MAX_VALUE
+                    || nonNullSelection.getEtaBandUpperArrivalTicks() != Long.MAX_VALUE) {
+                throw new IllegalArgumentException(fieldName + " unreachable route must use unreachable ETA band sentinels");
+            }
         }
     }
 
@@ -211,6 +234,29 @@ final class FutureRouteResultSupport {
     private static void validateNonNegativeRatio(String fieldName, double value) {
         if (!Double.isFinite(value) || value < 0.0d) {
             throw new IllegalArgumentException(fieldName + " must be finite and >= 0");
+        }
+    }
+
+    private static void validateBoundedProbability(String fieldName, double value) {
+        if (!Double.isFinite(value) || value < 0.0d || value > 1.0d) {
+            throw new IllegalArgumentException(fieldName + " must be finite within [0.0, 1.0]");
+        }
+    }
+
+    private static void validateNonNegativeMetric(String fieldName, float value) {
+        if (Float.isNaN(value) || value < 0.0f) {
+            throw new IllegalArgumentException(fieldName + " must be >= 0 or +Infinity");
+        }
+    }
+
+    private static void validateEtaBand(String fieldName, ScenarioRouteSelection selection) {
+        long lower = selection.getEtaBandLowerArrivalTicks();
+        long upper = selection.getEtaBandUpperArrivalTicks();
+        if (lower < 0L || upper < 0L) {
+            throw new IllegalArgumentException(fieldName + " ETA band bounds must be >= 0");
+        }
+        if (lower > upper) {
+            throw new IllegalArgumentException(fieldName + " ETA band lower bound must be <= upper bound");
         }
     }
 

@@ -139,7 +139,7 @@ Rule:
 | `B6` | 19, 20, 21 | Step 4 | homophily, scenario calibration | partially implemented |
 | `C1` | no direct v11 equivalent | Step 1, Step 4 | recency, temporal granularity | partially implemented |
 | `C2` | 13, 14 extended | Step 1, Step 2A | indirect support | partially implemented |
-| `C3` | 13, 14 extended | Step 2A | density-sensitive candidate coverage | partially implemented |
+| `C3` | 13, 14 extended | Step 2A | density-sensitive candidate coverage | implemented |
 | `C4` | 13, 14 extended | Step 2A, Step 3 | indirect support | partially implemented |
 | `C5` | 25, 26 extended | Step 1, Step 3 | none directly | partially implemented |
 | `D1` | 7, 25 extended | Step 2, Step 2A | recency override under incidents | partially implemented |
@@ -177,7 +177,7 @@ These contracts exist because local stage closure is not enough. Temporal proper
 
 Required suite:
 
-- `TemporalFidelityContractTest` (planned)
+- `TemporalFidelityContractTest`
 
 Purpose:
 
@@ -665,7 +665,7 @@ Named test suites:
 - `PersistenceCompetencyTest` (planned)
 - `PeriodicityCompetencyTest` (planned)
 - `RecurringIncidentPatternTest` (planned)
-- `TemporalFidelityContractTest` (planned)
+- `TemporalFidelityContractTest`
 
 Equivalence classes:
 - fully persistent edge
@@ -713,7 +713,7 @@ Named test suites:
 - `RecencyCalibrationTest` (planned)
 - `TemporalFreshnessOrderingTest` (planned)
 - `NearHorizonPriorShiftTest` (planned)
-- `TemporalFidelityContractTest` (planned)
+- `TemporalFidelityContractTest`
 
 Equivalence classes:
 - fresh strong signal vs stale conflicting signal
@@ -763,7 +763,7 @@ Named test suites:
 - `DirectionalityAsymmetryTest` (planned)
 - `DensityCalibrationTest` (planned)
 - `DirectedProfileDivergenceTest` (planned)
-- `TemporalFidelityContractTest` (planned)
+- `TemporalFidelityContractTest`
 
 Equivalence classes:
 - asymmetric opposing corridor profiles
@@ -865,7 +865,7 @@ Non-functional requirements:
 Named test suites:
 - `DefaultScenarioBundleResolverTest`
 - `FutureScenarioSupportTest`
-- `TemporalFidelityContractTest` (planned)
+- `TemporalFidelityContractTest`
 - `ScenarioPriorConsistencyContractTest` (planned)
 
 Equivalence classes:
@@ -918,7 +918,7 @@ Named test suites:
 - `FutureRouteServiceTest`
 - `FutureMatrixServiceTest`
 - `FutureScenarioSupportTest`
-- `TemporalFidelityContractTest` (planned)
+- `TemporalFidelityContractTest`
 
 Equivalence classes:
 - route vs matrix scenario execution
@@ -948,7 +948,7 @@ Core purpose:
 - select expected and robust winners by optimizing aggregate objectives directly across scenarios
 
 Current repo status:
-- partially implemented
+- implemented
 
 Gate severity:
 - hard blocker for future-aware route correctness
@@ -965,9 +965,11 @@ Non-functional requirements:
 
 Named test suites:
 - `FutureRouteObjectivePlannerTest`
+- `FutureRouteObjectivePlannerWeaknessFinderTest`
 - `FutureRouteServiceTest`
-- `AggregateCompromiseRouteContractTest` (planned)
-- `TemporalFidelityContractTest` (planned)
+- `AggregateCompromiseRouteContractTest`
+- `C3AggregateObjectivePerfSmokeTest`
+- `TemporalFidelityContractTest`
 
 Equivalence classes:
 - aggregate-best compromise route
@@ -1015,7 +1017,7 @@ Non-functional requirements:
 Named test suites:
 - `FutureRouteServiceTest`
 - `AlternativeConfidenceContractTest` (planned)
-- `TemporalFidelityContractTest` (planned)
+- `TemporalFidelityContractTest`
 - `ScenarioPriorConsistencyContractTest` (planned)
 
 Equivalence classes:

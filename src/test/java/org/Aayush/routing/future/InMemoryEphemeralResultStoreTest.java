@@ -175,7 +175,7 @@ class InMemoryEphemeralResultStoreTest {
     }
 
     @Test
-    @DisplayName("Route store rejects malformed B5 density and provenance artifacts")
+    @DisplayName("Route store rejects malformed B5 density and C4 selection artifacts")
     void testRouteStoreRejectsMalformedB5Artifacts() {
         MutableClock clock = new MutableClock(BASE_INSTANT);
         InMemoryEphemeralRouteResultStore store = new InMemoryEphemeralRouteResultStore(clock, InMemoryEphemeralRouteResultStore.Config.defaults());
@@ -197,6 +197,25 @@ class InMemoryEphemeralResultStoreTest {
         FutureRouteResultSet invalidProvenance = valid.toBuilder()
                 .expectedRoute(invalidSelection)
                 .build();
+        ScenarioRouteSelection invalidDominantProbability = valid.getExpectedRoute().toBuilder()
+                .dominantScenarioProbability(0.0d)
+                .build();
+        FutureRouteResultSet invalidDominantProbabilityResult = valid.toBuilder()
+                .expectedRoute(invalidDominantProbability)
+                .build();
+        ScenarioRouteSelection invalidEtaBand = valid.getExpectedRoute().toBuilder()
+                .etaBandLowerArrivalTicks(12L)
+                .etaBandUpperArrivalTicks(11L)
+                .build();
+        FutureRouteResultSet invalidEtaBandResult = valid.toBuilder()
+                .expectedRoute(invalidEtaBand)
+                .build();
+        ScenarioRouteSelection invalidRegret = valid.getExpectedRoute().toBuilder()
+                .expectedRegret(-1.0f)
+                .build();
+        FutureRouteResultSet invalidRegretResult = valid.toBuilder()
+                .expectedRoute(invalidRegret)
+                .build();
         ScenarioRouteSelection invalidUnreachable = valid.getExpectedRoute().toBuilder()
                 .route(valid.getExpectedRoute().getRoute().toBuilder().reachable(false).build())
                 .routeSelectionProvenance(RouteSelectionProvenance.SCENARIO_OPTIMAL)
@@ -208,6 +227,9 @@ class InMemoryEphemeralResultStoreTest {
         assertThrows(IllegalArgumentException.class, () -> store.put(invalidDensity));
         assertThrows(IllegalArgumentException.class, () -> store.put(invalidRatios));
         assertThrows(IllegalArgumentException.class, () -> store.put(invalidProvenance));
+        assertThrows(IllegalArgumentException.class, () -> store.put(invalidDominantProbabilityResult));
+        assertThrows(IllegalArgumentException.class, () -> store.put(invalidEtaBandResult));
+        assertThrows(IllegalArgumentException.class, () -> store.put(invalidRegretResult));
         assertThrows(IllegalArgumentException.class, () -> store.put(invalidUnreachableSelection));
     }
 
@@ -254,6 +276,37 @@ class InMemoryEphemeralResultStoreTest {
         assertTrue(thrown.getCause() instanceof IllegalStateException);
     }
 
+    @Test
+    @DisplayName("Route result sizing accounts for structural prior audit payloads")
+    void testRouteResultSizingIncludesStructuralPriorAudit() {
+        FutureRouteResultSet withStructuralAudit = routeResultSet(
+                "route-structural",
+                BASE_INSTANT.plus(Duration.ofMinutes(10)),
+                List.of("N0", "N1")
+        );
+        ScenarioBundle withoutStructuralAuditBundle = ScenarioBundle.builder()
+                .scenarioBundleId(withStructuralAudit.getScenarioBundle().getScenarioBundleId())
+                .generatedAt(withStructuralAudit.getScenarioBundle().getGeneratedAt())
+                .validUntil(withStructuralAudit.getScenarioBundle().getValidUntil())
+                .horizonTicks(withStructuralAudit.getScenarioBundle().getHorizonTicks())
+                .topologyVersion(withStructuralAudit.getScenarioBundle().getTopologyVersion())
+                .quarantineSnapshotId(withStructuralAudit.getScenarioBundle().getQuarantineSnapshotId())
+                .scenario(ScenarioDefinition.builder()
+                        .scenarioId("baseline")
+                        .label("baseline")
+                        .probability(1.0d)
+                        .build())
+                .build();
+        FutureRouteResultSet withoutStructuralAudit = withStructuralAudit.toBuilder()
+                .scenarioBundle(withoutStructuralAuditBundle)
+                .build();
+
+        assertTrue(
+                FutureResultStoreSizing.estimateRouteResultSet(withStructuralAudit)
+                        > FutureResultStoreSizing.estimateRouteResultSet(withoutStructuralAudit)
+        );
+    }
+
     private FutureRouteResultSet routeResultSet(String resultSetId, Instant expiresAt, List<String> pathNodes) {
         TopologyVersion topologyVersion = topologyVersion();
         ScenarioRouteSelection selection = ScenarioRouteSelection.builder()
@@ -270,7 +323,11 @@ class InMemoryEphemeralResultStoreTest {
                 .minArrivalTicks(10L)
                 .maxArrivalTicks(10L)
                 .optimalityProbability(1.0d)
+                .expectedRegret(0.0f)
+                .etaBandLowerArrivalTicks(10L)
+                .etaBandUpperArrivalTicks(10L)
                 .dominantScenarioId("baseline")
+                .dominantScenarioProbability(1.0d)
                 .dominantScenarioLabel("baseline")
                 .routeSelectionProvenance(RouteSelectionProvenance.SCENARIO_OPTIMAL)
                 .build();
@@ -299,6 +356,7 @@ class InMemoryEphemeralResultStoreTest {
                                 .scenarioId("baseline")
                                 .label("baseline")
                                 .probability(1.0d)
+                                .probabilityAudit(structuralAudit())
                                 .build())
                         .build())
                 .candidateDensityCalibrationReport(CandidateDensityCalibrationReport.builder()
@@ -331,6 +389,25 @@ class InMemoryEphemeralResultStoreTest {
                                 .settledStates(1)
                                 .pathExternalNodeIds(pathNodes)
                                 .build())
+                        .build())
+                .build();
+    }
+
+    private ScenarioProbabilityAudit structuralAudit() {
+        return ScenarioProbabilityAudit.builder()
+                .policyId("b4-recency-v1")
+                .evidenceSource("quarantine")
+                .freshnessWeight(0.8d)
+                .horizonWeight(0.9d)
+                .baseProbability(0.65d)
+                .adjustedProbability(1.0d)
+                .structuralPriorAudit(ScenarioStructuralPriorAudit.builder()
+                        .policyId("b6-structural-prior-v1")
+                        .normalizedDegreeScore(0.75d)
+                        .centeredDegreeSignal(0.5d)
+                        .appliedAdjustment(0.025d)
+                        .homophilyScore(0.6d)
+                        .affectedEdgeCount(2)
                         .build())
                 .build();
     }

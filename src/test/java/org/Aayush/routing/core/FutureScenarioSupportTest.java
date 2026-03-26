@@ -5,6 +5,7 @@ import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.future.ScenarioBundle;
 import org.Aayush.routing.future.ScenarioDefinition;
 import org.Aayush.routing.future.ScenarioProbabilityAudit;
+import org.Aayush.routing.future.ScenarioStructuralPriorAudit;
 import org.Aayush.routing.overlay.LiveUpdate;
 import org.Aayush.routing.testutil.RoutingFixtureFactory;
 import org.Aayush.routing.topology.FailureQuarantine;
@@ -124,6 +125,31 @@ class FutureScenarioSupportTest {
                 snapshot,
                 quarantineSnapshot
         ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                bundleWithMetadata("", Instant.EPOCH, Instant.EPOCH.plusSeconds(60), 60L, snapshot, quarantineSnapshot),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                bundleWithMetadata("bundle", null, Instant.EPOCH.plusSeconds(60), 60L, snapshot, quarantineSnapshot),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                bundleWithMetadata("bundle", Instant.EPOCH, null, 60L, snapshot, quarantineSnapshot),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                bundleWithMetadata("bundle", Instant.EPOCH, Instant.EPOCH, 60L, snapshot, quarantineSnapshot),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                bundleWithMetadata("bundle", Instant.EPOCH, Instant.EPOCH.plusSeconds(60), 0L, snapshot, quarantineSnapshot),
+                snapshot,
+                quarantineSnapshot
+        ));
 
         assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
                 bundleWithOneScenario(topologyVersion("other"), quarantineSnapshot.snapshotId(), "baseline", 1.0d),
@@ -198,6 +224,187 @@ class FutureScenarioSupportTest {
         assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", 10L, null, 0.5d, 0.75d, 1.0d, 1.0d));
         assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", null, 10L, 0.5d, 0.75d, 1.0d, 1.0d));
         assertInvalidAudit(snapshot, quarantineSnapshot, audit("b4-recency-v1", "test", 10L, -1L, 0.5d, 0.75d, 1.0d, 1.0d));
+        assertInvalidAudit(snapshot, quarantineSnapshot, auditWithStructural(
+                structuralAudit(" ", 0.5d, 0.0d, 0.0d, 0.5d, 1)
+        ));
+        assertInvalidAudit(snapshot, quarantineSnapshot, auditWithStructural(
+                structuralAudit("b6-structural-prior-v1", 1.1d, 0.0d, 0.0d, 0.5d, 1)
+        ));
+        assertInvalidAudit(snapshot, quarantineSnapshot, auditWithStructural(
+                structuralAudit("b6-structural-prior-v1", 0.5d, 1.1d, 0.0d, 0.5d, 1)
+        ));
+        assertInvalidAudit(snapshot, quarantineSnapshot, auditWithStructural(
+                structuralAudit("b6-structural-prior-v1", 0.5d, 0.0d, 1.1d, 0.5d, 1)
+        ));
+        assertInvalidAudit(snapshot, quarantineSnapshot, auditWithStructural(
+                structuralAudit("b6-structural-prior-v1", 0.5d, 0.0d, 0.0d, -0.1d, 1)
+        ));
+        assertInvalidAudit(snapshot, quarantineSnapshot, auditWithStructural(
+                structuralAudit("b6-structural-prior-v1", 0.5d, 0.0d, 0.0d, 0.5d, -1)
+        ));
+    }
+
+    @Test
+    @DisplayName("Scenario bundle validation rejects malformed scenario payloads")
+    void testValidateScenarioBundleRejectsMalformedScenarioPayloads() {
+        TopologyRuntimeSnapshot snapshot = snapshot();
+        FailureQuarantine.Snapshot quarantineSnapshot = snapshot.getFailureQuarantine().snapshot(0L);
+
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("null-scenario")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario((ScenarioDefinition) null)
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("blank-label")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder().scenarioId("baseline").label(" ").probability(1.0d).build())
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("duplicate-scenario-id")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder().scenarioId("baseline").label("baseline").probability(0.5d).build())
+                        .scenario(ScenarioDefinition.builder().scenarioId("baseline").label("other").probability(0.5d).build())
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("blank-tag")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("baseline")
+                                .label("baseline")
+                                .probability(1.0d)
+                                .explanationTag(" ")
+                                .build())
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("duplicate-tag")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("baseline")
+                                .label("baseline")
+                                .probability(1.0d)
+                                .explanationTag("tag-a")
+                                .explanationTag("tag-a")
+                                .build())
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("null-update")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("baseline")
+                                .label("baseline")
+                                .probability(1.0d)
+                                .liveUpdate((LiveUpdate) null)
+                                .build())
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("duplicate-edge-update")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("baseline")
+                                .label("baseline")
+                                .probability(1.0d)
+                                .liveUpdate(LiveUpdate.of(0, 0.5f, 60L))
+                                .liveUpdate(LiveUpdate.of(0, 0.3f, 90L))
+                                .build())
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+        assertThrows(IllegalArgumentException.class, () -> FutureScenarioSupport.validateScenarioBundle(
+                ScenarioBundle.builder()
+                        .scenarioBundleId("out-of-range-edge-update")
+                        .generatedAt(Instant.EPOCH)
+                        .validUntil(Instant.EPOCH.plusSeconds(60))
+                        .horizonTicks(60L)
+                        .topologyVersion(snapshot.getTopologyVersion())
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("baseline")
+                                .label("baseline")
+                                .probability(1.0d)
+                                .liveUpdate(LiveUpdate.of(99, 0.5f, 60L))
+                                .build())
+                        .build(),
+                snapshot,
+                quarantineSnapshot
+        ));
+    }
+
+    private ScenarioBundle bundleWithMetadata(
+            String scenarioBundleId,
+            Instant generatedAt,
+            Instant validUntil,
+            long horizonTicks,
+            TopologyRuntimeSnapshot snapshot,
+            FailureQuarantine.Snapshot quarantineSnapshot
+    ) {
+        return ScenarioBundle.builder()
+                .scenarioBundleId(scenarioBundleId)
+                .generatedAt(generatedAt)
+                .validUntil(validUntil)
+                .horizonTicks(horizonTicks)
+                .topologyVersion(snapshot.getTopologyVersion())
+                .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                .scenario(ScenarioDefinition.builder()
+                        .scenarioId("baseline")
+                        .label("baseline")
+                        .probability(1.0d)
+                        .build())
+                .build();
     }
 
     private ScenarioBundle bundleWithOneScenario(
@@ -250,6 +457,18 @@ class FutureScenarioSupportTest {
         return audit("b4-recency-v1", "test", null, null, 0.5d, 0.75d, 1.0d, adjustedProbability);
     }
 
+    private ScenarioProbabilityAudit auditWithStructural(ScenarioStructuralPriorAudit structuralPriorAudit) {
+        return ScenarioProbabilityAudit.builder()
+                .policyId("b4-recency-v1")
+                .evidenceSource("test")
+                .freshnessWeight(0.5d)
+                .horizonWeight(0.75d)
+                .baseProbability(1.0d)
+                .adjustedProbability(1.0d)
+                .structuralPriorAudit(structuralPriorAudit)
+                .build();
+    }
+
     private ScenarioProbabilityAudit audit(
             String policyId,
             String evidenceSource,
@@ -269,6 +488,24 @@ class FutureScenarioSupportTest {
                 .horizonWeight(horizonWeight)
                 .baseProbability(baseProbability)
                 .adjustedProbability(adjustedProbability)
+                .build();
+    }
+
+    private ScenarioStructuralPriorAudit structuralAudit(
+            String policyId,
+            double normalizedDegreeScore,
+            double centeredDegreeSignal,
+            double appliedAdjustment,
+            double homophilyScore,
+            int affectedEdgeCount
+    ) {
+        return ScenarioStructuralPriorAudit.builder()
+                .policyId(policyId)
+                .normalizedDegreeScore(normalizedDegreeScore)
+                .centeredDegreeSignal(centeredDegreeSignal)
+                .appliedAdjustment(appliedAdjustment)
+                .homophilyScore(homophilyScore)
+                .affectedEdgeCount(affectedEdgeCount)
                 .build();
     }
 

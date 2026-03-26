@@ -161,7 +161,11 @@ class TopologyReloadCoordinatorTest {
                 .minArrivalTicks(1L)
                 .maxArrivalTicks(1L)
                 .optimalityProbability(1.0d)
+                .expectedRegret(0.0f)
+                .etaBandLowerArrivalTicks(1L)
+                .etaBandUpperArrivalTicks(1L)
                 .dominantScenarioId("baseline")
+                .dominantScenarioProbability(1.0d)
                 .dominantScenarioLabel("baseline")
                 .routeSelectionProvenance(RouteSelectionProvenance.SCENARIO_OPTIMAL)
                 .build();

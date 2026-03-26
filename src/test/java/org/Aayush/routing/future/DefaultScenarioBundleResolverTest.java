@@ -85,7 +85,7 @@ class DefaultScenarioBundleResolverTest {
 
         ScenarioDefinition incidentPersists = bundle.getScenarios().get(0);
         assertEquals("incident_persists", incidentPersists.getScenarioId());
-        assertEquals(List.of("node_down", "ops"), incidentPersists.getExplanationTags());
+        assertTrue(incidentPersists.getExplanationTags().containsAll(List.of("node_down", "ops")));
         assertEquals(List.of(0, 1), incidentPersists.getLiveUpdates().stream().map(update -> update.edgeId()).toList());
         assertTrue(incidentPersists.getLiveUpdates().stream().allMatch(update -> update.validUntilTicks() == 1_000L));
         assertNotNull(incidentPersists.getProbabilityAudit());
@@ -99,6 +99,82 @@ class DefaultScenarioBundleResolverTest {
         assertTrue(clearingFast.getLiveUpdates().stream().allMatch(update -> update.validUntilTicks() == 104L));
         assertNotNull(clearingFast.getProbabilityAudit());
         assertNull(clearingFast.getProbabilityAudit().getObservedAtTicks());
+    }
+
+    @Test
+    @DisplayName("Degree-aware incident priors emit structural audit metadata and preserve normalized mass")
+    void testStructuralPriorAuditIsExposedOnIncidentSplit() {
+        long departureTicks = Instant.parse("2026-03-23T07:00:00Z").getEpochSecond();
+        TopologyModelSource source = structuralHubSource();
+        TopologyRuntimeSnapshot snapshot = snapshot(source);
+        snapshot.getFailureQuarantine().quarantineEdge(1, departureTicks + Duration.ofHours(2).toSeconds(), departureTicks - 60L, "edge_down", "ops");
+        DefaultScenarioBundleResolver resolver = new DefaultScenarioBundleResolver();
+
+        ScenarioBundle bundle = resolver.resolve(
+                futureRouteRequest(departureTicks, Duration.ofHours(2).toSeconds()),
+                costEngine(source),
+                TemporalTestContexts.calendarUtc(),
+                snapshot.getTopologyVersion(),
+                snapshot.getFailureQuarantine().snapshot(departureTicks),
+                FIXED_CLOCK
+        );
+
+        ScenarioDefinition incidentPersists = bundle.getScenarios().getFirst();
+        assertTrue(incidentPersists.getExplanationTags().contains("structural_prior_present"));
+        assertTrue(incidentPersists.getExplanationTags().contains("degree_prior_high"));
+        assertTrue(incidentPersists.getExplanationTags().contains("homophily_high"));
+        assertNotNull(incidentPersists.getProbabilityAudit());
+        assertNotNull(incidentPersists.getProbabilityAudit().getStructuralPriorAudit());
+        assertEquals(1, incidentPersists.getProbabilityAudit().getStructuralPriorAudit().getAffectedEdgeCount());
+        assertTrue(incidentPersists.getProbabilityAudit().getStructuralPriorAudit().getAppliedAdjustment() > 0.0d);
+        assertEquals(1.0d, bundle.getScenarios().stream().mapToDouble(ScenarioDefinition::getProbability).sum(), 1.0e-9d);
+    }
+
+    @Test
+    @DisplayName("Single-argument constructor keeps default structural policy and classifies heterophilic neighborhoods")
+    void testSingleArgumentConstructorUsesDefaultStructuralPolicy() {
+        long departureTicks = Instant.parse("2026-03-23T07:00:00Z").getEpochSecond();
+        DefaultScenarioBundleResolver resolver = new DefaultScenarioBundleResolver(RecencyCalibrationConfig.defaults());
+
+        TopologyRuntimeSnapshot highSnapshot = snapshot(structuralHubSource());
+        highSnapshot.getFailureQuarantine().quarantineEdge(
+                1,
+                departureTicks + Duration.ofHours(2).toSeconds(),
+                departureTicks - 60L,
+                "edge_down",
+                "ops"
+        );
+        ScenarioDefinition high = resolver.resolve(
+                futureRouteRequest(departureTicks, Duration.ofHours(2).toSeconds()),
+                costEngine(structuralHubSource()),
+                TemporalTestContexts.calendarUtc(),
+                highSnapshot.getTopologyVersion(),
+                highSnapshot.getFailureQuarantine().snapshot(departureTicks),
+                FIXED_CLOCK
+        ).getScenarios().getFirst();
+
+        TopologyModelSource lowHomophilySource = heterophilicStructuralSource();
+        TopologyRuntimeSnapshot lowSnapshot = snapshot(lowHomophilySource);
+        lowSnapshot.getFailureQuarantine().quarantineEdge(
+                1,
+                departureTicks + Duration.ofHours(2).toSeconds(),
+                departureTicks - 60L,
+                "edge_down",
+                "ops"
+        );
+        ScenarioDefinition low = resolver.resolve(
+                futureRouteRequest(departureTicks, Duration.ofHours(2).toSeconds()),
+                costEngine(lowHomophilySource),
+                TemporalTestContexts.calendarUtc(),
+                lowSnapshot.getTopologyVersion(),
+                lowSnapshot.getFailureQuarantine().snapshot(departureTicks),
+                FIXED_CLOCK
+        ).getScenarios().getFirst();
+
+        assertEquals("b6-structural-prior-v1", high.getProbabilityAudit().getStructuralPriorAudit().getPolicyId());
+        assertTrue(high.getExplanationTags().contains("homophily_high"));
+        assertTrue(low.getExplanationTags().contains("homophily_low"));
+        assertEquals(1, low.getProbabilityAudit().getStructuralPriorAudit().getAffectedEdgeCount());
     }
 
     @Test
@@ -255,6 +331,60 @@ class DefaultScenarioBundleResolverTest {
                 .build();
     }
 
+    private TopologyModelSource structuralHubSource() {
+        return TopologyModelSource.builder()
+                .modelVersion("resolver-structural-hub")
+                .profileTimezone("UTC")
+                .profile(TopologyModelSource.ProfileDefinition.builder()
+                        .profileId(1)
+                        .dayMask(0x7F)
+                        .bucket(1.0f)
+                        .multiplier(1.0f)
+                        .build())
+                .node(node("N0", 0.0d, 0.0d))
+                .node(node("N1", 1.0d, 0.0d))
+                .node(node("N2", 2.0d, 0.0d))
+                .node(node("N3", 1.0d, 1.0d))
+                .node(node("N4", 2.0d, 1.0d))
+                .node(node("N5", 2.0d, -1.0d))
+                .edge(edge("E01", "N0", "N1"))
+                .edge(edge("E12", "N1", "N2"))
+                .edge(edge("E13", "N1", "N3"))
+                .edge(edge("E24", "N2", "N4"))
+                .edge(edge("E25", "N2", "N5"))
+                .build();
+    }
+
+    private TopologyModelSource heterophilicStructuralSource() {
+        return TopologyModelSource.builder()
+                .modelVersion("resolver-structural-heterophily")
+                .profileTimezone("UTC")
+                .profile(TopologyModelSource.ProfileDefinition.builder()
+                        .profileId(1)
+                        .dayMask(0x7F)
+                        .bucket(1.0f)
+                        .multiplier(1.0f)
+                        .build())
+                .profile(TopologyModelSource.ProfileDefinition.builder()
+                        .profileId(2)
+                        .dayMask(0x7F)
+                        .bucket(1.0f)
+                        .multiplier(1.0f)
+                        .build())
+                .node(node("N0", 0.0d, 0.0d))
+                .node(node("N1", 1.0d, 0.0d))
+                .node(node("N2", 2.0d, 0.0d))
+                .node(node("N3", 1.0d, 1.0d))
+                .node(node("N4", 2.0d, 1.0d))
+                .node(node("N5", 2.0d, -1.0d))
+                .edge(edge("E01", "N0", "N1", 2))
+                .edge(edge("E12", "N1", "N2", 1))
+                .edge(edge("E13", "N1", "N3", 2))
+                .edge(edge("E24", "N2", "N4", 2))
+                .edge(edge("E25", "N2", "N5", 2))
+                .build();
+    }
+
     private ProfileRecurrenceCalibrationStore recurrenceCalibrationStore(TopologyModelSource source) {
         Map<Integer, ProfileRecurrenceCalibrationStore.ProfileRecurrenceCalibration> calibrationByProfileId = new HashMap<>();
         for (TopologyModelSource.ProfileDefinition profile : source.getProfiles()) {
@@ -304,12 +434,21 @@ class DefaultScenarioBundleResolverTest {
     }
 
     private TopologyModelSource.EdgeDefinition edge(String edgeId, String originNodeId, String destinationNodeId) {
+        return edge(edgeId, originNodeId, destinationNodeId, 1);
+    }
+
+    private TopologyModelSource.EdgeDefinition edge(
+            String edgeId,
+            String originNodeId,
+            String destinationNodeId,
+            int profileId
+    ) {
         return TopologyModelSource.EdgeDefinition.builder()
                 .edgeId(edgeId)
                 .originNodeId(originNodeId)
                 .destinationNodeId(destinationNodeId)
                 .baseWeight(1.0f)
-                .profileId(1)
+                .profileId(profileId)
                 .build();
     }
 }

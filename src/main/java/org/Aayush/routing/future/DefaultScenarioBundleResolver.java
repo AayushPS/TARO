@@ -2,6 +2,7 @@ package org.Aayush.routing.future;
 
 import org.Aayush.core.time.TimeUtils;
 import org.Aayush.routing.cost.CostEngine;
+import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.overlay.LiveUpdate;
 import org.Aayush.routing.profile.ProfileRecurrenceCalibrationStore;
 import org.Aayush.routing.profile.ProfileRecencyCalibrationStore;
@@ -21,7 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * Default bounded resolver that turns active quarantines and recurring profile signals
@@ -48,15 +48,36 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
     private static final String TAG_RECURRENT_CALIBRATION_DERIVED = "recurrent_calibration_derived";
     private static final String TAG_RECURRENT_SIGNAL_REJECTED = "recurrent_signal_rejected";
     private static final String TAG_RECOVERY_EXPECTED = "recovery_expected";
+    private static final String TAG_STRUCTURAL_PRIOR_PRESENT = "structural_prior_present";
+    private static final String TAG_DEGREE_PRIOR_LOW = "degree_prior_low";
+    private static final String TAG_DEGREE_PRIOR_NEUTRAL = "degree_prior_neutral";
+    private static final String TAG_DEGREE_PRIOR_HIGH = "degree_prior_high";
+    private static final String TAG_HOMOPHILY_LOW = "homophily_low";
+    private static final String TAG_HOMOPHILY_MIXED = "homophily_mixed";
+    private static final String TAG_HOMOPHILY_HIGH = "homophily_high";
+    private static final double DEGREE_PRIOR_LOW_MAX = 0.33d;
+    private static final double DEGREE_PRIOR_HIGH_MIN = 0.67d;
 
     private final RecencyCalibrationConfig recencyCalibrationConfig;
+    private final StructuralPriorCalibrationConfig structuralPriorCalibrationConfig;
 
     public DefaultScenarioBundleResolver() {
-        this(RecencyCalibrationConfig.defaults());
+        this(RecencyCalibrationConfig.defaults(), StructuralPriorCalibrationConfig.defaults());
     }
 
     public DefaultScenarioBundleResolver(RecencyCalibrationConfig recencyCalibrationConfig) {
+        this(recencyCalibrationConfig, StructuralPriorCalibrationConfig.defaults());
+    }
+
+    public DefaultScenarioBundleResolver(
+            RecencyCalibrationConfig recencyCalibrationConfig,
+            StructuralPriorCalibrationConfig structuralPriorCalibrationConfig
+    ) {
         this.recencyCalibrationConfig = Objects.requireNonNull(recencyCalibrationConfig, "recencyCalibrationConfig");
+        this.structuralPriorCalibrationConfig = Objects.requireNonNull(
+                structuralPriorCalibrationConfig,
+                "structuralPriorCalibrationConfig"
+        );
     }
 
     @Override
@@ -76,16 +97,11 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
         Clock nonNullClock = Objects.requireNonNull(clock, "clock");
 
         Instant now = nonNullClock.instant();
+        Instant validUntil = now.plus(request.getResultTtl());
         ResolvedRecencyCalibration resolvedCalibration =
                 resolveCalibrationTicks(nonNullBaseCostEngine.engineTimeUnit());
         double horizonWeight = horizonWeight(request.getHorizonTicks(), resolvedCalibration.horizonHalfLifeTicks());
-        ScenarioBundle.ScenarioBundleBuilder bundle = ScenarioBundle.builder()
-                .scenarioBundleId(UUID.randomUUID().toString())
-                .generatedAt(now)
-                .validUntil(now.plus(request.getResultTtl()))
-                .horizonTicks(request.getHorizonTicks())
-                .topologyVersion(topologyVersion)
-                .quarantineSnapshotId(quarantineSnapshot.snapshotId());
+        ArrayList<ScenarioDefinition> scenarios = new ArrayList<>();
         RecurringSignalSummary recurringSignal = recurringSignalSummary(
                 request,
                 nonNullBaseCostEngine,
@@ -95,23 +111,23 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
         );
 
         if (!quarantineSnapshot.hasActiveFailures()) {
-            bundle.scenario(ScenarioDefinition.builder()
+            scenarios.add(ScenarioDefinition.builder()
                     .scenarioId("baseline")
                     .label("baseline")
                     .probability(recurringSignal.hasScenario() ? 1.0d - recurringSignal.scenarioProbability() : 1.0d)
-                    .explanationTags(recurringSignal.baselineTags())
+                    .explanationTags(mergeTags(recurringSignal.baselineTags(), recurringSignal.structuralTags()))
                     .build());
             if (recurringSignal.hasScenario()) {
-                bundle.scenario(ScenarioDefinition.builder()
+                scenarios.add(ScenarioDefinition.builder()
                         .scenarioId(recurringSignal.scenarioId())
                         .label(recurringSignal.scenarioLabel())
                         .probability(recurringSignal.scenarioProbability())
                         .probabilityAudit(recurringSignal.probabilityAudit())
-                        .explanationTags(recurringSignal.scenarioTags())
+                        .explanationTags(mergeTags(recurringSignal.scenarioTags(), recurringSignal.structuralTags()))
                         .liveUpdates(recurringSignal.scenarioUpdates())
                         .build());
             }
-            return bundle.build();
+            return buildBundle(request, nonNullTemporalContext, topologyVersion, quarantineSnapshot, now, validUntil, scenarios);
         }
 
         List<String> explanationTags = mergeTags(quarantineSnapshot.explanationTags(), recurringSignal.baselineTags());
@@ -119,26 +135,33 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
         long clearAtTicks = saturatingAdd(departureTicks, Math.max(1L, request.getHorizonTicks() / 2L));
         QuarantineProbabilitySplit probabilitySplit = quarantineProbabilitySplit(
                 request,
+                nonNullBaseCostEngine,
                 quarantineSnapshot,
                 horizonWeight,
                 resolvedCalibration
         );
 
-        bundle.scenario(ScenarioDefinition.builder()
+        scenarios.add(ScenarioDefinition.builder()
                 .scenarioId("incident_persists")
                 .label("incident_persists")
                 .probability(probabilitySplit.incidentPersistsProbability())
                 .probabilityAudit(probabilitySplit.incidentPersistsAudit())
-                .explanationTags(mergeTags(explanationTags, recurringSignal.scenarioTags()))
+                .explanationTags(mergeTags(
+                        mergeTags(explanationTags, recurringSignal.scenarioTags()),
+                        probabilitySplit.structuralTags()
+                ))
                 .liveUpdates(mergeLiveUpdates(
-                        quarantineSnapshot.toLiveUpdates(),
+                        quarantineSnapshot.toLiveUpdates(nonNullBaseCostEngine.edgeGraph()),
                         recurringSignal.scenarioUpdates()
                 ))
                 .build());
 
-        ArrayList<String> clearingTags = new ArrayList<>(mergeTags(explanationTags, recurringSignal.scenarioTags()));
+        ArrayList<String> clearingTags = new ArrayList<>(mergeTags(
+                mergeTags(explanationTags, recurringSignal.scenarioTags()),
+                probabilitySplit.structuralTags()
+        ));
         appendTag(clearingTags, TAG_RECOVERY_EXPECTED);
-        bundle.scenario(ScenarioDefinition.builder()
+        scenarios.add(ScenarioDefinition.builder()
                 .scenarioId("clearing_fast")
                 .label("clearing_fast")
                 .probability(probabilitySplit.clearingFastProbability())
@@ -150,7 +173,33 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                 ))
                 .build());
 
-        return bundle.build();
+        return buildBundle(request, nonNullTemporalContext, topologyVersion, quarantineSnapshot, now, validUntil, scenarios);
+    }
+
+    private ScenarioBundle buildBundle(
+            ScenarioBundleRequest request,
+            ResolvedTemporalContext temporalContext,
+            TopologyVersion topologyVersion,
+            FailureQuarantine.Snapshot quarantineSnapshot,
+            Instant generatedAt,
+            Instant validUntil,
+            List<ScenarioDefinition> scenarios
+    ) {
+        return ScenarioBundle.builder()
+                .scenarioBundleId(ScenarioBundleIdentityHasher.stableBundleId(
+                        request,
+                        temporalContext,
+                        topologyVersion,
+                        quarantineSnapshot,
+                        scenarios
+                ))
+                .generatedAt(generatedAt)
+                .validUntil(validUntil)
+                .horizonTicks(request.getHorizonTicks())
+                .topologyVersion(topologyVersion)
+                .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                .scenarios(scenarios)
+                .build();
     }
 
     private RecurringSignalSummary recurringSignalSummary(
@@ -219,6 +268,7 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                     null,
                     List.of(),
                     List.of(),
+                    List.of(),
                     true
             );
         }
@@ -272,6 +322,7 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
         int updateBudget = updateBudget(summaryConfidence, totalObservations);
 
         ArrayList<LiveUpdate> updates = new ArrayList<>(Math.min(updateBudget, candidates.size()));
+        ArrayList<WeightedScenarioEdge> selectedEdges = new ArrayList<>(Math.min(updateBudget, candidates.size()));
         for (int i = 0; i < candidates.size() && i < updateBudget; i++) {
             RecurringEdgeCandidate candidate = candidates.get(i);
             updates.add(LiveUpdate.of(
@@ -280,9 +331,20 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                     candidate.validFromTicks(),
                     candidate.validUntilTicks()
             ));
+            selectedEdges.add(new WeightedScenarioEdge(candidate.edgeId(), candidate.severity()));
         }
 
         boolean recurringIncident = incidentSeverity > routineSeverity;
+        StructuralPriorSummary structuralPrior = recurringIncident
+                ? structuralPriorSummary(selectedEdges, baseCostEngine.edgeGraph(), freshnessWeight, horizonWeight, true)
+                : StructuralPriorSummary.empty();
+        double adjustedScenarioProbability = recurringIncident
+                ? clamp(
+                scenarioProbability + structuralPrior.appliedAdjustment(),
+                MIN_RECURRENT_SCENARIO_PROBABILITY,
+                MAX_RECURRENT_SCENARIO_PROBABILITY
+        )
+                : scenarioProbability;
         String scenarioId = recurringIncident ? TAG_RECURRING_INCIDENT_PEAK : TAG_PERIODIC_PEAK;
         String scenarioPresenceTag = recurringIncident ? TAG_RECURRING_INCIDENT_RISK : TAG_PERIODIC_SIGNAL_PRESENT;
         String confidenceTag = confidenceTag(summaryConfidence);
@@ -302,7 +364,7 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                 List.copyOf(baselineTags),
                 scenarioId,
                 scenarioId,
-                scenarioProbability,
+                adjustedScenarioProbability,
                 buildProbabilityAudit(
                         EVIDENCE_SOURCE_PROFILE_RECENCY,
                         mostRecentObservedAtTicks,
@@ -310,9 +372,11 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                         freshnessWeight,
                         horizonWeight,
                         baseScenarioProbability,
-                        scenarioProbability
+                        adjustedScenarioProbability,
+                        structuralPrior.audit()
                 ),
                 List.copyOf(scenarioTags),
+                structuralPrior.tags(),
                 List.copyOf(updates),
                 weakSignalSeen
         );
@@ -474,6 +538,7 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
 
     private QuarantineProbabilitySplit quarantineProbabilitySplit(
             ScenarioBundleRequest request,
+            CostEngine baseCostEngine,
             FailureQuarantine.Snapshot quarantineSnapshot,
             double horizonWeight,
             ResolvedRecencyCalibration resolvedCalibration
@@ -485,9 +550,18 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                 freshestObservedAtTicks,
                 resolvedCalibration.freshnessHalfLifeTicks()
         );
+        List<LiveUpdate> updates = quarantineSnapshot.toLiveUpdates(baseCostEngine.edgeGraph());
+        StructuralPriorSummary structuralPrior = structuralPriorSummary(
+                toWeightedScenarioEdges(updates),
+                baseCostEngine.edgeGraph(),
+                freshnessWeight,
+                horizonWeight,
+                true
+        );
         double incidentPersistsProbability = clamp(
                 recencyCalibrationConfig.incidentPersistsBaseProbability()
-                        + (recencyCalibrationConfig.incidentPersistsRange() * freshnessWeight * horizonWeight),
+                        + (recencyCalibrationConfig.incidentPersistsRange() * freshnessWeight * horizonWeight)
+                        + structuralPrior.appliedAdjustment(),
                 recencyCalibrationConfig.minIncidentPersistsProbability(),
                 recencyCalibrationConfig.maxIncidentPersistsProbability()
         );
@@ -502,7 +576,8 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                         freshnessWeight,
                         horizonWeight,
                         INCIDENT_PERSISTS_PROBABILITY,
-                        incidentPersistsProbability
+                        incidentPersistsProbability,
+                        structuralPrior.audit()
                 ),
                 buildProbabilityAudit(
                         EVIDENCE_SOURCE_QUARANTINE,
@@ -511,8 +586,10 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                         freshnessWeight,
                         horizonWeight,
                         CLEARING_FAST_PROBABILITY,
-                        clearingFastProbability
-                )
+                        clearingFastProbability,
+                        structuralPrior.audit()
+                ),
+                structuralPrior.tags()
         );
     }
 
@@ -646,7 +723,8 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
             double freshnessWeight,
             double horizonWeight,
             double baseProbability,
-            double adjustedProbability
+            double adjustedProbability,
+            ScenarioStructuralPriorAudit structuralPriorAudit
     ) {
         Long evidenceAgeTicks = observedAtTicks == null ? null : Math.max(0L, departureTicks - observedAtTicks);
         return ScenarioProbabilityAudit.builder()
@@ -658,7 +736,149 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                 .horizonWeight(horizonWeight)
                 .baseProbability(baseProbability)
                 .adjustedProbability(adjustedProbability)
+                .structuralPriorAudit(structuralPriorAudit)
                 .build();
+    }
+
+    private StructuralPriorSummary structuralPriorSummary(
+            List<WeightedScenarioEdge> affectedEdges,
+            EdgeGraph edgeGraph,
+            double freshnessWeight,
+            double horizonWeight,
+            boolean applyDegreeAdjustment
+    ) {
+        if (affectedEdges == null || affectedEdges.isEmpty()) {
+            return StructuralPriorSummary.empty();
+        }
+
+        int maxDegree = 0;
+        for (int nodeId = 0; nodeId < edgeGraph.nodeCount(); nodeId++) {
+            maxDegree = Math.max(maxDegree, edgeGraph.getNodeDegree(nodeId));
+        }
+        boolean hasDegreeSpread = maxDegree > 1;
+        double weightedDegreeScore = 0.0d;
+        double weightedHomophilyScore = 0.0d;
+        double totalWeight = 0.0d;
+        for (WeightedScenarioEdge affectedEdge : affectedEdges) {
+            if (!Double.isFinite(affectedEdge.weight()) || affectedEdge.weight() <= 0.0d) {
+                continue;
+            }
+            weightedDegreeScore += edgeDegreeScore(affectedEdge.edgeId(), edgeGraph, maxDegree) * affectedEdge.weight();
+            weightedHomophilyScore += edgeHomophilyScore(affectedEdge.edgeId(), edgeGraph) * affectedEdge.weight();
+            totalWeight += affectedEdge.weight();
+        }
+        if (!(totalWeight > 0.0d)) {
+            return StructuralPriorSummary.empty();
+        }
+
+        double normalizedDegreeScore = clamp(weightedDegreeScore / totalWeight, 0.0d, 1.0d);
+        double homophilyScore = clamp(weightedHomophilyScore / totalWeight, 0.0d, 1.0d);
+        double centeredDegreeSignal = hasDegreeSpread ? clamp((2.0d * normalizedDegreeScore) - 1.0d, -1.0d, 1.0d) : 0.0d;
+        double appliedAdjustment = applyDegreeAdjustment
+                ? centeredDegreeSignal
+                * structuralPriorCalibrationConfig.degreeAdjustmentRange()
+                * freshnessWeight
+                * horizonWeight
+                : 0.0d;
+
+        ArrayList<String> tags = new ArrayList<>();
+        appendTag(tags, TAG_STRUCTURAL_PRIOR_PRESENT);
+        appendTag(tags, degreeTag(normalizedDegreeScore, hasDegreeSpread));
+        appendTag(tags, homophilyTag(homophilyScore));
+
+        return new StructuralPriorSummary(
+                List.copyOf(tags),
+                ScenarioStructuralPriorAudit.builder()
+                        .policyId(structuralPriorCalibrationConfig.policyId())
+                        .normalizedDegreeScore(normalizedDegreeScore)
+                        .centeredDegreeSignal(centeredDegreeSignal)
+                        .appliedAdjustment(appliedAdjustment)
+                        .homophilyScore(homophilyScore)
+                        .affectedEdgeCount(affectedEdges.size())
+                        .build(),
+                appliedAdjustment
+        );
+    }
+
+    private List<WeightedScenarioEdge> toWeightedScenarioEdges(List<LiveUpdate> updates) {
+        if (updates == null || updates.isEmpty()) {
+            return List.of();
+        }
+        ArrayList<WeightedScenarioEdge> weightedEdges = new ArrayList<>(updates.size());
+        for (LiveUpdate update : updates) {
+            weightedEdges.add(new WeightedScenarioEdge(update.edgeId(), 1.0d));
+        }
+        return List.copyOf(weightedEdges);
+    }
+
+    private double edgeDegreeScore(int edgeId, EdgeGraph edgeGraph, int maxDegree) {
+        if (maxDegree <= 1) {
+            return 0.0d;
+        }
+        return clamp((
+                normalizedNodeDegree(edgeGraph.getEdgeOrigin(edgeId), edgeGraph, maxDegree)
+                        + normalizedNodeDegree(edgeGraph.getEdgeDestination(edgeId), edgeGraph, maxDegree)
+        ) / 2.0d, 0.0d, 1.0d);
+    }
+
+    private double normalizedNodeDegree(int nodeId, EdgeGraph edgeGraph, int maxDegree) {
+        if (maxDegree <= 1) {
+            return 0.0d;
+        }
+        return clamp((double) (edgeGraph.getNodeDegree(nodeId) - 1) / (double) (maxDegree - 1), 0.0d, 1.0d);
+    }
+
+    private double edgeHomophilyScore(int edgeId, EdgeGraph edgeGraph) {
+        int profileId = edgeGraph.getProfileId(edgeId);
+        double originRatio = nodeHomophilyRatio(edgeGraph.getEdgeOrigin(edgeId), profileId, edgeGraph);
+        double destinationRatio = nodeHomophilyRatio(edgeGraph.getEdgeDestination(edgeId), profileId, edgeGraph);
+        if (Double.isNaN(originRatio) && Double.isNaN(destinationRatio)) {
+            return 0.5d;
+        }
+        if (Double.isNaN(originRatio)) {
+            return destinationRatio;
+        }
+        if (Double.isNaN(destinationRatio)) {
+            return originRatio;
+        }
+        return clamp((originRatio + destinationRatio) / 2.0d, 0.0d, 1.0d);
+    }
+
+    private double nodeHomophilyRatio(int nodeId, int profileId, EdgeGraph edgeGraph) {
+        EdgeGraph.EdgeIterator iterator = edgeGraph.iterator().resetForNode(nodeId);
+        int sameProfileCount = 0;
+        int totalCount = 0;
+        while (iterator.hasNext()) {
+            int outgoingEdgeId = iterator.next();
+            totalCount++;
+            if (edgeGraph.getProfileId(outgoingEdgeId) == profileId) {
+                sameProfileCount++;
+            }
+        }
+        return totalCount == 0 ? Double.NaN : (double) sameProfileCount / (double) totalCount;
+    }
+
+    private static String degreeTag(double normalizedDegreeScore, boolean hasDegreeSpread) {
+        if (!hasDegreeSpread) {
+            return TAG_DEGREE_PRIOR_NEUTRAL;
+        }
+        if (normalizedDegreeScore <= DEGREE_PRIOR_LOW_MAX) {
+            return TAG_DEGREE_PRIOR_LOW;
+        }
+        if (normalizedDegreeScore >= DEGREE_PRIOR_HIGH_MIN) {
+            return TAG_DEGREE_PRIOR_HIGH;
+        }
+        return TAG_DEGREE_PRIOR_NEUTRAL;
+    }
+
+    private String homophilyTag(double homophilyScore) {
+        if (homophilyScore <= structuralPriorCalibrationConfig.homophilyLowThreshold()) {
+            return TAG_HOMOPHILY_LOW;
+        }
+        if (homophilyScore >= structuralPriorCalibrationConfig.homophilyHighThreshold()) {
+            return TAG_HOMOPHILY_HIGH;
+        }
+        return TAG_HOMOPHILY_MIXED;
     }
 
     private static long saturatingAdd(long left, long right) {
@@ -720,11 +940,12 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
             double scenarioProbability,
             ScenarioProbabilityAudit probabilityAudit,
             List<String> scenarioTags,
+            List<String> structuralTags,
             List<LiveUpdate> scenarioUpdates,
             boolean weakSignalSeen
     ) {
         static RecurringSignalSummary empty() {
-            return new RecurringSignalSummary(List.of(), null, null, 0.0d, null, List.of(), List.of(), false);
+            return new RecurringSignalSummary(List.of(), null, null, 0.0d, null, List.of(), List.of(), List.of(), false);
         }
 
         boolean hasScenario() {
@@ -736,8 +957,22 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
             double incidentPersistsProbability,
             double clearingFastProbability,
             ScenarioProbabilityAudit incidentPersistsAudit,
-            ScenarioProbabilityAudit clearingFastAudit
+            ScenarioProbabilityAudit clearingFastAudit,
+            List<String> structuralTags
     ) {
+    }
+
+    private record StructuralPriorSummary(
+            List<String> tags,
+            ScenarioStructuralPriorAudit audit,
+            double appliedAdjustment
+    ) {
+        static StructuralPriorSummary empty() {
+            return new StructuralPriorSummary(List.of(), null, 0.0d);
+        }
+    }
+
+    private record WeightedScenarioEdge(int edgeId, double weight) {
     }
 
     private record ResolvedRecencyCalibration(long freshnessHalfLifeTicks, long horizonHalfLifeTicks) {

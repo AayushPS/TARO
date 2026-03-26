@@ -7,7 +7,9 @@ import lombok.Value;
 import java.util.List;
 
 /**
- * Aggregate summary for one selected route across all scenarios.
+ * Stage C4 aggregate summary for one selected route across all scenarios.
+ * Satisfies closure criterion: explanation and confidence fields remain consistent with
+ * scenario probabilities and aggregate objectives.
  */
 @Value
 @Builder(toBuilder = true)
@@ -21,7 +23,11 @@ public class ScenarioRouteSelection {
     long minArrivalTicks;
     long maxArrivalTicks;
     double optimalityProbability;
+    float expectedRegret;
+    long etaBandLowerArrivalTicks;
+    long etaBandUpperArrivalTicks;
     String dominantScenarioId;
+    double dominantScenarioProbability;
     String dominantScenarioLabel;
     RouteSelectionProvenance routeSelectionProvenance;
     @Singular("explanationTag")

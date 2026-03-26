@@ -15,6 +15,7 @@ ResearchData/*
 *.taro
 __pycache__/
 *.pyc
+docs/agent_work/
 
 ### IntelliJ IDEA ###
 .idea/
