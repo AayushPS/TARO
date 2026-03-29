@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.venv
+target
+coverage
+node_modules
+taro-frontend/node_modules
+ResearchData
+docs
+sample-data
+*.log

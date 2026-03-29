@@ -127,6 +127,35 @@ Then open:
 - `http://127.0.0.1:8080/admin`
 - `http://127.0.0.1:8080/query`
 
+## Render Deployment
+
+TARO can now be deployed as one containerized service on Render. The repo root
+includes:
+
+- `Dockerfile` for a multi-stage build that:
+  - builds `taro-frontend/`
+  - embeds the built assets into `src/main/resources/static/`
+  - packages the Spring Boot jar
+- `render.yaml` for a Docker-based Render web service
+- `src/main/resources/application.properties` so Spring binds to Render's `PORT`
+
+Local container smoke run:
+
+```bash
+docker build -t taro-render .
+docker run --rm -p 10000:10000 -e PORT=10000 taro-render
+```
+
+Then open:
+
+- `http://127.0.0.1:10000/admin`
+- `http://127.0.0.1:10000/query`
+- `http://127.0.0.1:10000/api/v1/health`
+
+On Render, create a Blueprint from this repo or point a Docker web service at
+the root `Dockerfile`. The service health check path should stay
+`/api/v1/health`.
+
 ## Architectural Through-Line
 
 TARO now spans three layers of ambition.
