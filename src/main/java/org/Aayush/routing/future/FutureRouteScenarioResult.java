@@ -17,6 +17,7 @@ public class FutureRouteScenarioResult {
     String label;
     double probability;
     RouteResponse route;
+    List<RouteShape.PathPoint> pathPoints;
     @Singular("explanationTag")
     List<String> explanationTags;
 }

@@ -97,7 +97,9 @@ class FutureRouteServiceTest {
         assertEquals("topo-1", resultSet.getTopologyVersion().getTopologyVersion());
         assertEquals("quarantine-topo-1:0", resultSet.getQuarantineSnapshotId());
         assertEquals(List.of("N0", "N1", "N3"), resultSet.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(3, resultSet.getExpectedRoute().getRoute().getPathPoints().size());
         assertEquals(List.of("N0", "N2", "N3"), resultSet.getRobustRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(3, resultSet.getRobustRoute().getRoute().getPathPoints().size());
         assertEquals(2.6f, resultSet.getExpectedRoute().getExpectedCost(), 0.0001f);
         assertEquals(3.0f, resultSet.getRobustRoute().getP90Cost(), 0.0001f);
         assertEquals(0.6d, resultSet.getExpectedRoute().getOptimalityProbability(), 1.0e-9d);
@@ -119,6 +121,7 @@ class FutureRouteServiceTest {
         assertEquals(List.of("N0", "N1", "N3"), resultSet.getAlternatives().get(0).getRoute().getPathExternalNodeIds());
         assertEquals(List.of("N0", "N2", "N3"), resultSet.getAlternatives().get(1).getRoute().getPathExternalNodeIds());
         assertEquals(2, resultSet.getScenarioResults().size());
+        assertEquals(3, resultSet.getScenarioResults().get(0).getPathPoints().size());
         assertEquals(CandidateDensityClass.HIGH_DENSITY, resultSet.getCandidateDensityCalibrationReport().getDensityClass());
         assertEquals(1.0d, resultSet.getCandidateDensityCalibrationReport().getScenarioCoverageRatio(), 1.0e-9d);
         assertEquals(1.0d, resultSet.getCandidateDensityCalibrationReport().getCandidateCoverageRatio(), 1.0e-9d);

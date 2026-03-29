@@ -17,9 +17,14 @@ __pycache__/
 *.pyc
 *.egg-info/
 docs/agent_work/
+taro-frontend/node_modules/
+taro-frontend/dist/
+taro-frontend/.vite/
+taro-frontend/coverage/
 
 ### IntelliJ IDEA ###
-.idea/
+.idea/*
+!.idea/externalDependencies.xml
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml

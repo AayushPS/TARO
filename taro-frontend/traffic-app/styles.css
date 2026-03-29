@@ -1,0 +1,119 @@
+.traffic-shell {
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.traffic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.traffic-header h1 {
+  margin: 12px 0 0;
+  font-family: var(--font-display);
+  font-size: 2rem;
+}
+
+.traffic-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.traffic-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 18px;
+  min-height: calc(100vh - 96px);
+}
+
+.traffic-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.traffic-nav {
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.traffic-nav-active {
+  background: rgba(16, 32, 48, 0.94);
+  color: white;
+}
+
+.traffic-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.traffic-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.traffic-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.traffic-card-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+}
+
+.traffic-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--muted);
+  color: var(--ink-soft);
+}
+
+.traffic-badge-live {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.traffic-badge-paused {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.traffic-badge-error {
+  background: var(--signal-soft);
+  color: var(--signal);
+}
+
+@media (max-width: 900px) {
+  .traffic-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .traffic-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+}

@@ -1,0 +1,65 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
+
+:root {
+  color-scheme: light;
+  --font-sans: "IBM Plex Sans", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --page-bg:
+    radial-gradient(circle at top left, rgba(217, 79, 43, 0.18), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(11, 114, 133, 0.2), transparent 34%),
+    linear-gradient(160deg, #f6efe4 0%, #f3f0ea 60%, #eef8f8 100%);
+  --ink-strong: #102030;
+  --ink: #334155;
+  --ink-soft: #64748b;
+  --line: rgba(16, 32, 48, 0.12);
+  --line-strong: rgba(16, 32, 48, 0.2);
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-strong: rgba(255, 255, 255, 0.94);
+  --accent: #0b7285;
+  --accent-soft: rgba(11, 114, 133, 0.12);
+  --signal: #d94f2b;
+  --signal-soft: rgba(217, 79, 43, 0.12);
+  --success: #2f7d32;
+  --success-soft: rgba(47, 125, 50, 0.14);
+  --warning: #c27a08;
+  --warning-soft: rgba(194, 122, 8, 0.14);
+  --danger: #b42318;
+  --danger-soft: rgba(180, 35, 24, 0.14);
+  --muted: rgba(148, 163, 184, 0.18);
+  --shadow: 0 18px 48px rgba(16, 32, 48, 0.14);
+  --radius-xl: 28px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--ink-strong);
+  background: var(--page-bg);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}

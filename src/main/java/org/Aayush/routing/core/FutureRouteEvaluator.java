@@ -97,7 +97,7 @@ public final class FutureRouteEvaluator {
                     unreachable,
                     unreachable,
                     List.of(),
-                    toScenarioResults(evaluatedScenarios)
+                    toScenarioResults(resolved.routeCore(), evaluatedScenarios)
             );
         }
 
@@ -118,7 +118,13 @@ public final class FutureRouteEvaluator {
 
         ArrayList<ScoredCandidate> scoredCandidates = new ArrayList<>(candidates.size());
         for (CandidateRoute candidate : candidates) {
-            scoredCandidates.add(scoreCandidate(candidate, evaluatedScenarios, resolved.normalized(), scenarioOptimalSignatures));
+            scoredCandidates.add(scoreCandidate(
+                    candidate,
+                    evaluatedScenarios,
+                    resolved.routeCore(),
+                    resolved.normalized(),
+                    scenarioOptimalSignatures
+            ));
         }
 
         ScoredCandidate expectedRoute = resolveWinner(
@@ -163,7 +169,7 @@ public final class FutureRouteEvaluator {
                 expectedRoute.selection(),
                 robustRoute.selection(),
                 alternatives,
-                toScenarioResults(evaluatedScenarios)
+                toScenarioResults(resolved.routeCore(), evaluatedScenarios)
         );
     }
 
@@ -280,14 +286,16 @@ public final class FutureRouteEvaluator {
                 .build();
     }
 
-    private List<FutureRouteScenarioResult> toScenarioResults(List<EvaluatedScenario> evaluatedScenarios) {
+    private List<FutureRouteScenarioResult> toScenarioResults(RouteCore routeCore, List<EvaluatedScenario> evaluatedScenarios) {
         ArrayList<FutureRouteScenarioResult> results = new ArrayList<>(evaluatedScenarios.size());
         for (EvaluatedScenario evaluatedScenario : evaluatedScenarios) {
+            RouteShape routeShape = RouteShape.fromRouteResponse(evaluatedScenario.routeResponse(), routeCore);
             results.add(FutureRouteScenarioResult.builder()
                     .scenarioId(evaluatedScenario.scenario().getScenarioId())
                     .label(evaluatedScenario.scenario().getLabel())
                     .probability(evaluatedScenario.scenario().getProbability())
                     .route(evaluatedScenario.routeResponse())
+                    .pathPoints(routeShape.getPathPoints())
                     .explanationTags(evaluatedScenario.scenario().getExplanationTags())
                     .build());
         }
@@ -463,6 +471,7 @@ public final class FutureRouteEvaluator {
     private ScoredCandidate scoreCandidate(
             CandidateRoute candidate,
             List<EvaluatedScenario> evaluatedScenarios,
+            RouteCore routeCore,
             RequestNormalizer.NormalizedRouteRequest normalized,
             Set<String> scenarioOptimalSignatures
     ) {
@@ -530,7 +539,7 @@ public final class FutureRouteEvaluator {
                 : RouteSelectionProvenance.AGGREGATE_OBJECTIVE;
 
         ScenarioRouteSelection selection = ScenarioRouteSelection.builder()
-                .route(RouteShape.fromRouteResponse(candidate.representativeResponse()))
+                .route(RouteShape.fromRouteResponse(candidate.representativeResponse(), routeCore))
                 .expectedCost(expectedCost)
                 .p50Cost(p50Cost)
                 .p90Cost(p90Cost)

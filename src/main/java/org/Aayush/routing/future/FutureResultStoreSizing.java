@@ -248,6 +248,7 @@ final class FutureResultStoreSizing {
         size += resolvedAddress(routeShape.getSourceResolvedAddress());
         size += resolvedAddress(routeShape.getTargetResolvedAddress());
         size += stringList(routeShape.getPathExternalNodeIds());
+        size += pathPointList(routeShape.getPathPoints());
         return size;
     }
 
@@ -259,6 +260,7 @@ final class FutureResultStoreSizing {
         size += string(scenarioResult.getScenarioId());
         size += string(scenarioResult.getLabel());
         size += routeResponse(scenarioResult.getRoute());
+        size += pathPointList(scenarioResult.getPathPoints());
         size += stringList(scenarioResult.getExplanationTags());
         return size;
     }
@@ -314,6 +316,16 @@ final class FutureResultStoreSizing {
 
     private static long stringList(List<String> values) {
         return listOverhead(values) + values.stream().mapToLong(FutureResultStoreSizing::string).sum();
+    }
+
+    private static long pathPointList(List<RouteShape.PathPoint> values) {
+        return values == null
+                ? 0L
+                : listOverhead(values) + values.stream().mapToLong(FutureResultStoreSizing::pathPoint).sum();
+    }
+
+    private static long pathPoint(RouteShape.PathPoint value) {
+        return value == null ? 0L : OBJECT_HEADER_BYTES + (2L * Double.BYTES);
     }
 
     private static long listOverhead(List<?> values) {

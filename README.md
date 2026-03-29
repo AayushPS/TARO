@@ -47,6 +47,7 @@ Implemented today:
 - Spring Boot API endpoints for route/matrix evaluation and retained summary/detail lookup
 - caller-scoped feedback ingestion for route and matrix outcomes
 - health, metrics, governance, and retained-result purge endpoints
+- bundled `taro-frontend/` workspace with a live-backed Maps app and capability-gated Traffic app shell
 - `DIJKSTRA` and `A_STAR` execution modes
 - `NONE`, `EUCLIDEAN`, `SPHERICAL`, and `LANDMARK` heuristics
 - Stage 15 typed addressing
@@ -65,7 +66,6 @@ Not implemented yet:
 - quarantine mutation / registry API surface
 - topology validate / publish control API surface
 - traffic/infra operational APIs for request stream, instances, rate limits, and ingestion status
-- bundled frontend workspace for operator-facing maps and traffic consoles
 - externalized model-loader/publication workflow beyond the current in-process topology runtime path
 
 ## Architectural Through-Line
@@ -313,6 +313,7 @@ It also introduces:
 - `resultSetId`
 - temporary result retention
 - frontend follow-up reads for summary and detail
+- frontend-ready route geometry through `pathPoints` on future route products
 
 ## What v13 Adds
 
@@ -361,6 +362,8 @@ Examples:
 - `LiveOverlay` runtime override layer
 - `SpatialRuntime` nearest-node lookup
 - startup-bound execution/trait runtime selection
+- `taro-frontend/maps-app` using live route, retained-result, feedback, health, metrics, and governance APIs
+- `taro-frontend/traffic-app` as a capability-gated operator shell for planned traffic/infra APIs
 
 ### Planned Next
 
@@ -371,7 +374,6 @@ Operational/planned contracts already reflected in the docs:
 - traffic stream / recent traffic endpoints
 - instance registry and routing-rule endpoints
 - rate-limit and ingestion-status endpoints
-- frontend workspace under `taro-frontend/`
 
 ### Important Separation
 
@@ -432,6 +434,8 @@ MatrixResponse matrix = router.matrix(
 - Java 21
 - Maven 3.9+
 - Python 3.11+
+- Node.js 22+
+- npm 10+
 
 ### Bootstrap
 
@@ -440,10 +444,24 @@ MatrixResponse matrix = router.matrix(
 ./scripts/bootstrap_env.sh
 ```
 
+Frontend workspace bootstrap:
+
+```bash
+cd taro-frontend
+npm install
+```
+
 ### Build
 
 ```bash
 mvn clean package
+```
+
+Frontend production bundle:
+
+```bash
+cd taro-frontend
+npm run build
 ```
 
 ### Run Tests
@@ -452,6 +470,41 @@ mvn clean package
 ./scripts/run_java_tests.sh
 ./scripts/run_python_tests.sh
 ```
+
+Current direct verification commands:
+
+```bash
+mvn test -q
+.venv/bin/python -m pytest -q
+cd taro-frontend && npm test
+```
+
+### Frontend Dev
+
+```bash
+cd taro-frontend
+npm run dev:maps
+```
+
+```bash
+cd taro-frontend
+npm run dev:traffic
+```
+
+Current posture:
+
+- `maps-app` is live-backed against the current Java API surface
+- `traffic-app` is an explicit capability-gated shell until the traffic/infra endpoints exist
+
+### IntelliJ IDEA
+
+Tracked plugin requirements are declared in `.idea/externalDependencies.xml`:
+
+- JavaScript
+- Spring
+- Spring Boot
+- Maven
+- YAML
 
 ### Regenerate FlatBuffers Bindings
 
@@ -495,6 +548,10 @@ mvn clean package
 - `docs/stage7_live_overlay_impl.md`
 - `docs/trait_runtime_lock_audit_report.md`
 
+### Frontend architecture
+
+- `docs/frontend/FRONTEND_BUILD_RECORD.md`
+
 ## Repo Layout
 
 - `src/main/java/org/Aayush/routing/core/`
@@ -513,6 +570,8 @@ mvn clean package
   - addressing, temporal, transition, and bundle/runtime binding
 - `src/main/python/`
   - builder and Python-side utilities
+- `taro-frontend/`
+  - Vite workspace with `shared/`, `maps-app/`, and `traffic-app/`
 - `src/test/java/`
   - correctness, parity, determinism, stress, and perf suites
 - `docs/`

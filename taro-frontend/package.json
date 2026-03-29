@@ -1,0 +1,25 @@
+{
+  "name": "taro-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:maps": "vite --open /maps-app/",
+    "dev:traffic": "vite --open /traffic-app/",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@vitejs/plugin-react": "^4.4.1",
+    "jsdom": "^26.0.0",
+    "vite": "^6.3.0",
+    "vitest": "^3.0.7"
+  }
+}
