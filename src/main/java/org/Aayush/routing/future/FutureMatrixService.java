@@ -30,6 +30,22 @@ public final class FutureMatrixService {
         return resultStore.get(resultSetId);
     }
 
+    /**
+     * Stage C5 — exposes a stable retained matrix summary contract by {@code resultSetId}.
+     * Satisfies closure criterion: retained results remain safe for API retrieval work.
+     */
+    public Optional<RetainedMatrixResultView.Summary> getResultSummary(String resultSetId) {
+        return resultStore.get(resultSetId).map(RetainedMatrixResultView::summaryOf);
+    }
+
+    /**
+     * Stage C5 — exposes a stable retained matrix detail contract by {@code resultSetId}.
+     * Satisfies closure criterion: retained results remain safe for API retrieval work.
+     */
+    public Optional<RetainedMatrixResultView.Detail> getResultDetail(String resultSetId) {
+        return resultStore.get(resultSetId).map(RetainedMatrixResultView::detailOf);
+    }
+
     public void purgeExpired() {
         resultStore.purgeExpired();
     }

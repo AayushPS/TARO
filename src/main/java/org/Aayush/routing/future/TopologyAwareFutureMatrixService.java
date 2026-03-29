@@ -27,4 +27,20 @@ public final class TopologyAwareFutureMatrixService {
     public Optional<FutureMatrixResultSet> getResultSet(String resultSetId) {
         return futureMatrixService.getResultSet(resultSetId);
     }
+
+    /**
+     * Stage C5 — forwards stable retained matrix summary lookup through the topology-aware service seam.
+     * Satisfies closure criterion: retained results remain topology-aware and safe for API retrieval work.
+     */
+    public Optional<RetainedMatrixResultView.Summary> getResultSummary(String resultSetId) {
+        return futureMatrixService.getResultSummary(resultSetId);
+    }
+
+    /**
+     * Stage C5 — forwards stable retained matrix detail lookup through the topology-aware service seam.
+     * Satisfies closure criterion: retained results remain topology-aware and safe for API retrieval work.
+     */
+    public Optional<RetainedMatrixResultView.Detail> getResultDetail(String resultSetId) {
+        return futureMatrixService.getResultDetail(resultSetId);
+    }
 }

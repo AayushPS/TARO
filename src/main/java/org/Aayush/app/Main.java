@@ -1,19 +1,21 @@
 package org.Aayush.app;
 
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
 /**
- * Minimal application entry point used for local smoke runs.
+ * Stage F1 application bootstrap for the TARO HTTP/API surface.
+ * Satisfies closure criterion: frontend retrieval flow can inspect retained future-aware results without recomputing them.
  */
+@SpringBootApplication(scanBasePackages = "org.Aayush")
 public class Main {
     /**
-     * Launches the sample CLI routine.
+     * Stage F1 launches the Spring Boot API layer.
+     * Satisfies closure criterion: API endpoints for retained-result inspection are available from one canonical entrypoint.
      *
      * @param args command-line arguments.
      */
     public static void main(String[] args) {
-        System.out.printf("Hello and welcome!");
-
-        for (int i = 1; i <= 5; i++) {
-            System.out.println("i = " + i);
-        }
+        SpringApplication.run(Main.class, args);
     }
 }

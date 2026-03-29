@@ -102,6 +102,39 @@ class DefaultScenarioBundleResolverTest {
     }
 
     @Test
+    @DisplayName("Low-degree incident corridors keep the minimum two-scenario coverage floor instead of being pruned away")
+    void testLowDegreeIncidentCorridorKeepsCoverageFloor() {
+        long departureTicks = Instant.parse("2026-03-23T07:00:00Z").getEpochSecond();
+        TopologyModelSource source = lineSource();
+        TopologyRuntimeSnapshot snapshot = snapshot(source);
+        snapshot.getFailureQuarantine().quarantineEdge(
+                0,
+                departureTicks + Duration.ofHours(2).toSeconds(),
+                departureTicks - 60L,
+                "edge_down",
+                "ops"
+        );
+        DefaultScenarioBundleResolver resolver = new DefaultScenarioBundleResolver();
+
+        ScenarioBundle bundle = resolver.resolve(
+                futureRouteRequest(departureTicks, Duration.ofHours(2).toSeconds()),
+                costEngine(source),
+                TemporalTestContexts.calendarUtc(),
+                snapshot.getTopologyVersion(),
+                snapshot.getFailureQuarantine().snapshot(departureTicks),
+                FIXED_CLOCK
+        );
+
+        assertEquals(2, resolver.minimumScenarioCoverageFloor());
+        assertEquals(List.of("incident_persists", "clearing_fast"),
+                bundle.getScenarios().stream().map(ScenarioDefinition::getScenarioId).toList());
+        assertTrue(bundle.getScenarios().size() >= resolver.minimumScenarioCoverageFloor());
+        assertTrue(bundle.getScenarios().get(0).getProbability() >= RecencyCalibrationConfig.defaults().minIncidentPersistsProbability());
+        assertTrue(bundle.getScenarios().get(1).getProbability() > 0.0d);
+        assertEquals(1.0d, bundle.getScenarios().stream().mapToDouble(ScenarioDefinition::getProbability).sum(), 1.0e-9d);
+    }
+
+    @Test
     @DisplayName("Degree-aware incident priors emit structural audit metadata and preserve normalized mass")
     void testStructuralPriorAuditIsExposedOnIncidentSplit() {
         long departureTicks = Instant.parse("2026-03-23T07:00:00Z").getEpochSecond();

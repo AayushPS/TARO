@@ -1,6 +1,6 @@
 # TARO Codebase Concern Map for Future Codex Sessions
 
-Status date: 2026-03-22
+Status date: 2026-03-27
 Purpose: help future Codex sessions quickly find the right package, file, and doc for a given TARO concern.
 
 ## 1. Read these docs first when architecture matters
@@ -165,13 +165,17 @@ Use this table as the quickest way to find the correct code area.
 | Future-aware matrix evaluation | `src/main/java/org/Aayush/routing/core/FutureMatrixEvaluator.java`, `src/main/java/org/Aayush/routing/future/FutureMatrixService.java`, `src/main/java/org/Aayush/routing/future/FutureMatrixResultSet.java` | Main v12 matrix-serving flow |
 | Scenario generation | `src/main/java/org/Aayush/routing/future/ScenarioBundleResolver.java`, `src/main/java/org/Aayush/routing/future/DefaultScenarioBundleResolver.java`, `src/main/java/org/Aayush/routing/core/FutureScenarioSupport.java` | Scenario materialization and scenario-level cost-engine creation |
 | Retained result stores | `src/main/java/org/Aayush/routing/future/InMemoryEphemeralRouteResultStore.java`, `src/main/java/org/Aayush/routing/future/InMemoryEphemeralMatrixResultStore.java`, `src/main/java/org/Aayush/routing/future/FutureResultStoreSizing.java`, `src/main/java/org/Aayush/routing/topology/ReloadCompatibilityPolicy.java` | Bounded TTL retention, byte budgeting, matrix compaction/compression, and reload-era invalidation behavior |
+| Retained result retrieval contracts | `src/main/java/org/Aayush/routing/future/RetainedRouteResultView.java`, `src/main/java/org/Aayush/routing/future/RetainedMatrixResultView.java`, `src/main/java/org/Aayush/routing/future/TopologyAwareFutureRouteService.java`, `src/main/java/org/Aayush/routing/future/TopologyAwareFutureMatrixService.java` | Stable summary/detail retrieval views and topology-aware forwarding for later API/frontend work |
+| HTTP/API product surface | `src/main/java/org/Aayush/app/Main.java`, `src/main/java/org/Aayush/api/FutureRouteController.java`, `src/main/java/org/Aayush/api/FutureMatrixController.java`, `src/main/java/org/Aayush/api/OperationsController.java`, `src/main/java/org/Aayush/api/FutureRoutingApiFacade.java` | Stage F1 Spring Boot entrypoint, versioned route/matrix/health/admin endpoints, caller scoping, and retained-result retrieval semantics |
+| Feedback telemetry and export | `src/main/java/org/Aayush/api/PredictionTelemetryStore.java`, `src/main/java/org/Aayush/api/PredictionFeedbackController.java`, `src/main/java/org/Aayush/api/PredictionFeedbackRequest.java`, `src/main/java/org/Aayush/api/PredictionFeedbackResponse.java`, `src/main/python/learning/feedback/*` | Stage F2 served-prediction lineage capture, caller-scoped outcome ingestion, bounded joined telemetry retention, and canonical `telemetry_event.parquet` artifact helpers |
+| Operational observability and governance | `src/main/java/org/Aayush/api/OperationalMetricsService.java`, `src/main/java/org/Aayush/api/OperationalMetricsResponse.java`, `src/main/java/org/Aayush/api/OperationalGovernanceResponse.java`, `src/main/java/org/Aayush/routing/topology/TopologyReloadObserver.java` | Stage F3 low-cardinality metrics, alert posture, builder/serving rollback rules, and reload-observer wiring for future-aware serving and topology evolution |
 | Topology snapshot identity | `src/main/java/org/Aayush/routing/topology/TopologyVersion.java`, `src/main/java/org/Aayush/routing/topology/TopologyRuntimeSnapshot.java` | Versioning and active snapshot binding |
 | Transient failure quarantine | `src/main/java/org/Aayush/routing/topology/FailureQuarantine.java`, `src/main/java/org/Aayush/routing/topology/TopologyIncidentIndex.java` | Fast-path edge/node failure suppression with topology-bound incident expansion |
 | Batched structural changes | `src/main/java/org/Aayush/routing/topology/StructuralChangeSet.java`, `src/main/java/org/Aayush/routing/topology/StructuralChangeApplier.java`, `src/main/java/org/Aayush/routing/topology/TopologyModelSource.java` | Typed v13 change model and deterministic application |
 | Builder-side compilation and reload | `src/main/java/org/Aayush/routing/topology/TopologyModelCompiler.java`, `src/main/java/org/Aayush/routing/topology/TopologyIndexLayout.java`, `src/main/java/org/Aayush/routing/topology/TopologyRuntimeFactory.java`, `src/main/java/org/Aayush/routing/topology/TopologyPublicationService.java`, `src/main/java/org/Aayush/routing/topology/TopologyReloadCoordinator.java` | End-to-end rebuild, balanced spatial artifacts, quarantine rebinding, validation, and atomic swap |
 | Schema and FlatBuffers model contract | `src/main/resources/flatbuffers/taro_model.fbs`, `src/main/java/org/Aayush/serialization/flatbuffers/ModelContractValidator.java` | The wire/storage contract plus metadata validation |
 | Generated FlatBuffers Java classes | `src/main/java/org/Aayush/serialization/flatbuffers/taro/model/*` | Generated schema bindings; read only when needed |
-| Python-side current scope | `src/main/python/Utils/IDMapper.py`, `src/main/python/tests/*` | The only meaningful Python logic currently in-tree is small and utility-focused |
+| Python-side current scope | `src/main/python/Utils/IDMapper.py`, `src/main/python/learning/ingestion/*`, `src/main/python/learning/datasets/*`, `src/main/python/learning/forecasting/*`, `src/main/python/learning/calibration/*`, `src/main/python/learning/feedback/*`, `src/main/python/tests/*` | Python now includes the canonical v11/v14 builder-plane modules for E1 ingestion, E2 deterministic sequence/feature artifact construction, E3 deterministic forecast/representation learning, E4 constraint-aware calibration/selection, and the F2 telemetry-feedback artifact surface alongside the older `IDMapper` utility surface |
 
 ## 5. Fast heuristics for where to look
 
@@ -218,14 +222,14 @@ Current roadmap note:
 | v11 Stage 16: temporal trait | Implemented | `routing.traits.temporal`, Stage 16 tests |
 | v11 Stage 17: transition trait | Implemented | `routing.traits.transition`, Stage 17 tests |
 | v11 Stage 18: trait registry/configuration | Implemented | `routing.traits.registry`, Stage 18 tests, delta report |
-| v11 Stages 19-24: offline ingestion / compile pipeline | Not present as a full v11 builder stack in this repo; only partial/build-adjacent pieces exist | There is no dedicated v11 builder module family, but there is schema/compiler support and some Python utilities |
+| v11 Stages 19-24: offline ingestion / compile pipeline | Stages 19-23 / `E1`-`E5` foundations now present; later API/feedback productionization stages remain absent | `src/main/python/learning/ingestion`, `src/main/python/learning/datasets`, `src/main/python/learning/forecasting`, `src/main/python/learning/calibration`, and `src/main/python/learning/export` now provide canonical source ingestion, deterministic temporal sequence construction, deterministic forecast/representation learning, constraint-aware calibration/selection, and reproducible release/research evidence packaging, but later F-stage API and feedback loops are still not implemented |
 | v11 Stage 25: model loader / hot reload | Partially superseded by v13 topology snapshot publication and reload | `routing.topology` provides runtime rebuild and atomic snapshot swap |
-| v11 Stage 26: HTTP API | Not implemented | no API/server/controller layer in repo |
+| v11 Stage 26: HTTP API | Implemented foundation | `Main`, `org.Aayush.api`, and the F1 contract suites now provide a Spring Boot HTTP layer for route/matrix evaluation plus retained-result inspection |
 | v11 Stages 27-28: telemetry / observability | Only local telemetry objects and test metrics exist; no full service-level observability layer | telemetry DTOs exist in traits/runtime, but no standalone aggregation/metrics subsystem |
 | v12 future-aware route serving | Implemented foundation | future route request/result contracts, evaluator, stores, tests |
 | v12 future-aware matrix serving | Implemented foundation | future matrix evaluator, stores, tests, migration report Step 1 |
 | v12 richer scenario generation | Still minimal | default resolver is bounded and quarantine-driven |
-| v12 frontend/API retrieval flow | Not wired to an actual API | retained results exist in-memory, but no HTTP layer |
+| v12 frontend/API retrieval flow | Implemented foundation | retained route/matrix results are now exposed through the Spring Boot F1 API with caller-scoped summary/detail retrieval, health, and admin purge endpoints |
 | v13 failure quarantine | Implemented foundation | `FailureQuarantine`, topology tests |
 | v13 structural rebuild and atomic reload | Implemented foundation | `TopologyModelSource`, compiler, runtime factory, publication service, reload coordinator, topology tests |
 

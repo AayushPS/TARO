@@ -114,6 +114,27 @@ public final class InMemoryEphemeralRouteResultStore implements EphemeralRouteRe
         }
     }
 
+    /**
+     * Stage F3 exposes a read-only retained-route store pressure snapshot for operational metrics.
+     * Satisfies closure criterion: retained-result memory pressure is observable without changing TTL or eviction behavior.
+     */
+    public Stats stats() {
+        lock.lock();
+        try {
+            purgeExpiredLocked(clock.instant());
+            return new Stats(
+                    entries.size(),
+                    totalBytes,
+                    config.maxEntries(),
+                    config.maxTotalBytes(),
+                    ratio(entries.size(), config.maxEntries()),
+                    ratio(totalBytes, config.maxTotalBytes())
+            );
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private void purgeExpiredLocked(Instant now) {
         Iterator<Map.Entry<String, StoredEntry>> iterator = entries.entrySet().iterator();
         while (iterator.hasNext()) {
@@ -164,6 +185,13 @@ public final class InMemoryEphemeralRouteResultStore implements EphemeralRouteRe
         return !resultSet.getExpiresAt().isAfter(now);
     }
 
+    private static double ratio(long numerator, long denominator) {
+        if (denominator <= 0L) {
+            return 0.0d;
+        }
+        return (double) numerator / (double) denominator;
+    }
+
     public record Config(long maxEntries, long maxTotalBytes, long maxPerEntryBytes) {
         private static final long DEFAULT_MAX_ENTRIES = 512L;
         private static final long DEFAULT_MAX_TOTAL_BYTES = 64L * 1024L * 1024L;
@@ -187,6 +215,20 @@ public final class InMemoryEphemeralRouteResultStore implements EphemeralRouteRe
         public static Config defaults() {
             return new Config(DEFAULT_MAX_ENTRIES, DEFAULT_MAX_TOTAL_BYTES, DEFAULT_MAX_PER_ENTRY_BYTES);
         }
+    }
+
+    /**
+     * Stage F3 retained-route store operational snapshot.
+     * Satisfies closure criterion: retained-result pressure is explicit and low-cardinality for dashboards and alerts.
+     */
+    public record Stats(
+            int entryCount,
+            long totalBytes,
+            long maxEntries,
+            long maxTotalBytes,
+            double entryUsageRatio,
+            double byteUsageRatio
+    ) {
     }
 
     private static final class StoredEntry {

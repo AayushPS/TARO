@@ -7,12 +7,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Applies one typed v13 structural change set to source-level topology inputs.
  */
 public final class StructuralChangeApplier {
 
+    /**
+     * Stage D2 — structural source-level change application.
+     * Satisfies closure criterion: change application remains deterministic and auditable.
+     */
     public TopologyModelSource apply(TopologyModelSource baseSource, StructuralChangeSet changeSet) {
         TopologyModelSource nonNullBaseSource = Objects.requireNonNull(baseSource, "baseSource");
         StructuralChangeSet nonNullChangeSet = Objects.requireNonNull(changeSet, "changeSet");
@@ -175,6 +180,21 @@ public final class StructuralChangeApplier {
                 throw new IllegalArgumentException("change set cannot remove and add the same edgeId: " + removedEdgeId);
             }
         }
+        requireDistinctTargets(
+                changeSet.getChangedCoordinates(),
+                StructuralChangeSet.CoordinateChange::getNodeId,
+                "coordinate-change nodeIds"
+        );
+        requireDistinctTargets(
+                changeSet.getChangedProfileAssignments(),
+                StructuralChangeSet.ProfileAssignmentChange::getEdgeId,
+                "profile-assignment edgeIds"
+        );
+        requireDistinctTargets(
+                changeSet.getChangedTurnRelationships(),
+                change -> change.getFromEdgeId() + "->" + change.getToEdgeId(),
+                "turn-change relationships"
+        );
     }
 
     private static void requireDistinct(List<String> values, String fieldName) {
@@ -182,6 +202,16 @@ public final class StructuralChangeApplier {
         for (String value : values) {
             if (!seen.add(value)) {
                 throw new IllegalArgumentException("duplicate value in " + fieldName + ": " + value);
+            }
+        }
+    }
+
+    private static <T> void requireDistinctTargets(List<T> values, Function<T, String> targetKey, String fieldName) {
+        Set<String> seen = new LinkedHashSet<>();
+        for (T value : values) {
+            String key = targetKey.apply(value);
+            if (!seen.add(key)) {
+                throw new IllegalArgumentException("duplicate value in " + fieldName + ": " + key);
             }
         }
     }

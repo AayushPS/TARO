@@ -1,13 +1,14 @@
 package org.Aayush.routing.topology;
 
+import org.Aayush.routing.graph.EdgeGraph;
 import org.Aayush.routing.core.RouteCore;
 import org.Aayush.routing.core.RouteRequest;
 import org.Aayush.routing.core.RouteResponse;
-import org.Aayush.routing.core.RoutingAlgorithm;
-import org.Aayush.routing.heuristic.HeuristicType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+
+import java.nio.ByteOrder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,6 +58,32 @@ class PersistentBaselineProfileTest {
         assertRouteCost(routeCore, "N0", "N1", 10L, 20.0f);
         assertRouteCost(routeCore, "N0", "N1", 20L, 19.0f);
         assertRouteCost(routeCore, "N0", "N1", 30L, 21.0f);
+    }
+
+    @Test
+    @DisplayName("Distinct opposing profiles remain distinct in the compiled edge graph and served runtime")
+    void testDistinctOpposingProfilesRemainDistinctAfterCompileLoad() {
+        TopologyModelSource source = TopologyModelSource.builder()
+                .modelVersion("b2-distinct-opposing-profiles")
+                .profileTimezone("UTC")
+                .profile(profile(1, 2.0f, 2.0f, 2.0f, 2.0f))
+                .profile(profile(2, 1.0f, 1.0f, 1.0f, 1.0f))
+                .node(node("N0", 0.0d, 0.0d))
+                .node(node("N1", 1.0d, 0.0d))
+                .edge(edge("E01", "N0", "N1", 10.0f, 1))
+                .edge(edge("E10", "N1", "N0", 10.0f, 2))
+                .build();
+
+        TopologyIndexLayout layout = TopologyIndexLayout.fromSource(source);
+        CompiledTopologyModel compiled = new TopologyModelCompiler().compile(source);
+        EdgeGraph edgeGraph = EdgeGraph.fromFlatBuffer(compiled.getModelBuffer().duplicate().order(ByteOrder.LITTLE_ENDIAN));
+
+        assertEquals(1, edgeGraph.getProfileId(layout.findEdgeIndex("E01")));
+        assertEquals(2, edgeGraph.getProfileId(layout.findEdgeIndex("E10")));
+
+        TopologyRuntimeSnapshot snapshot = buildSnapshot(source);
+        assertRouteCost(snapshot.getRouteCore(), "N0", "N1", 0L, 20.0f);
+        assertRouteCost(snapshot.getRouteCore(), "N1", "N0", 0L, 10.0f);
     }
 
     private TopologyRuntimeSnapshot buildSnapshot(TopologyModelSource source) {

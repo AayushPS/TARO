@@ -156,6 +156,56 @@ class StructuralChangeApplierTest {
                                 .edgeId("E12").originNodeId("N1").destinationNodeId("N2").baseWeight(1.0f).profileId(1).build())
                         .build()
         ));
+
+        IllegalArgumentException duplicateCoordinate = assertThrows(IllegalArgumentException.class, () -> applier.apply(
+                source,
+                StructuralChangeSet.builder()
+                        .changedCoordinate(StructuralChangeSet.CoordinateChange.builder()
+                                .nodeId("N3")
+                                .x(3.5d)
+                                .y(1.5d)
+                                .build())
+                        .changedCoordinate(StructuralChangeSet.CoordinateChange.builder()
+                                .nodeId("N3")
+                                .x(4.0d)
+                                .y(2.0d)
+                                .build())
+                        .build()
+        ));
+        assertTrue(duplicateCoordinate.getMessage().contains("coordinate-change nodeIds"));
+
+        IllegalArgumentException duplicateProfileAssignment = assertThrows(IllegalArgumentException.class, () -> applier.apply(
+                source,
+                StructuralChangeSet.builder()
+                        .changedProfileAssignment(StructuralChangeSet.ProfileAssignmentChange.builder()
+                                .edgeId("E23")
+                                .profileId(1)
+                                .build())
+                        .changedProfileAssignment(StructuralChangeSet.ProfileAssignmentChange.builder()
+                                .edgeId("E23")
+                                .profileId(2)
+                                .build())
+                        .build()
+        ));
+        assertTrue(duplicateProfileAssignment.getMessage().contains("profile-assignment edgeIds"));
+
+        IllegalArgumentException duplicateTurnRelationship = assertThrows(IllegalArgumentException.class, () -> applier.apply(
+                source,
+                StructuralChangeSet.builder()
+                        .changedTurnRelationship(StructuralChangeSet.TurnRelationshipChange.builder()
+                                .operation(StructuralChangeSet.TurnChangeOperation.UPSERT)
+                                .fromEdgeId("E01")
+                                .toEdgeId("E23")
+                                .penaltySeconds(1.0f)
+                                .build())
+                        .changedTurnRelationship(StructuralChangeSet.TurnRelationshipChange.builder()
+                                .operation(StructuralChangeSet.TurnChangeOperation.REMOVE)
+                                .fromEdgeId("E01")
+                                .toEdgeId("E23")
+                                .build())
+                        .build()
+        ));
+        assertTrue(duplicateTurnRelationship.getMessage().contains("turn-change relationships"));
     }
 
     @Test

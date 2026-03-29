@@ -10,7 +10,9 @@ At its core, TARO treats movement as a compiled, queryable physics surface:
 - bounded live overrides,
 - and deterministic route or matrix search on top of that surface.
 
-The repository already contains a working Java runtime for point-to-point and matrix routing, and the project roadmap now extends that base in three major directions:
+The repository already contains a working Java runtime, Spring Boot API surface,
+and Python learning pipeline for point-to-point and matrix routing, and the
+project roadmap now extends that base in three major directions:
 
 - **v11**: offline learning to improve compiled temporal profiles,
 - **v12**: future-aware serving with scenario-based route products,
@@ -41,6 +43,10 @@ Implemented today:
 - `RouteCore` as the main in-process routing facade
 - `RouterService#route(RouteRequest)` for point-to-point routing
 - `RouterService#matrix(MatrixRequest)` for many-to-many routing
+- future-aware route and matrix evaluation with retained result sets
+- Spring Boot API endpoints for route/matrix evaluation and retained summary/detail lookup
+- caller-scoped feedback ingestion for route and matrix outcomes
+- health, metrics, governance, and retained-result purge endpoints
 - `DIJKSTRA` and `A_STAR` execution modes
 - `NONE`, `EUCLIDEAN`, `SPHERICAL`, and `LANDMARK` heuristics
 - Stage 15 typed addressing
@@ -49,14 +55,18 @@ Implemented today:
 - Stage 18 trait-bundle/runtime binding
 - startup-locked execution profile binding
 - Stage 7 live overlay integration
+- topology-aware retained result lookup across reload policy boundaries
+- failure quarantine and topology reload coordination
+- Python learning/calibration probes and verification/audit records under `docs/`
 - native matrix execution paths for `DIJKSTRA + NONE` and bounded-target `A_STAR`
 
 Not implemented yet:
 
-- production HTTP transport
-- Stage 25 model loader / atomic hot reload
-- v12 scenario-aware serving runtime
-- v13 topology-evolution and failure-quarantine runtime
+- quarantine mutation / registry API surface
+- topology validate / publish control API surface
+- traffic/infra operational APIs for request stream, instances, rate limits, and ingestion status
+- bundled frontend workspace for operator-facing maps and traffic consoles
+- externalized model-loader/publication workflow beyond the current in-process topology runtime path
 
 ## Architectural Through-Line
 
@@ -278,7 +288,8 @@ Default production posture in v11:
 
 ## What v12 Adds
 
-v12 is the future-aware serving layer.
+v12 is the future-aware serving layer, and the core runtime is already present in
+the current repository.
 
 It introduces:
 
@@ -305,7 +316,9 @@ It also introduces:
 
 ## What v13 Adds
 
-v13 is the topology-evolution and operational-failure layer.
+v13 is the topology-evolution and operational-failure layer. Core reload and
+quarantine runtime pieces are already present; the remaining gap is the
+operator-facing API/control surface.
 
 It introduces:
 
@@ -332,6 +345,18 @@ Examples:
 
 - `RouterService#route(RouteRequest)`
 - `RouterService#matrix(MatrixRequest)`
+- `POST /api/v1/route`
+- `GET /api/v1/route/results/{resultSetId}/summary`
+- `GET /api/v1/route/results/{resultSetId}/detail`
+- `POST /api/v1/matrix`
+- `GET /api/v1/matrix/results/{resultSetId}/summary`
+- `GET /api/v1/matrix/results/{resultSetId}/detail`
+- `POST /api/v1/feedback/route/results/{resultSetId}/outcome`
+- `POST /api/v1/feedback/matrix/results/{resultSetId}/outcome`
+- `GET /api/v1/health`
+- `GET /api/v1/metrics`
+- `GET /api/v1/governance`
+- `POST /api/v1/admin/retained-results/purge`
 - `CostEngine`-driven time-dependent edge evaluation
 - `LiveOverlay` runtime override layer
 - `SpatialRuntime` nearest-node lookup
@@ -341,17 +366,12 @@ Examples:
 
 Operational/planned contracts already reflected in the docs:
 
-- `ModelLoaderService`
-  - `load(path) -> ModelHandle`
-  - `reload(path) -> ReloadReport`
-- planned API v1 endpoints:
-  - `POST /api/v1/route`
-  - `POST /api/v1/matrix`
-  - `POST /api/v1/engine/live`
-  - `POST /api/v1/telemetry`
-  - `POST /api/v1/admin/reload`
-  - `GET /api/v1/health`
-  - `GET /api/v1/metrics`
+- quarantine registry and mutation endpoints
+- topology status / validate / publish endpoints
+- traffic stream / recent traffic endpoints
+- instance registry and routing-rule endpoints
+- rate-limit and ingestion-status endpoints
+- frontend workspace under `taro-frontend/`
 
 ### Important Separation
 

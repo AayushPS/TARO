@@ -15,6 +15,7 @@ ResearchData/*
 *.taro
 __pycache__/
 *.pyc
+*.egg-info/
 docs/agent_work/
 
 ### IntelliJ IDEA ###

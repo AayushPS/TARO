@@ -1,779 +1,945 @@
-# TARO Agent Guidance
+# TARO Frontend Build Agent Guidance — v2
 
-This file gives project-level instructions to Codex and other coding agents working in this repository.
+This file supersedes `AGENTS.md` v1 entirely for frontend work.
 
----
+The repo already contains backend closure and audit records under
+`docs/verification/`, `docs/training/`, and `docs/audit/`.
+For frontend work, treat those records as the current backend baseline.
+Do not re-run backend verification or training protocols unless the user
+explicitly asks for backend re-validation.
 
-## Part 1: Primary Rule
+The sole task defined here is building two frontend applications with
+correct layered architecture. A standalone monolithic `.jsx` file is
+explicitly rejected as an output format.
 
-When answering architecture, roadmap, planning, or product-behavior questions for TARO,
-always read the latest project docs from disk first instead of relying on prior chat context.
-
----
-
-## Part 2: Canonical Document Order
-
-Use these documents in this priority order when they are relevant:
-
-1. `docs/taro_v14_stagewise_breakdown.md`
-   - Latest canonical staged roadmap and implementation sequencing reference.
-   - Primary source for phase/stage order, stage closure rules, and the integrated v11/v12/v13/v14 roadmap.
-
-2. `docs/taro_v13_architecture_plan.md`
-   - Latest topology-evolution and failure-handling plan.
-   - Current top-level direction for infrequent node/edge add-drop handling,
-     transient failure quarantine, and atomic reload behavior.
-
-3. `docs/taro_v12_architecture_plan.md`
-   - Latest future-aware serving plan.
-   - Current top-level architecture direction for scenario-aware routing,
-     expected ETA / robust / top-K products, and ephemeral result retention for frontend querying.
-
-4. `docs/taro_v11_architecture_plan.md`
-   - Foundation for offline learning and compile-time refinement.
-   - Baseline that v12 and v13 extend.
-
-5. `docs/taro_v11_implementation_guide.md`
-   - Practical implementation sequencing for the v11 learning foundation.
-
-6. `docs/taro_v11_single_source_of_truth.md`
-   - Contract-oriented reference when behavior, gates, or requirements need confirmation.
-
-7. `docs/taro_v11_ssot_stagewise_breakdown.md`
-   - Historical v11-only stage numbering and cross-reference aid.
-   - Use only when a question explicitly depends on the old 28-stage numbering
-     or historical stage intent.
-
-8. `docs/trait_runtime_lock_audit_report.md`
-   - Runtime-locking and trait-binding context when working on startup/runtime immutability topics.
-
-9. `docs/taro_v12_v13_migration_report.md`
-   - Current tracker for what v12/v13 additions have actually landed in code.
-
-10. `docs/codex_repo_concern_map.md`
-    - Package/file/concern map; fast orientation for any session.
-
-11. `docs/codex_test_reference_map.md`
-    - Test corpus map; use to identify the right evidence and regression suites.
+This frontend guidance is additive to the current TARO backend repository.
+It does not replace the Java runtime, Python learning pipeline, or the current
+verification and audit docs already present in this repo. The frontend must be
+built on top of the live API surface that exists under `src/main/java/org/Aayush/api`,
+with explicit placeholder handling for any planned endpoint that is not yet implemented.
 
 ---
 
-## Part 3: Interpretation Rules
+## 1. Architecture Overview
 
-- v14 is the latest canonical staged roadmap.
-- Higher-version docs supersede lower-version planning docs when they conflict.
-- v13 is the latest operational topology and failure-handling direction.
-- v12 remains the latest future-aware product-serving direction underneath v13.
-- v11 remains the offline learning foundation underneath v12/v13/v14.
-- `docs/taro_v11_ssot_stagewise_breakdown.md` is historical and must not override v14 staging
-  unless the user explicitly asks for legacy stage mapping.
-- Older stage docs are useful for implementation detail but must not override
-  v14/v13/v12 architecture intent unless the user explicitly asks for historical stage behavior.
-- README.md may be stale on implementation status; trust the migration report and code over README.
-
----
-
-## Part 4: Expected Agent Behavior
-
-- If the user asks for the "latest stage breakdown", "latest staged roadmap", or implementation
-  sequence, start with `docs/taro_v14_stagewise_breakdown.md`.
-- If the user asks for the "latest architecture plan", start with `docs/taro_v13_architecture_plan.md`.
-- If the user asks how current work fits the roadmap, explain relative to v14 first,
-  then v13, then v12, then v11 if needed.
-- If the user asks about future-aware routing behavior, include the three v12 product layers:
-  - expected ETA route
-  - robust/P90 route
-  - top-K scenario routes with confidence
-- If the user asks about structural changes or failures, include the v13 distinction between:
-  - transient failure quarantine
-  - batched structural rebuild + atomic reload
-- If the user asks about frontend retrieval flow, include the v12 ephemeral result-serving model.
-- If a response depends on project architecture or stage sequencing, open the relevant doc(s)
-  in this file before answering.
-- When doing further implementation, explicitly check whether touched code is canonical,
-  compatibility-only, stale, or effectively dead relative to v14.
-- Do not assume existing code deserves preservation just because it passes tests;
-  prefer tracking irrelevant or redundant paths and call them out for pruning
-  when they are off the canonical roadmap.
-
----
-
-## Part 5: Documentation Maintenance
-
-- When creating a new top-level planning doc version, add it to this file above older versions.
-- When creating a markdown architecture/plan doc meant for stakeholders,
-  also render the matching PDF when feasible using `scripts/render_md_to_pdf.py`.
-
----
-
-## Part 6: Semi-Autonomous Stage Execution Protocol
-
-This section governs how Codex executes any stage (e.g. `C1`, `B4`, `D3`) when the user
-is not present. The protocol is designed to be:
-
-  - **Reliable over fast**: spend tokens freely; every step must be internally verified.
-  - **Self-halting when genuinely blocked**: do not guess on architectural decisions;
-    emit a HALT message instead (see Section 6.8).
-  - **Auditable**: every step produces visible artifacts so the user can resume context
-    after returning.
-
-### 6.1 How to Enter the Protocol
-
-The user will say something like:
+### 1.1 Repository Layout
 
 ```
-Work on stage C1.
-```
-or
-```
-Continue from stage B4 step 3.
-```
-
-Before touching any code, read:
-1. `AGENTS.md` (this file) — full pass.
-2. `docs/taro_v14_stagewise_breakdown.md` — the full entry for the named stage.
-3. `docs/codex_repo_concern_map.md` — relevant sections for the packages in scope.
-4. `docs/codex_test_reference_map.md` — identify all test suites related to the stage.
-5. Any architecture doc that the stage's `Shared contract dependencies` section references.
-
-Do not skip any of these reads. Do not rely on context from a previous session.
-
----
-
-### 6.2 The Step Sequence
-
-Every stage is executed in exactly this sequence of numbered steps.
-Each step must be completed and its output written to disk before moving to the next.
-
-```
-Step 1 — DEEP READ
-Step 2 — THINK
-Step 3 — PLAN
-Step 4 — PLAN RECHECK
-Step 5 — IMPLEMENT
-Step 6 — SELF-REVIEW
-Step 7 — TEST
-Step 8 — TEST AUDIT
-Step 9 — CODEBASE RECHECK
-Step 10 — STAGE CLOSURE CHECKLIST
+<repo root>
+├── src/                            # existing Java + Python backend
+├── docs/                           # existing verification / training / audit docs
+├── pom.xml
+├── pyproject.toml
+└── taro-frontend/                  # new additive frontend workspace
+    ├── package.json                # workspace root
+    ├── vite.config.js              # shared Vite config
+    │
+    ├── shared/                     # cross-app shared layer (no app-specific logic)
+    │   ├── api/
+    │   │   ├── TaroHttpClient.js   # single fetch wrapper, base URL, interceptors
+    │   │   ├── endpoints.js        # all URL constants
+    │   │   └── transforms.js       # backend-envelope -> frontend-view-model normalisation
+    │   ├── hooks/
+    │   │   ├── usePolling.js       # generic interval poller with pause/resume
+    │   │   ├── useAbortableFetch.js # fetch + AbortController lifecycle
+    │   │   └── useEventLog.js      # append-only bounded event log
+    │   ├── context/
+    │   │   └── ConfigContext.jsx   # API base URL, poll interval, shared settings
+    │   └── utils/
+    │       ├── time.js             # relative/absolute time formatting
+    │       ├── duration.js         # seconds -> "Xm Ys"
+    │       └── geo.js              # GeoJSON helpers, bbox computation
+    │
+    ├── maps-app/                   # App 1: current TARO operational surface
+    │   └── ...
+    └── traffic-app/                # App 2: planned traffic/infra console
+        └── ...
 ```
 
-Each step is defined below.
+### 1.2 Dependency Rules
 
----
-
-#### Step 1 — DEEP READ
-
-Goal: build a complete, current picture of the stage before writing a single line.
-
-Actions:
-1. Read all documents listed in Section 6.1.
-2. Read the full stage entry from `docs/taro_v14_stagewise_breakdown.md`:
-   - core purpose
-   - current repo status
-   - gate severity
-   - functional requirements
-   - non-functional requirements
-   - named test suites
-   - equivalence classes
-   - dependencies
-   - shared contract dependencies
-   - closure criteria
-   - repo anchors
-3. Read every source file listed in the stage's `repo anchors`.
-4. For each named test suite in the stage, read the existing test file if it exists,
-   or note it as `MISSING` if it does not.
-5. Read the `docs/codex_repo_concern_map.md` section covering each package touched.
-6. Read the `docs/codex_test_reference_map.md` rows relevant to each package touched.
-
-Output of Step 1 (write to `docs/agent_work/STAGE_XX_step1_deep_read.md`):
-- Bullet list: every file read, its current status (exists / missing / stub).
-- Bullet list: every named test suite, its file path, its current status (exists / missing).
-- One-paragraph summary of what is already implemented and what is still absent.
-- Explicit list of any gaps between the v14 closure criteria and the current repo state.
-
-Do not proceed to Step 2 until this file is written.
-
----
-
-#### Step 2 — THINK
-
-Goal: reason deeply about the implementation before forming a plan.
-This step is token-expensive by design. Use as many tokens as needed.
-
-Think about all of the following. Write your reasoning explicitly.
-
-**Architecture questions:**
-- Does the stage touch an interface that is used by other stages?
-  If yes, which stages, and what contract must be preserved?
-- Does the stage modify any class that is bound at startup under the runtime lock?
-  If yes, read `docs/trait_runtime_lock_audit_report.md` and confirm the change is compatible
-  with startup immutability.
-- Does the stage interact with the v12 retained-result serving model?
-  If yes, confirm that TTL semantics and byte-budget contracts are not broken.
-- Does the stage interact with v13 topology reload or quarantine?
-  If yes, confirm that atomic swap invariants are preserved.
-- Does the stage affect any temporal attribute (granularity / direction / density /
-  persistence / periodicity / recency / homophily / preferential attachment)?
-  If yes, identify which and check the paper attribute severity table in v14 Section 4.
-
-**Behavioral questions:**
-- For every functional requirement in the stage entry, write down:
-  - the specific class(es) and method(s) that will implement it
-  - any data structure choices that need to be made and why
-  - what the correct behavior is for the normal case
-  - what the correct behavior is for each boundary or failure case
-- For every equivalence class in the stage entry, write down:
-  - which test suite will cover it
-  - whether that test suite currently has a gap for this case
-
-**Dependency questions:**
-- Are all dependency stages (`Dependencies:` list) already closed (green)?
-  If any are not closed, can the current stage still proceed safely?
-  If not, HALT — see Section 6.8.
-- Are all shared contract dependencies listed in the stage entry confirmed as passing?
-  Run the relevant test suites and check before forming the plan.
-
-**Risk questions:**
-- What is the worst regression this implementation could introduce?
-- Which existing tests are most likely to catch that regression?
-- Is there any code that currently passes tests but is stale or non-canonical per v14?
-  If so, note it explicitly.
-
-Output of Step 2 (append to `docs/agent_work/STAGE_XX_step2_think.md`):
-- Full written reasoning for each category above.
-- Explicit yes/no answers to every question.
-- Named risks and which test suites mitigate them.
-
-Do not proceed to Step 3 if any question above results in an unresolvable ambiguity.
-Instead, go to Section 6.8 (HALT).
-
----
-
-#### Step 3 — PLAN
-
-Goal: produce a concrete, ordered implementation plan.
-
-The plan must list every action in the exact order it will be taken.
-Each action must name the specific file and the specific change.
-No hand-waving. No "add the necessary logic here".
-
-Plan format — write each item as:
+Enforced by directory structure and reflected in all import paths.
 
 ```
-[ACTION N]
-  File       : <path relative to repo root>
-  Type       : NEW_FILE | MODIFY_CLASS | ADD_METHOD | ADD_TEST | MODIFY_TEST |
-               ADD_INTERFACE | DELETE_DEAD_CODE | OTHER
-  What       : <one-sentence precise description of the change>
-  Why        : <one-sentence tie to the functional requirement or closure criterion it satisfies>
-  Test cover : <test suite and test method that will verify this change>
+shared/        → no dependencies on maps-app/ or traffic-app/
+maps-app/      → may import from shared/ only
+traffic-app/   → may import from shared/ only
+maps-app/      → must NOT import from traffic-app/
+traffic-app/   → must NOT import from maps-app/
 ```
 
-After writing all actions, write a short dependency-ordered justification:
-why this particular ordering is safe given the startup-lock, runtime contracts,
-and test execution model.
+Circular imports across this boundary are a build error. The agent must not
+create any cross-app import regardless of how convenient it would be.
 
-Also write a rollback note: if the implementation must be abandoned midway,
-which actions are reversible and which leave the repo in an intermediate state.
+### 1.3 Three-Layer State Model
 
-Output of Step 3 (write to `docs/agent_work/STAGE_XX_step3_plan.md`).
-
-Do not proceed to Step 4 until this file is complete and every action has a `Test cover` entry.
-If you cannot assign a `Test cover` entry to an action, stop and go to Section 6.8.
-
----
-
-#### Step 4 — PLAN RECHECK
-
-Goal: adversarially review the plan before a single line of production code is written.
-
-For each action in the plan, challenge it:
-
-1. **Completeness**: does this action fully satisfy its stated functional requirement,
-   or does it only partially satisfy it?
-   If partial, is the remaining part covered by a subsequent action?
-2. **Isolation**: does this action change behavior in a way that affects stages
-   that are not in scope? If yes, is that intentional and safe?
-3. **Contract preservation**: does this action preserve all interface contracts
-   used by dependent stages and test suites?
-4. **Test sufficiency**: is the named `Test cover` entry a genuine behavioral test
-   (not just a compilation guard)?
-5. **Ordering**: is there any action later in the plan that must logically come earlier?
-6. **Dead code risk**: does any action add a code path that will immediately become
-   unreachable given the runtime lock or execution model?
-7. **Cross-phase contract regression**: does any action change an artifact that is
-   cited in a cross-phase contract test from `docs/taro_v14_stagewise_breakdown.md` Section 10?
-   If yes, confirm the cross-phase test still passes after this change.
-
-For each failure found in the recheck, either:
-- Revise the plan (update `STAGE_XX_step3_plan.md`) and note the revision, or
-- Determine that the failure is unresolvable and go to Section 6.8.
-
-Output of Step 4 (write to `docs/agent_work/STAGE_XX_step4_plan_recheck.md`):
-- Verdict per action: PASS | REVISED | BLOCKED.
-- For each REVISED: describe what changed and why.
-- For each BLOCKED: describe exactly what is ambiguous or unresolvable.
-- Final recheck verdict: PROCEED or HALT.
-
-If the final verdict is HALT, go to Section 6.8 immediately.
-Do not write any production code if the verdict is HALT.
-
----
-
-#### Step 5 — IMPLEMENT
-
-Goal: execute the approved plan exactly, action by action.
-
-Rules during implementation:
-
-- Implement one action at a time. After each action, compile with `mvn compile -q` (or
-  equivalent) and confirm it compiles before moving to the next action.
-- Do not skip actions. Do not reorder actions without re-running Step 4 for the reordering.
-- Do not add undocumented behavior. If an unexpected need arises that was not in the plan,
-  stop, go back to Step 3, revise the plan, re-run Step 4, and then continue.
-- Every new or modified public method must have a Javadoc comment that names
-  the stage it belongs to and the closure criterion it satisfies.
-  Example: `/** Stage C1 — recency-weighted scenario scoring. Satisfies closure criterion: ... */`
-- Every new class must have a package-level comment or class Javadoc that places it
-  in the v14 stage context.
-- No TODO comments may be left in production code without a corresponding entry
-  in `docs/agent_work/STAGE_XX_implementation_notes.md`.
-
-Compilation rule: every individual action must leave the repo in a compilable state.
-If an action breaks compilation and you cannot fix it within that same action's scope,
-revert the action, document the failure in `docs/agent_work/STAGE_XX_implementation_notes.md`,
-and go to Section 6.8.
-
-Output of Step 5:
-- Modified/new production source files (the actual code).
-- `docs/agent_work/STAGE_XX_implementation_notes.md` — any deviations, surprises,
-  or non-obvious choices made during implementation, with the plan action number cited.
-
----
-
-#### Step 6 — SELF-REVIEW
-
-Goal: before running any test, read every changed file as a reviewer who did not write the code.
-
-For each modified or new file:
-
-1. Read the full file top to bottom. Not a diff — the whole file.
-2. Check: does every public method have the stage-context Javadoc from Step 5?
-3. Check: is there any code that is unreachable given the runtime execution model?
-4. Check: is there any edge case in the equivalence classes list from the stage entry
-   that is not covered by the implementation?
-5. Check: is there any import, dependency, or utility that could be removed or is
-   already provided elsewhere in the repo?
-6. Check: is there any behavior in this file that contradicts a cross-phase contract?
-7. Check: does the implementation match the plan exactly, or are there undocumented deviations?
-
-For each issue found:
-- Fix it immediately and note it in `docs/agent_work/STAGE_XX_step6_self_review.md`.
-- If the fix requires a plan change, go back to Step 3 for that specific change,
-  re-run Step 4, then fix and continue.
-
-Output of Step 6 (write to `docs/agent_work/STAGE_XX_step6_self_review.md`):
-- File-by-file review log: CLEAN | FIXED (with description) | CONCERN (with description).
-- Any remaining concerns that do not block but should be tracked.
-
-Do not proceed to Step 7 if any file is in status BLOCKED.
-
----
-
-#### Step 7 — TEST
-
-Goal: run the test suites in the correct order and confirm all pass.
-
-Run order:
-1. Compile: `mvn compile -q` — must be clean.
-2. Run the stage's own named test suites:
-   `mvn test -Dtest=<TestSuite1>,<TestSuite2> -q`
-3. Run the shared contract dependency test suites cited in the stage entry.
-4. Run the cross-phase contract tests relevant to this stage from v14 Section 10.
-5. Run the full default lane: `mvn test -q`
-6. Run Python tests if any Python files were touched: `.venv/bin/python -m pytest -q`
-7. If any perf-tagged suites are named in the stage entry, run:
-   `mvn -Pperf-tests test -Dtest=<PerfSuite> -q`
-
-For each test failure:
-- Diagnose whether it is a pre-existing failure or a regression introduced in Step 5.
-- If a regression: fix it, go back to Step 6 for the affected file, then re-run Step 7.
-- If a pre-existing failure: document it in `docs/agent_work/STAGE_XX_step7_test_log.md`
-  with evidence that it predates this session (e.g., git blame, test history).
-  Do not claim stage closure if a pre-existing failure affects a named test suite
-  for this stage. Go to Section 6.8 instead.
-
-Output of Step 7 (write to `docs/agent_work/STAGE_XX_step7_test_log.md`):
-- Test suite name, run command, result (PASS / FAIL / ERROR), and any failure detail.
-- Final verdict: ALL PASS | FAILURES (describe each).
-
-Do not proceed to Step 8 if verdict is FAILURES, unless the failure is confirmed
-pre-existing AND does not affect the stage's closure criteria.
-
----
-
-#### Step 8 — TEST AUDIT
-
-Goal: verify that the tests themselves are correct, not just green.
-
-For each named test suite in the stage entry, and for every test method added or
-modified in Step 5:
-
-1. Read the test method fully.
-2. Check: does it actually exercise the behavior named in the stage's equivalence classes,
-   or is it a trivial no-op that passes by construction?
-3. Check: does it use real behavioral assertions (asserting specific output values,
-   specific state, or specific exception types) rather than just
-   `assertNotNull` / `assertTrue(true)` style guards?
-4. Check: does it use `RoutingFixtureFactory`, `TemporalTestContexts`,
-   `TransitionTestContexts`, or `TopologyTestFixtures` where appropriate
-   (see `docs/codex_test_reference_map.md` Section 2)?
-5. Check: if the test is tagged `@Tag("smoke")` or `@Tag("integration")`, is the tag
-   correct for the test's actual scope (smoke = fast self-contained; integration = service-level)?
-6. Check: is there a test for the negative/failure equivalence classes (invalid input,
-   boundary violations, contract violations), not just the happy path?
-
-For each weak test found:
-- Strengthen it. Re-run Step 7 after any test change.
-- Document the strengthening in `docs/agent_work/STAGE_XX_step8_test_audit.md`.
-
-Output of Step 8 (write to `docs/agent_work/STAGE_XX_step8_test_audit.md`):
-- Per-test assessment: STRONG | STRENGTHENED (what changed) | WEAK (why, if left as-is).
-- Final test quality verdict: ACCEPTABLE | CONCERNS.
-
-If verdict is CONCERNS on a test that covers a hard-blocker closure criterion,
-go to Section 6.8.
-
----
-
-#### Step 9 — CODEBASE RECHECK
-
-Goal: zoom out from the stage and confirm the whole repo is in a healthy state.
-
-Actions:
-1. Run `mvn test -q` one final time and confirm the full default lane is clean.
-2. Run `mvn -Psmoke-tests test -q` and confirm all smoke tests pass.
-3. Scan every file touched during this session (production and test) and confirm:
-   a. No file has been left in a partially-implemented state.
-   b. No interface has a new method without implementation in all concrete classes.
-   c. No import is unused.
-   d. No class referenced in a test does not exist.
-4. Cross-check the v14 stage entry's `closure criteria` one more time against what
-   was implemented. Write a one-to-one mapping: each criterion → each implementing
-   element (class, method, test).
-5. Check whether any code touched in this session is stale or non-canonical per v14.
-   If yes, note it explicitly as a pruning candidate in
-   `docs/agent_work/STAGE_XX_step9_codebase_recheck.md`.
-   Do not prune without explicit user authorization unless the dead code is provably
-   unreachable and was already marked for removal in a prior session.
-6. Confirm that `docs/codex_repo_concern_map.md` and `docs/codex_test_reference_map.md`
-   are still accurate for the files touched. If new files were added that are not yet
-   in those maps, append entries and note the update.
-
-Output of Step 9 (write to `docs/agent_work/STAGE_XX_step9_codebase_recheck.md`):
-- Final test run result.
-- Closure criterion to implementation mapping (table format).
-- List of stale/non-canonical code found.
-- List of doc map updates made.
-- Overall health verdict: HEALTHY | ISSUES (describe each).
-
-If verdict is ISSUES and the issues affect closure criteria, go to Section 6.8.
-
----
-
-#### Step 10 — STAGE CLOSURE CHECKLIST
-
-Goal: produce the final stage closure record.
-
-Write `docs/agent_work/STAGE_XX_closure.md` containing:
+Both apps use the same state model. Every piece of state must be assigned to
+exactly one layer before any component is written.
 
 ```
-Stage      : <stage id, e.g. C1>
-Date       : <ISO date>
-Gate       : <gate severity from v14>
-Status     : CLOSED | PARTIAL (reason) | BLOCKED (see halt record)
+Layer 1 — Server state     : managed by custom hooks (useAbortableFetch,
+                              usePolling, useTrafficStream). Raw API responses
+                              never stored in raw useState at component level.
 
-Closure Criteria Satisfaction:
-  [criterion 1 text] → [implementing class/method/test] → SATISFIED / NOT SATISFIED
-  [criterion 2 text] → ...
-  ...
+Layer 2 — Shared UI state  : React Context. Contexts hold derived or
+                              cross-component state only — not raw responses.
+                              No Redux, no Zustand.
 
-Named Test Suites:
-  [suite name] → PASS / FAIL / MISSING
-  ...
-
-Cross-Phase Contract Tests:
-  [suite name] → PASS / FAIL / NOT APPLICABLE
-  ...
-
-Pre-existing Failures (if any):
-  [suite name] → KNOWN FAILURE → [evidence it predates this session]
-
-Stale Code Identified:
-  [file] → [reason it is stale] → PRUNING CANDIDATE
-
-Implementation Notes:
-  [any non-obvious choice or deviation from the plan, with rationale]
-
-Next Stage Recommendation:
-  [which stage should be worked next and why, based on v14 dependency graph]
-
-Agent Halt Record:
-  [if Section 6.8 was triggered during this session, record it here]
+Layer 3 — Local UI state   : useState inside leaf components (form field
+                              values, hover states, collapsed panels, selected
+                              row index). Must not escape the component.
 ```
 
-After writing the closure record:
-- If Status is CLOSED: output the following final message to the chat exactly:
+### 1.4 TaroHttpClient Contract
+
+All network calls in both apps go through `shared/api/TaroHttpClient.js`.
+
+`TaroHttpClient` is a factory, not a singleton:
+`createTaroClient({ baseUrl, timeoutMs, onLog })`.
+
+It must:
+- Attach `Content-Type: application/json` to all POST/DELETE bodies.
+- Attach `X-Taro-Caller-Id` to all caller-scoped route, matrix, retrieval, and
+  feedback requests. This header is required by the live backend.
+- Reject non-`application/json` responses with a typed `ApiShapeError`.
+- Return `{ ok: true, data } | { ok: false, error: ApiError }`.
+  No exceptions propagate beyond the client boundary.
+- Accept an `AbortSignal` on every call.
+- Invoke `onLog({ method, url, status, durationMs })` after every response.
+  `useEventLog` in both apps subscribes to this callback.
+
+One `TaroHttpClient` instance is created at each app root and injected via
+`ConfigContext`. Components receive it from context, never via module import.
+
+### 1.5 Backend Alignment Rules
+
+The frontend must distinguish three kinds of API contract:
+
+1. Implemented now in the Java backend
+2. Planned but not yet implemented
+3. Frontend-normalized view models produced by `shared/api/transforms.js`
+
+Current implemented backend families:
+
+- route evaluation and retained retrieval
+- matrix evaluation and retained retrieval
+- feedback ingestion
+- health
+- metrics
+- governance
+- retained-result purge admin
+
+Current planned-but-missing backend families:
+
+- quarantine registry / mutation API
+- topology validate / publish API
+- traffic stream / routing rule / rate limit / ingestion status APIs
+
+Rule:
+
+- If an endpoint is implemented now, frontend code must use the live endpoint.
+- If an endpoint is planned but not implemented, the frontend must render an
+  explicit placeholder state and log the gap.
+- `transforms.js` is the only place allowed to reshape the current backend
+  envelopes into the frontend model expected by components.
+
+---
+
+## 2. App 1 — TARO Maps (Full Operational Surface)
+
+### 2.1 Scope
+
+App 1 is the primary TARO product interface. It covers route planning, map
+visualization, **and** the full operational surface: feedback telemetry
+submission, health monitoring, quarantine management, topology reload, and
+audit log. All Phase F functionality (F1, F2, F3) lives in this app.
+Nothing is deferred to App 2.
+
+Backend alignment for the current repo:
+
+- route planning, retained result retrieval, feedback, health, metrics, and
+  governance are live-backed today
+- quarantine management and topology reload controls are planned UI surfaces,
+  but must render explicit "API not yet available" placeholders until the
+  matching backend endpoints exist
+
+### 2.2 AppShell Layout
 
 ```
-STAGE <id> COMPLETE.
-All closure criteria satisfied. All named test suites pass.
-Closure record written to docs/agent_work/STAGE_XX_closure.md.
-Recommended next stage: <stage id and reason>.
-Stale code candidates (if any): <list or "none">.
+┌─────────────────────────────────────────────────────────────────┐
+│  AlertBar (full width, shown only when system is degraded)      │
+├────────────────────┬────────────────────────────────────────────┤
+│  Sidebar (320px)   │  MapCanvas (fills remaining space)         │
+│  ┌──────────────┐  │                                            │
+│  │ RequestPanel │  │   RouteLayer    — blue / orange dashed     │
+│  ├──────────────┤  │   ScenarioLayer — gray thin lines          │
+│  │ ScenarioBundle│  │   AsymmetryLayer — red thick segments     │
+│  ├──────────────┤  │   QuarantineLayer — pulsing red circles    │
+│  │ ResultMeta   │  │                                            │
+│  ├──────────────┤  │                                            │
+│  │ [tab strip]  │  │                                            │
+│  ├──────────────┤  │                                            │
+│  │ Feedback     │  │                                            │
+│  │ Health       │  │                                            │
+│  │ Quarantine   │  │                                            │
+│  │ Reload       │  │                                            │
+│  │ Log          │  │                                            │
+│  └──────────────┘  │                                            │
+└────────────────────┴────────────────────────────────────────────┘
 ```
 
-- If Status is PARTIAL or BLOCKED: go to Section 6.8.
+The tab strip switches the bottom section of the sidebar only.
+`RequestPanel`, `ScenarioBundle`, and `ResultMetadata` are always visible
+regardless of active tab.
 
----
+### 2.3 RouteContext Contract
 
-### 6.3 Working Notes Convention
-
-All intermediate work files written during the protocol must go under:
-`docs/agent_work/STAGE_<ID>_step<N>_<name>.md`
-
-Example: `docs/agent_work/STAGE_C1_step2_think.md`
-
-These files are ephemeral working notes and are not canonical documentation.
-They exist so the user can audit the session and so a future session can resume
-from a known step if the agent was interrupted.
-
-Do not delete or overwrite these files during a session.
-Do not include them in production releases or canonical docs.
-
----
-
-### 6.4 Token Budget Guidance
-
-There is no token limit that justifies a shallow step.
-The reliability of the output is the only constraint.
-
-Specifically:
-- Step 2 (THINK) should be as long as needed to resolve every architectural question.
-  A short Step 2 is a red flag, not a sign of efficiency.
-- Step 4 (PLAN RECHECK) should be adversarial. If every item passes on first read,
-  that is suspicious — re-examine more carefully.
-- Step 8 (TEST AUDIT) should read every added/modified test method in full.
-  Do not skim.
-
----
-
-### 6.5 Multi-Session Resume
-
-If the agent session ends before the protocol completes (e.g. due to context limit),
-a new session can resume by:
-
-1. Reading `AGENTS.md` (this file) fully.
-2. Reading `docs/agent_work/STAGE_<ID>_step<N>_*.md` for all existing step files for the stage.
-3. Identifying the last completed step (the highest N for which a step file exists and
-   contains a complete output, not a partial draft).
-4. Resuming from the step immediately after the last completed step.
-
-The resuming agent must not assume that steps it did not personally execute were
-done correctly. It should briefly re-read the output of the last two completed steps
-and verify they are self-consistent before continuing.
-
----
-
-### 6.6 Scope Discipline
-
-The agent must not expand scope beyond the named stage during a session.
-
-Specifically:
-- Do not implement parts of a future stage in advance, even if it seems convenient.
-- Do not refactor code that is outside the named stage's `repo anchors`, even if
-  the refactor seems obviously correct.
-- Do not add test cases for a different stage's equivalence classes.
-
-If a change in an adjacent area is clearly necessary for the current stage to compile
-or pass tests, it is allowed, but it must be:
-- Documented in `docs/agent_work/STAGE_XX_implementation_notes.md`.
-- Minimal: the smallest change that unblocks the current stage.
-- Consistent with the v14 closure criteria and architectural rules of the adjacent stage.
-
----
-
-### 6.7 Code Classification Rule
-
-Before modifying any existing file, classify it:
-
-| Classification    | Meaning                                                                 | Action                                         |
-|-------------------|-------------------------------------------------------------------------|------------------------------------------------|
-| CANONICAL         | Lives on the v14 implementation path and is actively needed             | Modify freely within stage scope               |
-| COMPATIBILITY     | Exists only to bridge old behavior for tests or callers not yet updated | Modify minimally; note it as a pruning target  |
-| STALE             | Present in-tree but no longer on the canonical path                     | Do not expand; flag for pruning                |
-| DEAD              | Unreachable given the current execution model                           | Do not touch; flag for pruning with evidence   |
-
-Write the classification for every file you touch in
-`docs/agent_work/STAGE_XX_step5_file_classifications.md`.
-If you are unsure of a classification, go to Section 6.8.
-
----
-
-### 6.8 HALT Protocol
-
-Trigger a HALT when any of the following conditions is true:
-
-1. **Dependency not closed**: a stage listed in `Dependencies:` is not confirmed green
-   and the current stage cannot safely proceed without it.
-
-2. **Unresolvable architectural ambiguity**: Step 2 produces a question that cannot be
-   answered from the documents on disk, and getting it wrong would affect a
-   hard-blocker or release-critical closure criterion.
-
-3. **Plan recheck BLOCKED verdict**: Step 4 finds an action that is BLOCKED with no
-   viable revision.
-
-4. **Mid-implementation surprise**: during Step 5, an unexpected condition arises
-   (a class has a different contract than the docs describe, a required interface
-   does not exist, a type parameter is incompatible) that was not covered in the plan
-   and cannot be resolved without architectural judgment.
-
-5. **Pre-existing test failure on a closure-relevant suite**: Step 7 finds a failure
-   in a named test suite for this stage that predates the current session and has not
-   been acknowledged by a prior closure record.
-
-6. **Code classification ambiguity**: a file that must be modified has no clear
-   classification (could be canonical or stale) and the decision changes the
-   implementation direction materially.
-
-7. **Cross-phase contract broken with no clear fix**: the implementation satisfies
-   the current stage but breaks a cross-phase contract test and no fix is apparent
-   within the current stage's scope.
-
-**When HALT is triggered:**
-
-1. Stop all implementation immediately.
-   Do not write any further production code after the halt condition is detected.
-
-2. Revert any partial changes from the current action (not the whole session —
-   only the action that was in progress when HALT was triggered).
-   Confirm compilation is clean after revert.
-
-3. Run `mvn test -q` to confirm the repo is in the same state as before the failed action.
-
-4. Write `docs/agent_work/STAGE_XX_halt_record.md` containing:
-   ```
-   Stage              : <stage id>
-   Step               : <step number where halt occurred>
-   Action             : <plan action number, if applicable>
-   Halt condition     : <one of the 7 conditions above, with detail>
-   Last clean state   : <description of what is in the repo right now and that it compiles and passes tests>
-   Files in progress  : <list of any files that were being edited when halt was triggered>
-   Decision needed    : <precise question the user must answer, with the specific options and their consequences>
-   Evidence           : <relevant quotes from docs, code, or test output that define the decision space>
-   Recommended option : <if there is a clearly better option, say so and say why — do not guess if genuinely ambiguous>
-   ```
-
-5. Output the following as the **final message in the chat** (do not output anything else after this):
+Single source of truth for the active route result.
 
 ```
-⛔ HALT — STAGE <id>, STEP <N>
-
-I cannot proceed without a decision from you.
-
-SITUATION:
-<one paragraph describing what was being worked on and what was encountered>
-
-DECISION NEEDED:
-<precise question — be specific, not vague>
-
-OPTIONS:
-  A) <option A and its consequence>
-  B) <option B and its consequence>
-  [C) ...if applicable]
-
-CURRENT REPO STATE:
-✅ Compiles cleanly.
-✅ All tests pass (or: ⚠️ pre-existing failure in <suite>, predates this session).
-📁 Work files saved under docs/agent_work/STAGE_<id>_*.md
-
-RESUME INSTRUCTIONS (after you decide):
-Reply with your decision and I will continue from Step <N>, Action <M>.
+{
+  status:             "idle" | "loading" | "success" | "error",
+  result:             RouteResultViewModel | null,
+  selectedScenarioId: string | null,
+  error:              ApiError | null,
+  submitRoute:        (RouteRequest) => void,
+  retrieveById:       (string) => void,
+  selectScenario:     (string | null) => void
+}
 ```
 
-The agent must not attempt to resolve the ambiguity itself.
-The agent must not continue past the HALT message.
-The agent must not ask follow-up questions in the HALT message — one clear decision request only.
+`submitRoute` cancels any in-flight request before starting a new one.
+All map layer components subscribe to `RouteContext` directly — they do not
+receive route data as props.
 
----
+`RouteResultViewModel` is a frontend-normalized model built in `transforms.js`
+from the live `RouteApiResponse` + retained summary/detail envelopes.
 
-### 6.9 Between-Stage Transition
+### 2.4 MapContext Contract
 
-After a stage is closed (Status: CLOSED in the closure record), before starting the next stage:
-
-1. Confirm `mvn test -q` is clean.
-2. Confirm `mvn -Psmoke-tests test -q` is clean.
-3. Read the `Next Stage Recommendation` from the closure record.
-4. Verify the recommended next stage's `Dependencies:` list against the v14 breakdown.
-   Confirm all dependencies are now closed before entering the next stage's Step 1.
-5. If any dependency is not closed, output to chat:
+Holds the Leaflet map instance and a mutable layer registry. Only `MapCanvas`
+writes to it.
 
 ```
-ℹ️ STAGE <id> CLOSED.
-Next recommended stage is <next id>, but its dependency <dep id> is not yet closed.
-Available unblocked stages: <list stages whose dependencies are all closed>.
-Please confirm which stage to work next.
+{
+  mapRef:         React.MutableRefObject<L.Map | null>,
+  registerLayer:  (id: string, layer: L.Layer) => void,
+  removeLayer:    (id: string) => void,
+  fitBounds:      (bounds: L.LatLngBounds) => void
+}
 ```
 
-Then wait for user input. Do not start a new stage without confirmation if
-there is a dependency gap.
+### 2.5 OperationsContext Contract
+
+Drives Health, Quarantine, and Reload panels. Composes `usePolling` for health
+and quarantine. Derives `healthStatus` from response fields.
+
+```
+{
+  health:           HealthResponse | null,
+  metrics:          MetricsResponse | null,
+  governance:       GovernanceResponse | null,
+  healthStatus:     "ok" | "degraded" | "unknown",
+  quarantine:       QuarantineEntry[] | "unavailable",
+  addQuarantine:    (QuarantinePayload) => Promise<Result<QuarantineEntry> | CapabilityUnavailable>,
+  topologyStatus:   TopologyStatusResponse | "unavailable",
+  validateTopology: () => Promise<Result<ValidationResult> | CapabilityUnavailable>,
+  publishTopology:  () => Promise<Result<PublishResult> | CapabilityUnavailable>,
+  pollPaused:       boolean,
+  setPollPaused:    (boolean) => void
+}
+```
+
+`OperationsContext` must compose `/health`, `/metrics`, and `/governance`.
+`healthStatus` is derived from:
+
+- `metrics.alerts.overallStatus` when `/metrics` is available
+- otherwise `health.alertStatus` / `health.reloadHealth`
+- otherwise `"unknown"`
+
+`AlertBar` reads `healthStatus` from this context and only renders when
+`healthStatus === "degraded"`.
+
+`CapabilityUnavailable` is the normalized placeholder contract for planned
+frontend surfaces whose backend endpoint is not present yet:
+
+```json
+{
+  "ok": false,
+  "code": "ENDPOINT_UNAVAILABLE",
+  "endpoint": "/api/v1/quarantine"
+}
+```
+
+### 2.6 FeedbackForm Pre-Population Rule
+
+When a route result is active in `RouteContext`, `FeedbackForm` must
+auto-fill `resultSetId` from `RouteContext.result.resultSetId` and make
+that field read-only. The user must explicitly clear the active result
+to submit feedback for an arbitrary ID.
+
+### 2.7 Temporal Display Rules (Non-Optional)
+
+`ResultMetadata` must implement all four badges. These are visual encodings
+of v14 hard-blocker attributes — not optional decorations.
+
+| Condition | Badge text | Colour |
+|---|---|---|
+| `result.quarantineActive === true` | `⚡ Live incident influencing route` | yellow |
+| `result.asymmetricSegments.length > 0` | `⚠ Asymmetric corridor — N segments` | amber |
+| `result.optimalityProbability < 0.5` | `⚠ No dominant route — high uncertainty` | orange |
+| departure time > now + 72h | `ℹ Far-horizon — P90 uncertainty wider` | blue |
+
+If a field is absent in the response the badge must not render.
+These badges are computed from the normalized frontend model, not from a
+fictional flat backend envelope.
+
+### 2.8 useLeaflet Hook Contract
+
+```
+useLeaflet(): { ready: boolean }
+```
+
+Checks `window.L` first. Injects script tag only if absent. Uses a
+module-level `let scriptPromise = null` to deduplicate concurrent calls
+under React 18 strict-mode double-mount. `MapCanvas` renders a loading
+placeholder until `ready === true`.
+
+### 2.9 Stage Breakdown for Maps App
+
+#### Stage M1: Shared Layer Foundation
+- **Objective**: All shared utilities, API client, and base hooks are in place
+  and independently testable before any app code is written.
+- **Functional Requirements**:
+    - `createTaroClient({ baseUrl, timeoutMs, onLog })` factory
+    - All API path strings in `endpoints.js` only
+    - `usePolling(fetcher, intervalMs, { paused })` — generically reusable
+    - `useAbortableFetch(fetcher)` → `{ status, data, error, execute, abort }`
+    - `useEventLog(maxEntries)` → `{ entries, append, clear }`
+    - `ConfigContext` providing `{ apiBaseUrl, pollIntervalMs, maxLogEntries, client }`
+    - `time.js`: `relativeTime(iso)`, `absoluteTime(iso)`
+    - `duration.js`: `formatSeconds(n) → "Xm Ys"`
+    - `geo.js`: `geoJsonToBounds(LineString) → L.LatLngBounds`
+- **Non-Functional Requirements**:
+    - `TaroHttpClient` must be pure — no module-level side effects, no singletons
+    - All hooks safe under React 18 strict-mode double-mount
+    - Zero dependency on Leaflet, Recharts, or app-specific code
+- **Interface Contracts**:
+    - `createTaroClient(config): TaroHttpClient`
+    - `TaroHttpClient.get(path, signal): Promise<Result<T>>`
+    - `TaroHttpClient.post(path, body, signal): Promise<Result<T>>`
+    - `TaroHttpClient.delete(path, signal): Promise<Result<T>>`
+    - `usePolling(fetcher, interval, opts): { data, status, pause, resume }`
+    - `useAbortableFetch(fetcher): { data, status, error, execute }`
+    - `useEventLog(max): { entries, append, clear }`
+- **Test Equivalence Classes**:
+    - Client: 2xx success, 4xx error, 5xx error, network failure, abort mid-flight,
+      non-JSON response body, timeout, `onLog` invoked on every response
+    - `usePolling`: normal interval cycle, pause mid-flight request, resume,
+      unmount during active poll (no setState after unmount)
+    - `useAbortableFetch`: concurrent calls (last-write wins), abort before
+      response arrives, error shape matches `ApiError`
+    - `useEventLog`: append under max, append at max (oldest dropped), clear,
+      `entries` is stable reference when nothing changes
+- **Dependencies**: None
+
+#### Stage M2: Context Layer
+- **Objective**: All four context providers are defined with contracts, initial
+  state, and action/reducer patterns. No component code yet.
+- **Functional Requirements**:
+    - `ConfigContext`: reads initial `apiBaseUrl` from `window.__TARO_CONFIG__`
+      or query param `?api=`; falls back to `http://localhost:8080`
+    - `RouteContext`: internally drives `useAbortableFetch`; `submitRoute`
+      cancels in-flight before re-submitting
+    - `MapContext`: provides `mapRef` (MutableRefObject) and an internal
+      `Map<string, L.Layer>` registry
+    - `OperationsContext`: composes `usePolling` for `/health`, `/metrics`,
+      and `/governance`; quarantine and reload actions are capability-gated
+      and must resolve to `CapabilityUnavailable` without issuing a network call
+      when endpoint probes show the API is absent
+    - `healthStatus` derived from `/metrics.alerts.overallStatus` when present,
+      otherwise from `/health.alertStatus` / `/health.reloadHealth`
+- **Non-Functional Requirements**:
+    - Every context value object is `useMemo`-stabilised
+    - Every action function is `useCallback`-stabilised
+    - `OperationsContext` polling stops cleanly on provider unmount
+    - `RouteContext` abort on new request is synchronous before the new fetch starts
+- **Interface Contracts**:
+    - `RouteContext.submitRoute(req: RouteRequest): void`
+    - `RouteContext.retrieveById(id: string): void`
+    - `RouteContext.selectScenario(id: string | null): void`
+    - `MapContext.registerLayer(id: string, layer: L.Layer): void`
+    - `MapContext.removeLayer(id: string): void`
+    - `OperationsContext.addQuarantine(p: QuarantinePayload): Promise<Result<QuarantineEntry> | CapabilityUnavailable>`
+    - `OperationsContext.validateTopology(): Promise<Result<ValidationResult> | CapabilityUnavailable>`
+    - `OperationsContext.publishTopology(): Promise<Result<PublishResult> | CapabilityUnavailable>`
+- **Test Equivalence Classes**:
+    - `RouteContext`: submit while idle, submit while loading (cancel confirmed),
+      retrieve by ID, select scenario with active result, select with null result
+    - `OperationsContext`: poll cycle runs, pause suspends both pollers,
+      `healthStatus` derives from metrics first then health fallback,
+      capability-unavailable quarantine and reload actions short-circuit without fetch
+- **Dependencies**: M1
+
+#### Stage M3: MapCanvas and Layer Components
+- **Objective**: Leaflet map mounts correctly; all four overlay layers render
+  from context without prop threading.
+- **Functional Requirements**:
+    - `MapCanvas` uses `useLeaflet`; renders `<div>Loading map…</div>` until ready
+    - `MapCanvas` provides `MapContext` to its subtree
+    - `RouteLayer` subscribes to `RouteContext.result`; renders expected winner
+      (blue `#2563EB`, weight 5) and robust winner (orange `#EA580C`, weight 5, dashed)
+    - `ScenarioLayer` renders per-scenario gray polylines; selected scenario
+      (`selectedScenarioId`) becomes weight 4 with a scenario-index colour
+    - `AsymmetryLayer` renders `result.asymmetricSegments` as red `#DC2626` thick segments
+    - `QuarantineLayer` renders `result.quarantineZones` as pulsing circles via a
+      single `<style>` tag injected into `document.head` on first mount
+    - After every new result `MapContext.fitBounds` is called with the union bbox
+      of all visible polylines
+- **Non-Functional Requirements**:
+    - Every layer component calls `MapContext.removeLayer(id)` in its cleanup
+    - Leaflet layer data is updated via property mutation on the existing layer
+      object — not by creating a new layer on every state change
+    - `MapCanvas` container div height must be set via `style={{ height: "100%" }}`,
+      not Tailwind (avoids Leaflet 0px height bug)
+- **Interface Contracts**:
+    - `useLeaflet(): { ready: boolean }`
+    - All layer components: zero props (all data from context)
+- **Test Equivalence Classes**:
+    - Map mount: first mount, strict-mode double-mount, `window.L` already present
+    - `RouteLayer`: null result, expected winner only, both winners, result update
+      replaces previous polylines without ghost layers
+    - `AsymmetryLayer`: zero segments, multiple segments, result cleared removes layer
+    - `QuarantineLayer`: zero zones, multiple overlapping zones
+- **Dependencies**: M2
+
+#### Stage M4: Sidebar Route and Scenario Components
+- **Objective**: `RequestPanel`, `ScenarioBundle`, and `ResultMetadata` drive
+  `RouteContext` correctly with full validation and temporal badge logic.
+- **Functional Requirements**:
+    - `RequestPanel`: all fields controlled; departure defaults to `now + 5m`;
+      "Route Now" → `RouteContext.submitRoute`; "Retrieve by ID" → `retrieveById`;
+      loading spinner on `status === "loading"` (inline SVG); error banner on
+      `status === "error"` showing `error.message`; disabled submit when fields empty
+    - `ScenarioBundle`: sorted descending by probability; click → `selectScenario`;
+      selected row has `bg-blue-50`; probability bar proportional fill
+    - `ResultMetadata`: ETA/P90 formatted via `duration.js`; all four temporal
+      badges from Section 2.7; "Copy resultSetId" → `navigator.clipboard.writeText`
+- **Non-Functional Requirements**:
+    - No `alert()` calls anywhere; all validation surfaces inline
+    - Temporal badges computed purely from response fields; no hardcoded strings
+- **Interface Contracts**: All three components have zero props (context only)
+- **Test Equivalence Classes**:
+    - `RequestPanel`: valid submit, empty-field block, loading state disables button,
+      API error displayed, result clears error
+    - `ScenarioBundle`: zero scenarios, one scenario, five scenarios, select and deselect
+    - `ResultMetadata`: all four badge conditions true simultaneously, none true,
+      partial (two of four), `optimalityProbability` exactly 0.5 (boundary)
+- **Dependencies**: M2, M3
+
+#### Stage M5: Operational Panels
+- **Objective**: All five sidebar tabs (Feedback, Health, Quarantine, Reload, Log)
+  are functional against the live TARO API where supported, with explicit
+  capability placeholders where the backend surface is not implemented yet.
+- **Functional Requirements**:
+    - **Feedback**: `FeedbackForm` pre-populates from `RouteContext` (see 2.6);
+      POST → `/api/v1/feedback/route/results/{resultSetId}/outcome`; resets on success; `FeedbackLog` shows last 50
+      feedback events from `useEventLog` filtered by type `"feedback"`
+    - **Health**: `HealthPanel` driven primarily by `OperationsContext.metrics`
+      with `/health` and `/governance` as supporting metadata; metric cards
+      use the live low-cardinality metrics fields that already exist in the backend
+    - **Quarantine**: until `/api/v1/quarantine` exists, `QuarantinePanel`
+      renders a capability placeholder with no mock data
+    - **Reload**: until topology validate/publish endpoints exist, `ReloadPanel`
+      renders governance and active-topology posture from `/api/v1/governance`
+      and `/api/v1/health`, plus an explicit "controls unavailable" placeholder
+    - **Log**: `AuditLog` renders `useEventLog.entries`; row expand/collapse;
+      "Export" triggers client-side JSON download via temporary `<a>` element;
+      "Clear" → `useEventLog.clear`
+- **Non-Functional Requirements**:
+    - Health poller continues when Health tab is not active (lives in
+      `OperationsContext`, not in the panel component)
+    - `FeedbackForm` reset is synchronous after successful API response
+    - `ConfirmModal` must trap focus within the modal while open
+    - Log export is pure client-side — no server round-trip
+- **Interface Contracts**: All panel components have zero props
+- **Test Equivalence Classes**:
+    - Feedback: pre-populated ID (from active result), manual ID, submit success
+      (form resets), API error (form retained), `FeedbackLog` 50-entry overflow
+    - Health: normal metric render, alert state from `/metrics.alerts.overallStatus`,
+      chart buffer rolls at 60 samples, poll pause/resume
+    - Quarantine: capability unavailable placeholder, no silent mock mode
+    - Reload: governance posture visible, control-unavailable placeholder visible,
+      no publish API call attempted when the endpoint is absent
+    - Log: export produces valid JSON, clear resets entries to [], row expand/collapse
+- **Dependencies**: M2, M4
 
 ---
 
-## Part 7: Test Execution Reference (Quick Lookup)
+## 3. App 2 — TARO Internet Traffic Handler
 
-| Command                                         | What runs                                      |
-|-------------------------------------------------|------------------------------------------------|
-| `mvn test`                                      | Default lane: unit + untagged + integration + smoke (no perf) |
-| `mvn -Psmoke-tests test`                        | Only `@Tag("smoke")` tests                     |
-| `mvn -Pintegration-tests test`                  | Only `@Tag("integration")` tests               |
-| `mvn -Pperf-tests test`                         | Only `@Tag("perf")` tests                      |
-| `mvn test -Dtest=SuiteName1,SuiteName2`         | Specific suites only                           |
-| `mvn compile -q`                                | Compile check only                             |
-| `.venv/bin/python -m pytest -q`                 | Python tests under `src/main/python/tests`     |
-| `scripts/run_java_tests.sh`                     | Java test helper script                        |
-| `scripts/run_python_tests.sh`                   | Python test helper script                      |
+### 3.1 Scope
 
-Key shared fixtures — always check these before writing new test infrastructure:
-- `RoutingFixtureFactory` — FlatBuffer-backed route, matrix, graph, cost fixtures
-- `TemporalTestContexts` — pre-bound Stage 16 temporal contexts
-- `TransitionTestContexts` — pre-bound Stage 17 transition contexts
-- `TopologyTestFixtures` — v13 topology harness, fixed clock, quarantine resolver, grid-source helpers
+App 2 is the HTTP infrastructure console for the TARO service cluster. It
+monitors and controls network-level traffic: request rates per endpoint,
+latency distributions, error rates, live in-flight requests, load-balancing
+routing rules, per-caller rate limit quota, and the E1–E5 data ingestion
+pipeline status.
+
+It does not duplicate any route planning, map visualization, feedback form,
+quarantine management, or health metrics from App 1. Those belong to App 1.
+
+Backend alignment for the current repo:
+
+- none of the App 2 traffic-specific endpoints currently exist in the Java API
+- App 2 therefore starts as an architecture-first shell with explicit endpoint
+  capability placeholders
+- App 2 must not fabricate traffic, routing-rule, rate-limit, or ingestion data
+
+### 3.2 TrafficContext Contract
+
+```
+{
+  requestFeed:  RequestEvent[],       // rolling 500-entry circular buffer
+  aggregates:   Map<string, EndpointAggregate>,  // derived, not fetched
+  feedStatus:   "live" | "paused" | "error",
+  pause:        () => void,
+  resume:       () => void
+}
+```
+
+`EndpointAggregate: { rps: number, p50Ms: number, p99Ms: number, errorRate: number }`
+
+`aggregates` is recomputed inside the context on every feed update over a
+rolling 60-second window. It is never a separate API call.
+
+### 3.3 InstanceContext Contract
+
+```
+{
+  instances:        TaroInstance[],
+  routingRules:     RoutingRule[],
+  selectedInstance: TaroInstance | null,
+  select:           (instanceId: string) => void,
+  addRule:          (RoutingRulePayload) => Promise<r>,
+  deleteRule:       (ruleId: string) => Promise<r>
+}
+```
+
+`deleteRule` is optimistic: remove the row immediately, roll back on API error.
+
+### 3.4 AppShell Layout
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  TARO Traffic Handler                  [● LIVE]  [Pause]  [⚙]     │
+├────────────────┬───────────────────────────────────────────────────┤
+│  Sidebar       │  Main Panel                                        │
+│  ───────────   │                                                    │
+│  Traffic       │  [active tab content fills this space]            │
+│  Routing       │                                                    │
+│  Rate Limits   │                                                    │
+│  Ingestion     │                                                    │
+└────────────────┴───────────────────────────────────────────────────┘
+```
+
+`[● LIVE]` / `[⏸ PAUSED]` badge in header drives `TrafficContext.pause/resume`.
+
+### 3.5 Tab: Traffic
+
+Four sub-panels in a 2-column CSS grid.
+
+**RequestRateChart**: Recharts `LineChart`, one `<Line>` per TARO endpoint.
+X-axis: last 120 seconds (one data point per second). Y-axis: RPS.
+Legend items are togglable via click.
+
+**LatencyHeatmap**: `<table>`-based (no external library). Rows = endpoints;
+columns = ten 10-second buckets (last 100s). Cell `backgroundColor` interpolates
+white → red for P99 0ms → ≥1000ms via inline `style`.
+
+**ErrorRatePanel**: Recharts `BarChart`, stacked bars for 4xx and 5xx counts,
+last 12 × 10s buckets per endpoint.
+
+**ActiveRequestTable**: in-flight requests from `requestFeed` where
+`completedAt === null`. Elapsed column re-renders every 500ms via a
+`setInterval` scoped to that column only — not the whole table. Rows
+stalled > 30s highlighted red.
+
+### 3.6 Tab: Routing
+
+**InstanceMap**: Leaflet map via the shared `useLeaflet` hook. Instance markers
+coloured by `instance.health` (green/yellow/red). Click → `InstanceContext.select`.
+
+**RoutingRuleTable**: table of `InstanceContext.routingRules`. Delete requires
+inline confirmation text (not a modal). `deleteRule` is optimistic.
+
+**RuleEditor** (collapsible form): endpoint glob, caller prefix, time window
+HH:MM–HH:MM, target instance dropdown, weight 0–100, priority. Calls
+`InstanceContext.addRule`. Client-side validation before submit.
+
+### 3.7 Tab: Rate Limits
+
+**RateLimitPanel**: polled from `GET /api/v1/ratelimits`. Columns: caller ID,
+endpoint, window, quota, used, remaining, reset-in. Row click selects for gauge.
+
+**RateLimitGauge**: horizontal fill for selected row `used / quota`.
+Colour thresholds: green < 70%, yellow < 90%, red ≥ 90%.
+CSS `transition` on fill width. Memoised — re-renders only on row selection change.
+
+**ThrottleEventLog**: filters `TrafficContext.requestFeed` for `throttled === true`.
+Memoised filter keyed on feed length. Auto-scrolls on new entry via `useRef`.
+Capped at 100 entries displayed.
+
+### 3.8 Tab: Ingestion
+
+**IngestionPipelinePanel**: vertical stage flow, E1 → E2 → E3 → E4 → E5.
+Polled via `useIngestionPoll`. Connector lines between rows via CSS
+`border-left` on a centred absolutely-positioned pseudo-element.
+
+**StageStatusRow**: badge colours: `IDLE` gray, `RUNNING` blue pulse
+(CSS keyframe), `DONE` green, `FAILED` red. Columns: stage, name, status,
+last-run (relative), records-in, records-out, duration.
+
+**IngestionThroughputChart**: Recharts `LineChart`, one line per stage,
+records/sec, rolling 60-sample buffer (same pattern as `LatencyChart` in App 1).
+
+If any stage is `FAILED`, the `AppShell` in App 2 shows a red alert bar:
+`⚠ Ingestion pipeline failure — E{n} stage failed.`
+
+### 3.9 Stage Breakdown for Traffic App
+
+#### Stage T1: Traffic Data Layer
+- **Objective**: `TrafficContext` provides a live rolling request feed and
+  derived per-endpoint aggregates. Feed source is SSE if available,
+  polling fallback otherwise.
+- **Current backend note**:
+    - The current repo does not expose these traffic endpoints yet.
+    - Implement endpoint capability detection and an explicit unavailable
+      placeholder before implementing live feed logic.
+- **Functional Requirements**:
+    - `useTrafficStream` probes `GET /api/v1/traffic/stream`: if response is
+      `Content-Type: text/event-stream` use `EventSource`; else fall back to
+      1-second polling of `GET /api/v1/traffic/recent`
+    - `requestFeed` is a bounded circular buffer capped at 500 `RequestEvent` objects
+    - `aggregates` recomputed O(n) over the 60-second rolling window on every
+      feed append
+    - `pause()` closes the `EventSource` or suspends the polling interval;
+      `resume()` reconnects or restarts
+- **Non-Functional Requirements**:
+    - `EventSource` must be closed on context unmount
+    - No events dropped during SSE→polling fallback transition
+    - Aggregate recomputation must not block the main thread for > 16ms at 500
+      events (single O(n) pass, no sorting)
+- **Interface Contracts**:
+    - `useTrafficStream(client): { feed, append, status }`
+    - `TrafficContext.pause(): void`
+    - `TrafficContext.resume(): void`
+- **Test Equivalence Classes**:
+    - SSE: connect, receive events, unmount closes stream
+    - Polling fallback: interval fires, dedup on `requestId`
+    - Buffer: append at capacity (oldest evicted), pause stops new entries,
+      resume resumes without timestamp gap
+    - Aggregates: empty feed, single endpoint only, all endpoints, 60s window
+      rollover evicts old events from aggregate
+- **Dependencies**: M1
+
+#### Stage T2: Instance and Routing Layer
+- **Objective**: `InstanceContext` provides the node registry and rule CRUD.
+  `InstanceMap` renders the Leaflet topology.
+- **Current backend note**:
+    - The current repo does not expose instance or routing-rule APIs yet.
+    - This stage must start with capability placeholders and no fabricated data.
+- **Functional Requirements**:
+    - Polls `GET /api/v1/instances` every `pollIntervalMs`
+    - `addRule` → `POST /api/v1/routing/rules`
+    - `deleteRule` → `DELETE /api/v1/routing/rules/{id}`, optimistic removal
+    - `InstanceMap` uses shared `useLeaflet` hook
+    - Marker colour updates without full map reinit on poll cycle change
+    - `RoutingRuleTable` delete: inline confirm string (not modal), roll back row
+      on API error
+- **Non-Functional Requirements**:
+    - Rule deletion must roll back on failure within the same event loop tick
+    - Marker `L.CircleMarker` colour updated via `setStyle`, not by removing and
+      recreating the marker
+- **Interface Contracts**:
+    - `InstanceContext.addRule(p: RoutingRulePayload): Promise<Result<r>>`
+    - `InstanceContext.deleteRule(id: string): Promise<Result<r>>`
+    - `InstanceContext.select(id: string): void`
+- **Test Equivalence Classes**:
+    - Instance poll: empty list, mixed health colours, poll update changes marker
+      colour in-place
+    - Rule add: valid payload, weight out-of-range (0–100), invalid time window format
+    - Rule delete: success, API error rolls back row, concurrent deletes (no double delete)
+- **Dependencies**: M1, T1
+
+#### Stage T3: Rate Limit and Throttle Layer
+- **Objective**: `RateLimitPanel` shows per-caller quota and `ThrottleEventLog`
+  surfaces throttle events from the live feed.
+- **Current backend note**:
+    - The current repo does not expose rate-limit APIs yet.
+    - This stage must render explicit unavailable states until the backend adds them.
+- **Functional Requirements**:
+    - Rate limit data from `GET /api/v1/ratelimits` polled separately from feed
+    - `RateLimitGauge` re-renders only on selected row change (React.memo with
+      `{ used, quota }` props)
+    - `ThrottleEventLog` filters `requestFeed` for `throttled === true`;
+      memoised filter keyed on `feed.length`
+    - Auto-scroll via `scrollTop = scrollHeight` on the log container ref
+      whenever a new throttle event arrives
+- **Non-Functional Requirements**:
+    - `RateLimitGauge` fill width CSS transition duration 200ms
+    - `ThrottleEventLog` filter must not re-render the full table on every
+      unrelated feed update
+- **Interface Contracts**:
+    - `RateLimitGauge` props: `{ used: number, quota: number }`
+    - `ThrottleEventLog` props: none (reads `TrafficContext`)
+- **Test Equivalence Classes**:
+    - Gauge: 0%, 69% (green), 70% (yellow boundary), 89%, 90% (red boundary), 100%+
+    - Throttle log: empty feed, feed with no throttle events, feed with events,
+      auto-scroll on new entry, display capped at 100 entries
+- **Dependencies**: T1
+
+#### Stage T4: Ingestion Pipeline Panel
+- **Objective**: E1–E5 pipeline status is visualised with throughput charting
+  and pipeline failure surfaces in the app-level alert.
+- **Current backend note**:
+    - The current repo does not expose ingestion-status APIs yet.
+    - This stage must start in capability-placeholder mode without mock throughput.
+- **Functional Requirements**:
+    - `useIngestionPoll` drives polling of `GET /api/v1/ingestion/status`
+    - `RUNNING` badge uses CSS `@keyframes` pulse (blue); injected as a single
+      `<style>` tag on first mount of the pipeline panel
+    - Alert condition: `stages.some(s => s.status === "FAILED")` drives a
+      `useState` in `AppShell`; clears when all stages leave FAILED state
+    - `IngestionThroughputChart` 60-sample rolling buffer; same implementation
+      pattern as `LatencyChart` in App 1 (do not duplicate logic — share the
+      rolling-buffer logic from `shared/utils/` if needed)
+- **Non-Functional Requirements**:
+    - Pipeline poll continues when Ingestion tab is inactive
+    - Alert bar clears automatically when stages recover without user action
+- **Interface Contracts**:
+    - `useIngestionPoll(client): { stages: StageStatus[], pollStatus }`
+    - `StageStatusRow` props: `{ stage: StageStatus }`
+- **Test Equivalence Classes**:
+    - All IDLE, all DONE, one FAILED (alert fires), FAILED then DONE (alert clears),
+      RUNNING with non-zero throughput, zero records in/out
+- **Dependencies**: M1, T1
 
 ---
 
-## Part 8: Gate Severity Reference (From v14)
+## 4. TARO HTTP API Contract
 
-| Severity           | Meaning                                                                                    |
-|--------------------|--------------------------------------------------------------------------------------------|
-| `hard blocker`     | Cannot claim green for release scope until all closure criteria pass                       |
-| `release-critical` | Must pass for releases that depend on that feature family                                   |
-| `calibration gate` | May ship only with bounded uncertainty semantics and documented calibration posture         |
-| `advisory`         | Informative and tracked, but not a release gate                                            |
+### 4.1 Implemented Maps / Core Endpoints
 
-Paper-driven temporal attribute severity (from v14 Section 4):
+```
+POST /api/v1/route
+GET  /api/v1/route/results/{resultSetId}/summary
+GET  /api/v1/route/results/{resultSetId}/detail
+POST /api/v1/matrix
+GET  /api/v1/matrix/results/{resultSetId}/summary
+GET  /api/v1/matrix/results/{resultSetId}/detail
+GET  /api/v1/health
+GET  /api/v1/metrics
+GET  /api/v1/governance
+POST /api/v1/feedback/route/results/{resultSetId}/outcome
+POST /api/v1/feedback/matrix/results/{resultSetId}/outcome
+POST /api/v1/admin/retained-results/purge
+```
 
-| Attribute               | Severity in TARO     | Reason                                                          |
-|-------------------------|----------------------|-----------------------------------------------------------------|
-| temporal granularity    | release-critical     | discretization drift can quietly flatten time behavior          |
-| direction               | hard blocker         | asymmetric corridors and turn-sensitive costs are directional   |
-| density                 | hard blocker         | sparse candidate or prior collapse distorts scenario coverage   |
-| persistence             | release-critical     | durable congestion patterns must remain representable           |
-| periodicity             | release-critical     | recurring patterns affect expected and robust outputs           |
-| recency                 | hard blocker         | near-horizon forecasting is invalid without fresh evidence      |
-| homophily               | calibration gate     | useful modeling signal, not a default release blocker           |
-| preferential attachment | positive prior signal| high-traffic corridors should influence priors when supported   |
+All caller-scoped endpoints above require:
+
+```
+X-Taro-Caller-Id: <stable caller id>
+```
+
+### 4.2 Planned Frontend Endpoints (Not Yet Implemented In Repo)
+
+```
+GET    /api/v1/quarantine
+POST   /api/v1/quarantine
+GET    /api/v1/topology/status
+POST   /api/v1/topology/validate
+POST   /api/v1/topology/publish
+GET    /api/v1/traffic/stream          (SSE preferred)
+GET    /api/v1/traffic/recent          (polling fallback)
+GET    /api/v1/instances
+POST   /api/v1/routing/rules
+DELETE /api/v1/routing/rules/{id}
+GET    /api/v1/ratelimits
+GET    /api/v1/ingestion/status
+```
+
+These endpoints are architectural targets for the frontend, not live contracts
+in the current repo. Components using them must remain capability-gated until
+the backend implements them.
+
+### 4.3 Error Shape
+
+All error responses follow:
+```json
+{
+  "code": "INVALID_REQUEST",
+  "status": 400,
+  "message": "human-readable text",
+  "path": "/api/v1/route",
+  "timestamp": "2026-03-29T00:00:00Z"
+}
+```
+
+`TaroHttpClient` surfaces this as `ApiError { status, code, message }` in the
+`{ ok: false, error }` branch. Unknown fields are ignored (permissive parsing).
+
+### 4.4 Route API Envelope (Implemented Now)
+
+```json
+{
+  "resultSetId": "string",
+  "retained": true,
+  "expiresAt": "2026-03-29T00:10:00Z",
+  "topologyVersion": {
+    "topologyVersion": "topo-api"
+  },
+  "summary": {
+    "resultSetId": "string",
+    "scenarioBundleId": "bundle-api",
+    "scenarioCount": 2,
+    "expectedRoute": {
+      "expectedCost": 874.0,
+      "p90Cost": 1090.0,
+      "optimalityProbability": 0.71,
+      "dominantScenarioId": "incident_persists"
+    },
+    "robustRoute": {
+      "expectedCost": 910.0,
+      "p90Cost": 1130.0
+    }
+  }
+}
+```
+
+`transforms.js` must convert this envelope plus retained `detail` payloads into
+frontend view models used by `ResultMetadata`, `ScenarioBundle`, and map layers.
+Frontend components must not assume the backend directly returns the flattened
+"FutureRouteResponse" shape.
 
 ---
+
+## 5. Agent Build Protocol
+
+### 5.1 Build Order
+
+```
+Step 1    Read this file completely before creating any file.
+
+Step 2    Create the full directory tree from Section 1.1.
+          Create all directories, even empty ones.
+
+Step 3    Implement Stage M1 (shared layer).
+          No app code until M1 is complete and contains no parse errors.
+
+Step 4    Implement Stage M2 (Maps context layer).
+
+Step 5    Implement Stages M3, M4, M5 in parallel (no write conflict).
+
+Step 6    Implement Stage T1 (Traffic data layer).
+          Depends on M1 only — may begin as soon as M1 is done.
+
+Step 7    Implement Stages T2, T3, T4 in parallel.
+
+Step 8    Write docs/frontend/FRONTEND_BUILD_RECORD.md (see 5.3).
+```
+
+### 5.2 Code Quality Rules
+
+1. **No URL strings outside `endpoints.js`.** Import the constant; never
+   inline a path string.
+
+2. **No `localStorage`, `sessionStorage`, or `IndexedDB` anywhere.**
+
+3. **No prop drilling beyond one component boundary.** If data crosses two
+   levels, the receiving component reads from context directly.
+
+4. **Every `useEffect` that opens a network resource returns a cleanup.**
+   `AbortController` for fetch. `EventSource.close()` for SSE.
+   `clearInterval` for polling timers.
+
+5. **Context values are `useMemo`-stabilised. Action functions are
+   `useCallback`-stabilised.** Unstabilised context values cause O(n) cascade
+   re-renders.
+
+6. **`TaroHttpClient` is instantiated once per app root** inside the
+   `ConfigContext` provider. All hooks receive it from `useContext(ConfigContext)`
+   — never via `import`.
+
+7. **Recharts imports are named.** `import { LineChart, Line } from "recharts"`.
+   No `window.Recharts`.
+
+8. **The shared `useLeaflet` hook is the only Leaflet CDN loader.**
+   Neither app reimplements it.
+
+9. **If a TARO API endpoint does not yet exist**, render a clearly labelled
+   placeholder and record the gap. Do not silently mock data.
+
+### 5.3 Frontend Build Record
+
+After all stages complete, write `docs/frontend/FRONTEND_BUILD_RECORD.md`:
+
+```
+Frontend Build Record — TARO v2
+================================
+Date        : <ISO date>
+Agent       : <session identifier>
+
+Shared Layer (M1)
+  Status    : COMPLETE | PARTIAL | FAILED
+  Files     : list all created shared/ files
+
+App 1 — TARO Maps
+  Status    : COMPLETE | PARTIAL | FAILED
+  Stages    : M2=[status], M3=[status], M4=[status], M5=[status]
+  Contexts  : RouteContext, MapContext, OperationsContext — [COMPLETE | PARTIAL]
+  Temporal badges : recency=[YES/NO] direction=[YES/NO]
+                    uncertainty=[YES/NO] granularity=[YES/NO]
+  Phase F coverage:
+    Feedback     : YES | NO
+    Health       : YES | NO
+    Quarantine   : YES | NO
+    Reload       : YES | NO
+    Audit log    : YES | NO
+  Known gaps     : <list or "none">
+
+App 2 — TARO Traffic Handler
+  Status    : COMPLETE | PARTIAL | FAILED
+  Stages    : T1=[status], T2=[status], T3=[status], T4=[status]
+  Feed source    : SSE | polling fallback | not determined
+  Ingestion panel: YES | NO
+  Known gaps     : <list or "none">
+
+Dependency violations : NONE | <list any cross-app imports>
+Missing endpoints     : <list any endpoints that returned 404 or are stubbed>
+```
+
+---
+
+## 6. Agent Rules For This File
+
+1. **Standalone monolithic files are a build failure.** Output must match
+   the directory tree in Section 1.1 exactly.
+
+2. **Do not re-run backend verification or training pipeline protocols as part
+   of frontend execution unless the user explicitly asks for backend re-validation.**
+
+3. **Stage M1 and M2 must be fully complete before any component file
+   in `maps-app/` is started.** Similarly T1 before any `traffic-app/`
+   component.
+
+4. **App 2 must not re-implement any feature already in App 1.**
+   Overlap is a design error. Remove it from App 2.
+
+5. **This file is authoritative for the frontend build.** If any other
+   document contradicts a requirement here for the frontend scope, this
+   file wins.
+
+6. **This file does not override backend truth outside frontend scope.**
+   Live API controllers, request/response contracts, and runtime/learning docs
+   remain canonical for what the backend actually supports today.

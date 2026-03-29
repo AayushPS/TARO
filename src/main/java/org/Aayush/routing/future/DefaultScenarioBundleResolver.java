@@ -28,6 +28,7 @@ import java.util.Objects;
  * into a small shipped scenario bundle.
  */
 public final class DefaultScenarioBundleResolver implements ScenarioBundleResolver {
+    private static final int MIN_SCENARIO_COVERAGE_FLOOR = 2;
     private static final String EVIDENCE_SOURCE_PROFILE_RECENCY = "profile_recency";
     private static final String EVIDENCE_SOURCE_QUARANTINE = "quarantine";
     private static final double INCIDENT_PERSISTS_PROBABILITY = 0.65d;
@@ -78,6 +79,10 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                 structuralPriorCalibrationConfig,
                 "structuralPriorCalibrationConfig"
         );
+    }
+
+    int minimumScenarioCoverageFloor() {
+        return MIN_SCENARIO_COVERAGE_FLOOR;
     }
 
     @Override
@@ -173,6 +178,13 @@ public final class DefaultScenarioBundleResolver implements ScenarioBundleResolv
                 ))
                 .build());
 
+        if (scenarios.size() < MIN_SCENARIO_COVERAGE_FLOOR) {
+            throw new IllegalStateException(
+                    "quarantine scenario bundle must retain at least "
+                            + MIN_SCENARIO_COVERAGE_FLOOR
+                            + " scenarios"
+            );
+        }
         return buildBundle(request, nonNullTemporalContext, topologyVersion, quarantineSnapshot, now, validUntil, scenarios);
     }
 

@@ -7,6 +7,9 @@ import org.Aayush.routing.core.RouteRequest;
 import org.Aayush.routing.execution.ExecutionRuntimeConfig;
 import org.Aayush.routing.overlay.LiveUpdate;
 import org.Aayush.routing.profile.ProfileRecurrenceCalibrationStore;
+import org.Aayush.routing.profile.ProfileStore;
+import org.Aayush.routing.topology.CompiledTopologyModel;
+import org.Aayush.routing.topology.TopologyModelCompiler;
 import org.Aayush.routing.topology.TopologyModelSource;
 import org.Aayush.routing.topology.TopologyRuntimeFactory;
 import org.Aayush.routing.topology.TopologyRuntimeSnapshot;
@@ -19,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteOrder;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -56,6 +60,33 @@ class TemporalFidelityContractTest {
     }
 
     @Test
+    @DisplayName("Persistent artifact behavior survives shipped future-aware serving without inventing recurring scenarios")
+    void testPersistentArtifactSurvivesFutureServing() {
+        TopologyModelSource source = persistentContractSource();
+        TopologyRuntimeSnapshot snapshot = snapshot(source, "b3-persistent-fidelity");
+        FutureRouteService service = new FutureRouteService(
+                new FutureRouteEvaluator(new DefaultScenarioBundleResolver(), FIXED_CLOCK),
+                new InMemoryEphemeralRouteResultStore(FIXED_CLOCK)
+        );
+
+        ProfileStore.TemporalPatternMetadata persistentMetadata = profileStore(source).getTemporalPatternMetadata(1);
+        assertEquals(ProfileStore.TemporalPatternClass.FULLY_PERSISTENT, persistentMetadata.temporalPatternClass());
+        assertEquals(ProfileStore.RecurringCalibrationPosture.NO_RECURRING_SIGNAL, persistentMetadata.recurringCalibrationPosture());
+
+        FutureRouteResultSet weekdayMorning = service.evaluate(snapshot, requestAt("2026-03-23T08:00:00Z"));
+        FutureRouteResultSet weekendAfternoon = service.evaluate(snapshot, requestAt("2026-03-22T16:00:00Z"));
+
+        assertEquals(List.of("N0", "N2", "N3"), weekdayMorning.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(List.of("N0", "N2", "N3"), weekdayMorning.getRobustRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(List.of("N0", "N2", "N3"), weekendAfternoon.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(List.of("N0", "N2", "N3"), weekendAfternoon.getRobustRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(1, weekdayMorning.getScenarioBundle().getScenarios().size());
+        assertEquals(1, weekendAfternoon.getScenarioBundle().getScenarios().size());
+        assertEquals("baseline", weekdayMorning.getExpectedRoute().getDominantScenarioId());
+        assertEquals("baseline", weekendAfternoon.getExpectedRoute().getDominantScenarioId());
+    }
+
+    @Test
     @DisplayName("Default resolver carries periodic artifact signal into shipped future-aware serving without activating it before the peak window")
     void testDefaultResolverCarriesPeriodicSignalIntoServing() {
         TopologyRuntimeSnapshot snapshot = snapshot(periodicContractSource(), "b3-temporal-fidelity-default");
@@ -79,6 +110,26 @@ class TemporalFidelityContractTest {
         assertEquals("periodic_peak", preRushWeekday.getScenarioBundle().getScenarios().get(1).getScenarioId());
         assertEquals(1, rushWeekday.getScenarioBundle().getScenarios().size());
         assertEquals("baseline", rushWeekday.getRobustRoute().getDominantScenarioId());
+    }
+
+    @Test
+    @DisplayName("Rush-hour requests at 07:30 produce worse ETA and wider P90 than the same corridor at 11:30")
+    void testRushHourRequestProducesWorseEtaAndP90ThanOffPeakForSameCorridor() {
+        TopologyRuntimeSnapshot snapshot = snapshot(periodicContractSource(), "b3-periodicity-0730-vs-1130");
+        FutureRouteService service = new FutureRouteService(
+                new FutureRouteEvaluator(new DefaultScenarioBundleResolver(), FIXED_CLOCK),
+                new InMemoryEphemeralRouteResultStore(FIXED_CLOCK)
+        );
+
+        FutureRouteResultSet rushHour = service.evaluate(snapshot, requestAt("2026-03-23T07:30:00Z"));
+        FutureRouteResultSet offPeak = service.evaluate(snapshot, requestAt("2026-03-23T11:30:00Z"));
+
+        assertEquals(List.of("N0", "N2", "N3"), rushHour.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(List.of("N0", "N2", "N3"), rushHour.getRobustRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(List.of("N0", "N1", "N3"), offPeak.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(List.of("N0", "N1", "N3"), offPeak.getRobustRoute().getRoute().getPathExternalNodeIds());
+        assertTrue(rushHour.getExpectedRoute().getExpectedCost() > offPeak.getExpectedRoute().getExpectedCost());
+        assertTrue(rushHour.getRobustRoute().getP90Cost() > offPeak.getRobustRoute().getP90Cost());
     }
 
     @Test
@@ -325,6 +376,11 @@ class TemporalFidelityContractTest {
         return runtimeFactory.buildSnapshot(source, topologyVersion, 0L, null);
     }
 
+    private ProfileStore profileStore(TopologyModelSource source) {
+        CompiledTopologyModel compiled = new TopologyModelCompiler().compile(source);
+        return ProfileStore.fromFlatBuffer(compiled.getModelBuffer().duplicate().order(ByteOrder.LITTLE_ENDIAN));
+    }
+
     private TopologyRuntimeTemplate runtimeTemplate() {
         return TopologyRuntimeTemplate.builder()
                 .executionRuntimeConfig(ExecutionRuntimeConfig.dijkstra())
@@ -350,6 +406,23 @@ class TemporalFidelityContractTest {
                 .edge(edge("E02", "N0", "N2", 1.5f, 2))
                 .edge(edge("E13", "N1", "N3", 1.0f, 1))
                 .edge(edge("E23", "N2", "N3", 1.5f, 2))
+                .build();
+    }
+
+    private TopologyModelSource persistentContractSource() {
+        return TopologyModelSource.builder()
+                .modelVersion("b3-persistent-fidelity-source")
+                .profileTimezone("UTC")
+                .profile(flatProfile(1, 2.0f))
+                .profile(flatProfile(2, 1.0f))
+                .node(node("N0", 0.0d, 0.0d))
+                .node(node("N1", 1.0d, 0.0d))
+                .node(node("N2", 1.0d, 1.0d))
+                .node(node("N3", 2.0d, 0.0d))
+                .edge(edge("E01", "N0", "N1", 3_600.0f, 1))
+                .edge(edge("E02", "N0", "N2", 4_500.0f, 2))
+                .edge(edge("E13", "N1", "N3", 3_600.0f, 1))
+                .edge(edge("E23", "N2", "N3", 4_500.0f, 2))
                 .build();
     }
 

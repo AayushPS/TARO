@@ -27,4 +27,20 @@ public final class TopologyAwareFutureRouteService {
     public Optional<FutureRouteResultSet> getResultSet(String resultSetId) {
         return futureRouteService.getResultSet(resultSetId);
     }
+
+    /**
+     * Stage C5 — forwards stable retained route summary lookup through the topology-aware service seam.
+     * Satisfies closure criterion: retained results remain topology-aware and safe for API retrieval work.
+     */
+    public Optional<RetainedRouteResultView.Summary> getResultSummary(String resultSetId) {
+        return futureRouteService.getResultSummary(resultSetId);
+    }
+
+    /**
+     * Stage C5 — forwards stable retained route detail lookup through the topology-aware service seam.
+     * Satisfies closure criterion: retained results remain topology-aware and safe for API retrieval work.
+     */
+    public Optional<RetainedRouteResultView.Detail> getResultDetail(String resultSetId) {
+        return futureRouteService.getResultDetail(resultSetId);
+    }
 }

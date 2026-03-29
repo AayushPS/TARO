@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("integration")
@@ -64,6 +66,83 @@ class TopologyPublicationServiceTest {
         assertEquals("topo-initial", harness.currentSnapshot().getTopologyVersion().getTopologyVersion());
         assertEquals(3, harness.publicationService().currentSource().getNodes().size());
         assertEquals(4, result.getCandidateSource().getNodes().size());
+    }
+
+    @Test
+    @DisplayName("Failed publication keeps the active topology and retained results untouched")
+    void testFailedPublicationKeepsActiveTopologyAndRetainedResultsUntouched() {
+        TopologyModelSource source = baseLineSource();
+        InMemoryEphemeralRouteResultStore routeStore = new InMemoryEphemeralRouteResultStore(TopologyTestFixtures.FIXED_CLOCK);
+        InMemoryEphemeralMatrixResultStore matrixStore = new InMemoryEphemeralMatrixResultStore(TopologyTestFixtures.FIXED_CLOCK);
+        TopologyValidationGate failingGate = context -> {
+            throw new IllegalStateException("reject candidate");
+        };
+        TopologyTestFixtures.Harness harness = TopologyTestFixtures.createHarness(
+                source,
+                ReloadCompatibilityPolicy.invalidateStaleTopologyResults(),
+                List.of(routeStore, matrixStore),
+                List.of(failingGate)
+        );
+
+        TopologyRuntimeSnapshot beforeSnapshot = harness.currentSnapshot();
+        TopologyModelSource beforeSource = harness.publicationService().currentSource();
+        TopologyAwareFutureRouteService routeService = new TopologyAwareFutureRouteService(
+                harness.reloadCoordinator(),
+                new FutureRouteService(
+                        new org.Aayush.routing.core.FutureRouteEvaluator(
+                                new DefaultScenarioBundleResolver(),
+                                TopologyTestFixtures.FIXED_CLOCK
+                        ),
+                        routeStore
+                )
+        );
+        TopologyAwareFutureMatrixService matrixService = new TopologyAwareFutureMatrixService(
+                harness.reloadCoordinator(),
+                new FutureMatrixService(
+                        new org.Aayush.routing.core.FutureMatrixEvaluator(
+                                new DefaultScenarioBundleResolver(),
+                                TopologyTestFixtures.FIXED_CLOCK
+                        ),
+                        matrixStore
+                )
+        );
+
+        var oldRouteResult = routeService.evaluate(TopologyTestFixtures.futureRouteRequest("N0", "N2"));
+        var oldMatrixResult = matrixService.evaluate(TopologyTestFixtures.futureMatrixRequest("N0", "N2"));
+        assertTrue(routeService.getResultSummary(oldRouteResult.getResultSetId()).isPresent());
+        assertTrue(routeService.getResultDetail(oldRouteResult.getResultSetId()).isPresent());
+        assertTrue(matrixService.getResultSummary(oldMatrixResult.getResultSetId()).isPresent());
+        assertTrue(matrixService.getResultDetail(oldMatrixResult.getResultSetId()).isPresent());
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> harness.publicationService().publish(
+                        StructuralChangeSet.builder()
+                                .addedNode(StructuralChangeSet.NodeAddition.builder()
+                                        .nodeId("N3")
+                                        .x(3.0d)
+                                        .y(0.0d)
+                                        .build())
+                                .addedEdge(StructuralChangeSet.EdgeAddition.builder()
+                                        .edgeId("E23")
+                                        .originNodeId("N2")
+                                        .destinationNodeId("N3")
+                                        .baseWeight(1.0f)
+                                        .profileId(1)
+                                        .build())
+                                .build()
+                )
+        );
+
+        assertEquals("reject candidate", error.getMessage());
+        assertSame(beforeSnapshot, harness.currentSnapshot());
+        assertSame(beforeSource, harness.publicationService().currentSource());
+        assertEquals("topo-initial", harness.currentSnapshot().getTopologyVersion().getTopologyVersion());
+        assertEquals(3, harness.publicationService().currentSource().getNodes().size());
+        assertTrue(routeService.getResultSummary(oldRouteResult.getResultSetId()).isPresent());
+        assertTrue(routeService.getResultDetail(oldRouteResult.getResultSetId()).isPresent());
+        assertTrue(matrixService.getResultSummary(oldMatrixResult.getResultSetId()).isPresent());
+        assertTrue(matrixService.getResultDetail(oldMatrixResult.getResultSetId()).isPresent());
     }
 
     @Test
@@ -136,6 +215,116 @@ class TopologyPublicationServiceTest {
         assertTrue(Float.isFinite(newMatrixResult.getAggregate().getExpectedCosts()[0][0]));
         assertTrue(routeService.getResultSet(newRouteResult.getResultSetId()).isPresent());
         assertTrue(matrixService.getResultSet(newMatrixResult.getResultSetId()).isPresent());
+    }
+
+    @Test
+    @DisplayName("Atomic publication retains compatible retained results when policy allows")
+    void testAtomicPublicationRetainsCompatibleResultsWhenPolicyAllows() {
+        TopologyModelSource source = baseLineSource();
+        InMemoryEphemeralRouteResultStore routeStore = new InMemoryEphemeralRouteResultStore(TopologyTestFixtures.FIXED_CLOCK);
+        InMemoryEphemeralMatrixResultStore matrixStore = new InMemoryEphemeralMatrixResultStore(TopologyTestFixtures.FIXED_CLOCK);
+        TopologyTestFixtures.Harness harness = TopologyTestFixtures.createHarness(
+                source,
+                ReloadCompatibilityPolicy.retainUntilExpiry(),
+                List.of(routeStore, matrixStore),
+                List.of()
+        );
+
+        TopologyAwareFutureRouteService routeService = new TopologyAwareFutureRouteService(
+                harness.reloadCoordinator(),
+                new FutureRouteService(
+                        new org.Aayush.routing.core.FutureRouteEvaluator(
+                                new DefaultScenarioBundleResolver(),
+                                TopologyTestFixtures.FIXED_CLOCK
+                        ),
+                        routeStore
+                )
+        );
+        TopologyAwareFutureMatrixService matrixService = new TopologyAwareFutureMatrixService(
+                harness.reloadCoordinator(),
+                new FutureMatrixService(
+                        new org.Aayush.routing.core.FutureMatrixEvaluator(
+                                new DefaultScenarioBundleResolver(),
+                                TopologyTestFixtures.FIXED_CLOCK
+                        ),
+                        matrixStore
+                )
+        );
+
+        var oldRouteResult = routeService.evaluate(TopologyTestFixtures.futureRouteRequest("N0", "N2"));
+        var oldMatrixResult = matrixService.evaluate(TopologyTestFixtures.futureMatrixRequest("N0", "N2"));
+        var oldRouteSummary = routeService.getResultSummary(oldRouteResult.getResultSetId()).orElseThrow();
+        var oldRouteDetail = routeService.getResultDetail(oldRouteResult.getResultSetId()).orElseThrow();
+        var oldMatrixSummary = matrixService.getResultSummary(oldMatrixResult.getResultSetId()).orElseThrow();
+        var oldMatrixDetail = matrixService.getResultDetail(oldMatrixResult.getResultSetId()).orElseThrow();
+
+        TopologyPublicationResult publicationResult = harness.publicationService().publish(
+                StructuralChangeSet.builder()
+                        .addedNode(StructuralChangeSet.NodeAddition.builder()
+                                .nodeId("N3")
+                                .x(3.0d)
+                                .y(0.0d)
+                                .build())
+                        .addedEdge(StructuralChangeSet.EdgeAddition.builder()
+                                .edgeId("E23")
+                                .originNodeId("N2")
+                                .destinationNodeId("N3")
+                                .baseWeight(1.0f)
+                                .profileId(1)
+                                .build())
+                        .build()
+        );
+
+        var retainedRouteSummary = routeService.getResultSummary(oldRouteResult.getResultSetId()).orElseThrow();
+        var retainedRouteDetail = routeService.getResultDetail(oldRouteResult.getResultSetId()).orElseThrow();
+        var retainedMatrixSummary = matrixService.getResultSummary(oldMatrixResult.getResultSetId()).orElseThrow();
+        var retainedMatrixDetail = matrixService.getResultDetail(oldMatrixResult.getResultSetId()).orElseThrow();
+        var newRouteResult = routeService.evaluate(TopologyTestFixtures.futureRouteRequest("N0", "N3"));
+        var newMatrixResult = matrixService.evaluate(TopologyTestFixtures.futureMatrixRequest("N0", "N3"));
+
+        assertEquals(oldRouteResult.getTopologyVersion(), retainedRouteSummary.getTopologyVersion());
+        assertEquals(oldMatrixResult.getTopologyVersion(), retainedMatrixSummary.getTopologyVersion());
+        assertEquals(oldRouteSummary, retainedRouteSummary);
+        assertEquals(oldRouteDetail, retainedRouteDetail);
+        assertEquals(oldMatrixSummary, retainedMatrixSummary);
+        assertEquals(oldMatrixDetail, retainedMatrixDetail);
+        assertEquals(publicationResult.getTopologyVersion(), harness.currentSnapshot().getTopologyVersion());
+        assertEquals(publicationResult.getTopologyVersion(), newRouteResult.getTopologyVersion());
+        assertEquals(publicationResult.getTopologyVersion(), newMatrixResult.getTopologyVersion());
+        assertEquals(List.of("N0", "N1", "N2", "N3"), newRouteResult.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertTrue(Float.isFinite(newMatrixResult.getAggregate().getExpectedCosts()[0][0]));
+    }
+
+    @Test
+    @DisplayName("Atomic publication retains topology lineage fields on the rebuilt snapshot")
+    void testPublicationTopologyVersionRetainsLineageFields() {
+        TopologyTestFixtures.Harness harness = TopologyTestFixtures.createHarness(baseLineSource());
+
+        TopologyPublicationResult publicationResult = harness.publicationService().publish(
+                StructuralChangeSet.builder()
+                        .addedNode(StructuralChangeSet.NodeAddition.builder()
+                                .nodeId("N3")
+                                .x(3.0d)
+                                .y(0.0d)
+                                .build())
+                        .addedEdge(StructuralChangeSet.EdgeAddition.builder()
+                                .edgeId("E23")
+                                .originNodeId("N2")
+                                .destinationNodeId("N3")
+                                .baseWeight(1.0f)
+                                .profileId(1)
+                                .build())
+                        .build()
+        );
+
+        TopologyVersion topologyVersion = publicationResult.getTopologyVersion();
+        assertEquals("publication-base", topologyVersion.getModelVersion());
+        assertEquals(TopologyTestFixtures.FIXED_CLOCK.instant(), topologyVersion.getGeneratedAt());
+        assertTrue(topologyVersion.getTopologyVersion().startsWith("topology-"));
+        assertTrue(topologyVersion.getSourceDataLineageHash().startsWith("source-"));
+        assertTrue(topologyVersion.getChangeSetHash().startsWith("change-"));
+        assertEquals(topologyVersion, publicationResult.getCandidateSnapshot().getTopologyVersion());
+        assertEquals(topologyVersion, harness.currentSnapshot().getTopologyVersion());
     }
 
     @Test

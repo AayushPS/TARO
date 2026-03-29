@@ -26,6 +26,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("integration")
 @DisplayName("Directed Profile Divergence Tests")
@@ -56,6 +57,26 @@ class DirectedProfileDivergenceTest {
 
         assertEquals(List.of("N0", "N2", "N1"), forward.getExpectedRoute().getRoute().getPathExternalNodeIds());
         assertEquals(List.of("N1", "N0"), reverse.getExpectedRoute().getRoute().getPathExternalNodeIds());
+    }
+
+    @Test
+    @DisplayName("Served directional costs retain the opposing profile ratio instead of collapsing toward symmetry")
+    void testServedDirectionalCostsRetainOpposingProfileRatio() {
+        FutureRouteService service = new FutureRouteService(
+                new FutureRouteEvaluator(baselineResolver(), FIXED_CLOCK),
+                new InMemoryEphemeralRouteResultStore(FIXED_CLOCK)
+        );
+        TopologyRuntimeSnapshot snapshot = snapshot(directOpposingPairSource(), "b5-directed-ratio");
+
+        FutureRouteResultSet forward = service.evaluate(snapshot, request("N0", "N1"));
+        FutureRouteResultSet reverse = service.evaluate(snapshot, request("N1", "N0"));
+
+        assertEquals(List.of("N0", "N1"), forward.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(List.of("N1", "N0"), reverse.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertEquals(40.0f, forward.getExpectedRoute().getExpectedCost(), 0.0001f);
+        assertEquals(10.0f, reverse.getExpectedRoute().getExpectedCost(), 0.0001f);
+        assertEquals(4.0d, forward.getExpectedRoute().getExpectedCost() / reverse.getExpectedRoute().getExpectedCost(), 0.0001d);
+        assertTrue(forward.getExpectedRoute().getExpectedCost() > reverse.getExpectedRoute().getExpectedCost() + 20.0f);
     }
 
     private ScenarioBundleResolver baselineResolver() {
@@ -129,6 +150,19 @@ class DirectedProfileDivergenceTest {
                 .edge(edge("E21", "N2", "N1", 8.0f, 3))
                 .edge(edge("E12", "N1", "N2", 8.0f, 3))
                 .edge(edge("E20", "N2", "N0", 8.0f, 3))
+                .build();
+    }
+
+    private TopologyModelSource directOpposingPairSource() {
+        return TopologyModelSource.builder()
+                .modelVersion("b5-directed-ratio-source")
+                .profileTimezone("UTC")
+                .profile(peakProfile(1, 4.0f))
+                .profile(flatProfile(2, 1.0f))
+                .node(node("N0", 0.0d, 0.0d))
+                .node(node("N1", 1.0d, 0.0d))
+                .edge(edge("E01", "N0", "N1", 10.0f, 1))
+                .edge(edge("E10", "N1", "N0", 10.0f, 2))
                 .build();
     }
 

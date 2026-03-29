@@ -1,0 +1,40 @@
+{
+  "engine_time_unit": "SECONDS",
+  "id_namespace_cardinality": {
+    "edge": 2
+  },
+  "manifest_version": "E1.v1",
+  "sources": [
+    {
+      "content_hash": "telemetry-hash-v1",
+      "diagnostic_counts": {
+        "error": 0,
+        "warning": 0
+      },
+      "feed_kind": "telemetry",
+      "filters": {
+        "geography": "blr-core"
+      },
+      "id_namespace": "edge",
+      "late_arrival_count": 0,
+      "lineage": {
+        "schema_version": "1.0",
+        "snapshot_id": "telemetry:v1",
+        "source_uri": "s3://unit-test/telemetry.csv"
+      },
+      "normalized_tick_range": {
+        "max_tick": 130,
+        "min_tick": 100
+      },
+      "row_count": 2,
+      "source_name": "telemetry_source",
+      "temporal_fields": [
+        "timestamp"
+      ],
+      "unique_id_count": 2,
+      "warning_count": 0
+    }
+  ],
+  "total_row_count": 2,
+  "total_warning_count": 0
+}

@@ -428,6 +428,26 @@ class EdgeGraphTest {
     }
 
     @Test
+    @DisplayName("Req: Asymmetric edge sets stay asymmetric instead of inventing reverse traversal")
+    void testAsymmetricTraversalDoesNotInventReverseEdge() {
+        EdgeGraph graph = createGraph(
+                2, 1,
+                new int[]{0, 1, 1},
+                new int[]{1},
+                new int[]{0},
+                new float[]{1.0f},
+                new short[]{7},
+                null
+        );
+
+        assertEquals(1, graph.getNodeDegree(0));
+        assertEquals(0, graph.getNodeDegree(1));
+
+        EdgeGraph.EdgeIterator reverseIterator = graph.iterator().resetForNode(1);
+        assertFalse(reverseIterator.hasNext());
+    }
+
+    @Test
     @DisplayName("Req: Iterator reset from edge target")
     void testIteratorResetFromEdge() {
         EdgeGraph graph = createGraph(

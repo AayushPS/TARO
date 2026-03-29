@@ -120,6 +120,57 @@ class DensityCalibrationTest {
         assertEquals(CandidateDensityClass.HIGH_DENSITY, report.getDensityClass());
     }
 
+    @Test
+    @DisplayName("Low-degree aggregate winners remain visible in scenario materialization and preserve the requested top-K floor")
+    void testLowDegreeAggregateWinnerRemainsVisibleAndTopKDoesNotCollapse() {
+        TopologyRuntimeSnapshot snapshot = snapshot(compromiseFixture(), "density-low-degree-visible");
+        FutureRouteService service = new FutureRouteService(
+                new FutureRouteEvaluator(lowDegreeCoverageResolver(), FIXED_CLOCK),
+                new InMemoryEphemeralRouteResultStore(FIXED_CLOCK)
+        );
+
+        FutureRouteResultSet resultSet = service.evaluate(snapshot, request("N0", "N4", 0L, 3));
+
+        assertEquals(List.of("N0", "N3", "N4"), resultSet.getExpectedRoute().getRoute().getPathExternalNodeIds());
+        assertTrue(resultSet.getScenarioResults().stream()
+                .anyMatch(result -> result.getRoute().getPathExternalNodeIds().equals(List.of("N0", "N3", "N4"))));
+        assertEquals(3, resultSet.getAlternatives().size());
+        assertTrue(resultSet.getAlternatives().stream()
+                .anyMatch(selection -> selection.getRoute().getPathExternalNodeIds().equals(List.of("N0", "N1", "N4"))));
+        assertTrue(resultSet.getAlternatives().stream()
+                .anyMatch(selection -> selection.getRoute().getPathExternalNodeIds().equals(List.of("N0", "N2", "N4"))));
+        assertTrue(resultSet.getAlternatives().stream()
+                .anyMatch(selection -> selection.getRoute().getPathExternalNodeIds().equals(List.of("N0", "N3", "N4"))));
+        assertEquals(3, resultSet.getCandidateDensityCalibrationReport().getSelectedAlternativeCount());
+    }
+
+    @Test
+    @DisplayName("Incident-prone low-traffic corridors retain non-zero incident mass instead of collapsing to zero")
+    void testIncidentProneLowTrafficCorridorRetainsNonZeroIncidentMass() {
+        long departureTicks = Instant.parse("2026-03-23T07:00:00Z").getEpochSecond();
+        TopologyRuntimeSnapshot snapshot = snapshot(lineFixture(), "density-low-traffic-incident");
+        snapshot.getFailureQuarantine().quarantineEdge(
+                0,
+                departureTicks + Duration.ofHours(1).toSeconds(),
+                departureTicks - 60L,
+                "edge_down",
+                "ops"
+        );
+        FutureRouteService service = new FutureRouteService(
+                new FutureRouteEvaluator(new DefaultScenarioBundleResolver(), FIXED_CLOCK),
+                new InMemoryEphemeralRouteResultStore(FIXED_CLOCK)
+        );
+
+        FutureRouteResultSet resultSet = service.evaluate(snapshot, request("N0", "N2", departureTicks, 2));
+        ScenarioDefinition incidentPersists = resultSet.getScenarioBundle().getScenarios().getFirst();
+
+        assertEquals("incident_persists", incidentPersists.getScenarioId());
+        assertTrue(incidentPersists.getProbability() >= RecencyCalibrationConfig.defaults().minIncidentPersistsProbability());
+        assertTrue(incidentPersists.getProbability() > 0.0d);
+        assertEquals(2, resultSet.getScenarioBundle().getScenarios().size());
+        assertEquals(1.0d, resultSet.getScenarioBundle().getScenarios().stream().mapToDouble(ScenarioDefinition::getProbability).sum(), 1.0e-9d);
+    }
+
     private ScenarioBundleResolver baselineResolver() {
         return (request, baseCostEngine, temporalContext, topologyVersion, quarantineSnapshot, clock) ->
                 ScenarioBundle.builder()
@@ -183,6 +234,44 @@ class DensityCalibrationTest {
                                 .scenarioId("baseline-b")
                                 .label("baseline-b")
                                 .probability(0.5d)
+                                .build())
+                        .build();
+    }
+
+    private ScenarioBundleResolver lowDegreeCoverageResolver() {
+        return (request, baseCostEngine, temporalContext, topologyVersion, quarantineSnapshot, clock) ->
+                ScenarioBundle.builder()
+                        .scenarioBundleId("low-degree-coverage-bundle")
+                        .generatedAt(FIXED_CLOCK.instant())
+                        .validUntil(FIXED_CLOCK.instant().plus(Duration.ofMinutes(10)))
+                        .horizonTicks(request.getHorizonTicks())
+                        .topologyVersion(topologyVersion)
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("b_slow")
+                                .label("b_slow")
+                                .probability(0.4d)
+                                .explanationTag("b_slow")
+                                .liveUpdate(LiveUpdate.of(1, 0.1f, 10_000L))
+                                .liveUpdate(LiveUpdate.of(4, 0.1f, 10_000L))
+                                .build())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("a_slow")
+                                .label("a_slow")
+                                .probability(0.4d)
+                                .explanationTag("a_slow")
+                                .liveUpdate(LiveUpdate.of(0, 0.1f, 10_000L))
+                                .liveUpdate(LiveUpdate.of(3, 0.1f, 10_000L))
+                                .build())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("main_corridors_blocked")
+                                .label("main_corridors_blocked")
+                                .probability(0.2d)
+                                .explanationTag("main_corridors_blocked")
+                                .liveUpdate(LiveUpdate.of(0, 0.1f, 10_000L))
+                                .liveUpdate(LiveUpdate.of(1, 0.1f, 10_000L))
+                                .liveUpdate(LiveUpdate.of(3, 0.1f, 10_000L))
+                                .liveUpdate(LiveUpdate.of(4, 0.1f, 10_000L))
                                 .build())
                         .build();
     }

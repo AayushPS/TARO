@@ -123,6 +123,27 @@ public final class InMemoryEphemeralMatrixResultStore implements EphemeralMatrix
         }
     }
 
+    /**
+     * Stage F3 exposes a read-only retained-matrix store pressure snapshot for operational metrics.
+     * Satisfies closure criterion: retained-result memory pressure is observable without changing compaction or eviction behavior.
+     */
+    public Stats stats() {
+        lock.lock();
+        try {
+            purgeExpiredLocked(clock.instant());
+            return new Stats(
+                    entries.size(),
+                    totalBytes,
+                    config.maxEntries(),
+                    config.maxTotalBytes(),
+                    ratio(entries.size(), config.maxEntries()),
+                    ratio(totalBytes, config.maxTotalBytes())
+            );
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private StoredMatrixResultSet compact(FutureMatrixResultSet resultSet) {
         StoredFutureMatrixAggregate aggregate = StoredFutureMatrixAggregate.from(resultSet.getAggregate(), config);
         ArrayList<StoredFutureMatrixScenarioResult> scenarioResults = new ArrayList<>(resultSet.getScenarioResults().size());
@@ -192,6 +213,13 @@ public final class InMemoryEphemeralMatrixResultStore implements EphemeralMatrix
         return !expiresAt.isAfter(now);
     }
 
+    private static double ratio(long numerator, long denominator) {
+        if (denominator <= 0L) {
+            return 0.0d;
+        }
+        return (double) numerator / (double) denominator;
+    }
+
     public record Config(
             long maxEntries,
             long maxTotalBytes,
@@ -229,6 +257,20 @@ public final class InMemoryEphemeralMatrixResultStore implements EphemeralMatrix
                     DEFAULT_COMPRESSION_THRESHOLD_BYTES
             );
         }
+    }
+
+    /**
+     * Stage F3 retained-matrix store operational snapshot.
+     * Satisfies closure criterion: retained-result pressure is explicit and low-cardinality for dashboards and alerts.
+     */
+    public record Stats(
+            int entryCount,
+            long totalBytes,
+            long maxEntries,
+            long maxTotalBytes,
+            double entryUsageRatio,
+            double byteUsageRatio
+    ) {
     }
 
     private static final class StoredEntry {

@@ -1,0 +1,19 @@
+manifest_version: E5.v1
+model_class: deterministic_forecast_bundle
+learning_mode: profile_only
+package_scope: release_only
+training_seed: 13
+history_window_buckets: 12
+recency_half_life_buckets: 4
+minimum_training_observations: 2
+enabled_features: [periodicity, recency, persistence, density]
+allowed_sequence_scopes: [EDGE, CORRIDOR]
+minimum_confidence: 0.6
+minimum_relative_improvement: 0.05
+maximum_prior_adjustment: 0.2
+preferential_attachment_range: 0.1
+prior_floor: 0.0
+prior_ceiling: 1.0
+dataset_manifest_hash: 50440b8e33731d4bacd864949f9b0fe7e4efa369c2772256f94837f5494a0896
+training_bundle_hash: c5c7e0645fdcfcc23f485db2b8a87cd6f09ae0c49c2f8936729961109b411228
+calibration_bundle_hash: 73566eb6467828b9face59ce5a139b4291ca23d3af1af36352da6fb90c26959f

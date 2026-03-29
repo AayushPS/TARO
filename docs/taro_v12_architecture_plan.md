@@ -42,6 +42,42 @@ v12 does **not** replace v11. It treats v11 as the forecast-quality foundation a
 5. A* admissibility and A*/Dijkstra parity must not regress per scenario.
 6. Expired temporary results must be evictable without affecting core routing correctness.
 
+## 3.1 Temporal Semantics and Granularity Contract
+
+This section is the Phase B1 temporal contract that all builder, runtime, and future-aware serving work inherits.
+
+Canonical temporal meaning:
+- source and request timestamps must be normalized into one engine tick unit before temporal lookup
+- day-of-week and bucket selection must be derived from an explicit startup-bound temporal posture, never inferred ad hoc per request
+- the same temporal contract must apply from dataset ingestion, through snapshot build, through served route output
+
+Allowed postures:
+- `LINEAR`: periodic UTC bucket semantics; runtime samples by UTC time-of-day and does not apply day-mask-aware local-calendar meaning
+- `CALENDAR + UTC`: calendar-aware bucket and day-mask semantics in UTC
+- `CALENDAR + MODEL_TIMEZONE`: calendar-aware bucket and day-mask semantics in the explicit model timezone metadata
+
+Disallowed posture:
+- any implicit or request-time temporal-mode switch
+- any hidden timezone fallback when a calendar-aware mode requires an explicit zone
+- any coarse temporal discretization that silently exceeds the published drift budget under a strict loss policy
+
+Normalization rules:
+- dataset/model timestamps and request timestamps must agree on the engine tick unit before route evaluation
+- builder/runtime boundaries must preserve explicit `tick_duration_ns` semantics instead of assuming seconds by convention
+- timezone-aware calendar behavior must resolve the zone once at startup and keep that binding fixed for the runtime snapshot
+
+Granularity and drift posture:
+- bucketed temporal execution is allowed only when TARO can state an explicit worst-case discretization drift budget
+- the default runtime posture publishes a `30 minute` maximum discretization drift budget
+- the strict loss policy is `REJECT_EXCESS_DRIFT`: snapshot build must reject bucket widths whose worst-case drift would exceed the published budget
+- the permissive posture is `ALLOW_WITHIN_BUDGET`: publish the drift budget for auditability but allow startup even when the configured bucket width is coarser than the budget
+- for regular fixed-width buckets, the working worst-case drift bound is half the bucket width
+
+Serving implications:
+- route, matrix, and future-aware scenario materialization must consume the already-bound temporal context rather than inventing their own timezone or granularity semantics
+- B4 and C1 may add recency-aware behavior later, but they must build on this B1 contract rather than replacing it
+- learning or scenario generation may coarsen time only when the resulting posture stays within the published budget or is explicitly marked permissive
+
 ## 4. v12 Design Principle
 
 Future-aware routing is not one algorithmic mode. It is:

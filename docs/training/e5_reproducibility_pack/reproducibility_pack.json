@@ -1,0 +1,27 @@
+{
+  "artifact_files": {
+    "candidate_report": "candidate_report.parquet",
+    "dataset_manifest": "dataset_manifest.json",
+    "learning_config": "learning_config.yaml",
+    "refinement_decisions": "refinement_decisions.parquet",
+    "research_claims": null,
+    "validation_report": "validation_report.json"
+  },
+  "manifest_version": "E5.v1",
+  "package_scope": "release_only",
+  "release_artifact": {
+    "calibration_bundle_hash": "73566eb6467828b9face59ce5a139b4291ca23d3af1af36352da6fb90c26959f",
+    "candidate_report_hash": "49ca1e80602dfbf06f086cf10b54b37a53b7b252fe25c7710899c7d74bc3f039",
+    "dataset_manifest_hash": "50440b8e33731d4bacd864949f9b0fe7e4efa369c2772256f94837f5494a0896",
+    "learning_config_hash": "963be99d7fe5ed2974afe145c38a166b58da2d29a95a7a1cf1313b91821cc97b",
+    "learning_mode": "profile_only",
+    "manifest_version": "E5.v1",
+    "model_class": "deterministic_forecast_bundle",
+    "package_scope": "release_only",
+    "refinement_decisions_hash": "35c0f0b9b99354a1beb4b75e760fec12ab0dda47f9d555482ab4a5d94b261482",
+    "release_artifact_id": "release-fde7a686fdb7c76c5662267b",
+    "research_claims_hash": null,
+    "training_bundle_hash": "c5c7e0645fdcfcc23f485db2b8a87cd6f09ae0c49c2f8936729961109b411228",
+    "validation_report_hash": "bc4537fd828bb77bcd307f06b6a6044f4e1bde3c078fa1646c621e5e5e9a3652"
+  }
+}

@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "Python-side builder utilities for TARO."
 readme = "README.md"
 requires-python = ">=3.11"
+dependencies = [
+  "pyarrow>=18,<19",
+]
 authors = [
   { name = "Aayush" }
 ]
@@ -29,7 +32,7 @@ include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["src/main/python"]
-include = ["Utils", "Utils.*"]
+include = ["Utils", "Utils.*", "learning", "learning.*"]
 exclude = ["tests", "tests.*"]
 
 [tool.pytest.ini_options]

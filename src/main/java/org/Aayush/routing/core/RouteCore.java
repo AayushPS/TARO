@@ -502,6 +502,14 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
     }
 
     /**
+     * Stage F2 — exposes the startup-bound Stage 18 trait-bundle lineage for telemetry export.
+     * Satisfies closure criterion: feedback events persist stable trait-bundle lineage without request-time rebinding.
+     */
+    public ResolvedTraitBundleContext resolvedTraitBundleContext() {
+        return resolvedTraitBundleContext;
+    }
+
+    /**
      * Returns the startup-bound execution profile.
      */
     @Override
