@@ -66,6 +66,7 @@ Implemented today:
 - caller-scoped feedback ingestion for route and matrix outcomes
 - caller-scoped telemetry export for retraining
 - retraining job lifecycle endpoints for create, start, complete, publish, and active-model lookup
+- `taro-frontend/` React workspace with a client-admin dashboard and a thin end-user route workspace
 - health, metrics, governance, and retained-result purge endpoints
 - `DIJKSTRA` and `A_STAR` execution modes
 - `NONE`, `EUCLIDEAN`, `SPHERICAL`, and `LANDMARK` heuristics
@@ -85,11 +86,30 @@ Not implemented yet:
 - client onboarding / dataset upload control plane
 - durable training job orchestration that actually runs the Python pipeline
 - tenant-scoped auth and per-client serving activation in the Java route path
-- minimal client admin UI and minimal end-user query UI
+- embedded frontend hosting through Spring Boot or another deployment target
 - quarantine mutation / registry API surface
 - topology validate / publish control API surface
 - traffic/infra operational APIs for request stream, instances, rate limits, and ingestion status
 - externalized model-loader/publication workflow beyond the current in-process topology runtime path
+
+## Frontend Workspace
+
+The new frontend lives under `taro-frontend/` and has two real surfaces:
+
+- `/admin` for telemetry preview, retraining lifecycle, active model metadata, and serving health
+- `/query` for the thin end-user route experience that only asks for start and end
+
+Run it like this:
+
+```bash
+cd taro-frontend
+npm install
+npm run dev
+```
+
+Then open `http://127.0.0.1:5173/`.
+
+Keep Spring Boot running on `http://127.0.0.1:8080`. The Vite dev server proxies `/api` to the backend by default, so the frontend `API Base` field can stay at `/api`.
 
 ## Architectural Through-Line
 
