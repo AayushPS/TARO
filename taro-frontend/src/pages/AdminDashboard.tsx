@@ -12,30 +12,25 @@ import {
   formatCount,
   formatInstant,
   formatMillis,
-  formatSeconds,
   toneForStatus,
 } from '../lib/format'
 import type {
+  AdminNotificationResponse,
   HealthApiResponse,
   OperationalGovernanceResponse,
   OperationalMetricsResponse,
   PublishedServingModelResponse,
   RetrainingJobResponse,
-  RetrainingTelemetryExportResponse,
-  ResultKind,
+  TrainingDatasetResponse,
 } from '../lib/types'
-
-interface TelemetryFilters {
-  resultKind: ResultKind
-  topologyVersionId: string
-  scenarioBundleId: string
-  traitHash: string
-  completeOnly: boolean
-}
 
 interface ComposerState {
   trainingWindowLabel: string
   selectedTraits: string[]
+  datasetId: string
+  targetColumn: string
+  featureColumns: string[]
+  notifyOnCompletion: boolean
 }
 
 interface CompletionDraft {
@@ -55,6 +50,8 @@ interface OperationsSnapshot {
 
 interface DashboardSnapshot {
   activeModel: PublishedServingModelResponse | null
+  datasets: TrainingDatasetResponse[]
+  notifications: AdminNotificationResponse[]
   jobs: Record<string, RetrainingJobResponse>
   jobIssues: Record<string, string>
   operations: OperationsSnapshot
@@ -70,17 +67,13 @@ const traitCatalog = [
   'preferential_attachment',
 ] as const
 
-const initialFilters: TelemetryFilters = {
-  resultKind: 'ROUTE',
-  topologyVersionId: '',
-  scenarioBundleId: '',
-  traitHash: '',
-  completeOnly: true,
-}
-
 const initialComposer: ComposerState = {
-  trainingWindowLabel: 'rolling_30d',
+  trainingWindowLabel: 'bootstrap_90d',
   selectedTraits: ['recency', 'periodicity', 'persistence'],
+  datasetId: '',
+  targetColumn: '',
+  featureColumns: [],
+  notifyOnCompletion: true,
 }
 
 function blankCompletionDraft(): CompletionDraft {
@@ -96,10 +89,9 @@ export function AdminDashboard() {
   const { apiBase, callerId, trackedJobIds, trackJob, untrackJob } =
     useOutletContext<ShellContextValue>()
 
-  const [filters, setFilters] = useState<TelemetryFilters>(initialFilters)
   const [composer, setComposer] = useState<ComposerState>(initialComposer)
-  const [telemetry, setTelemetry] =
-    useState<RetrainingTelemetryExportResponse | null>(null)
+  const [datasets, setDatasets] = useState<TrainingDatasetResponse[]>([])
+  const [notifications, setNotifications] = useState<AdminNotificationResponse[]>([])
   const [jobs, setJobs] = useState<Record<string, RetrainingJobResponse>>({})
   const [jobIssues, setJobIssues] = useState<Record<string, string>>({})
   const [completionDrafts, setCompletionDrafts] = useState<
@@ -114,6 +106,7 @@ export function AdminDashboard() {
     error: null,
     refreshedAt: null,
   })
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [noticeTone, setNoticeTone] = useState<'good' | 'danger' | 'warn'>(
     'good',
@@ -123,11 +116,16 @@ export function AdminDashboard() {
   const [jobSearch, setJobSearch] = useState('')
   const deferredJobSearch = useDeferredValue(jobSearch)
 
+  const selectedDataset =
+    datasets.find((dataset) => dataset.datasetId === composer.datasetId) ?? null
+
   function applyDashboardSnapshot(snapshot: DashboardSnapshot) {
     startTransition(() => {
+      setActiveModel(snapshot.activeModel)
+      setDatasets(snapshot.datasets)
+      setNotifications(snapshot.notifications)
       setJobs((current) => ({ ...current, ...snapshot.jobs }))
       setJobIssues(snapshot.jobIssues)
-      setActiveModel(snapshot.activeModel)
       setOperations(snapshot.operations)
     })
   }
@@ -150,6 +148,10 @@ export function AdminDashboard() {
     return () => window.clearInterval(intervalId)
   }, [trackedJobIds, apiBase, callerId])
 
+  useEffect(() => {
+    setComposer((current) => reconcileComposer(current, datasets))
+  }, [datasets])
+
   const filteredJobIds = trackedJobIds.filter((jobId) => {
     const searchText = deferredJobSearch.trim().toLowerCase()
     if (!searchText) {
@@ -163,22 +165,35 @@ export function AdminDashboard() {
       job.jobId,
       job.status,
       job.trainingWindowLabel,
+      job.datasetFileName ?? '',
+      job.targetColumn ?? '',
       job.releaseArtifactId ?? '',
       ...job.selectedTraits,
+      ...job.featureColumns,
     ]
       .join(' ')
       .toLowerCase()
     return haystack.includes(searchText)
   })
 
-  async function previewTelemetry() {
-    setBusyKey('telemetry')
+  async function uploadDataset() {
+    if (!pendingFile) {
+      setNotice('Choose a CSV file before uploading.')
+      setNoticeTone('warn')
+      return
+    }
+
+    setBusyKey('upload-dataset')
     try {
       const client = new TaroApiClient(apiBase, callerId)
-      const preview = await client.exportTelemetry(filters)
-      startTransition(() => setTelemetry(preview))
-      setNotice(`Loaded ${preview.rowCount} telemetry rows for preview.`)
+      const dataset = await client.uploadDataset(pendingFile)
+      startTransition(() => {
+        setPendingFile(null)
+        setComposer((current) => composerForDataset(dataset, current))
+      })
+      setNotice(`Uploaded ${dataset.fileName} with ${dataset.rowCount} rows.`)
       setNoticeTone('good')
+      await refreshDashboardNow()
     } catch (error) {
       setNotice(describeError(error))
       setNoticeTone('danger')
@@ -187,18 +202,35 @@ export function AdminDashboard() {
     }
   }
 
-  async function createRetrainingJob() {
+  async function createTrainingJob() {
+    if (!selectedDataset) {
+      setNotice('Upload or select a dataset before creating a training job.')
+      setNoticeTone('warn')
+      return
+    }
+    if (!composer.targetColumn.trim()) {
+      setNotice('Choose a target column for training.')
+      setNoticeTone('warn')
+      return
+    }
+    if (composer.featureColumns.length === 0) {
+      setNotice('Choose at least one feature column for training.')
+      setNoticeTone('warn')
+      return
+    }
+
     setBusyKey('create-job')
     try {
       const client = new TaroApiClient(apiBase, callerId)
       const job = await client.createRetrainingJob({
         trainingWindowLabel: composer.trainingWindowLabel.trim(),
         selectedTraits: composer.selectedTraits,
-        resultKind: filters.resultKind,
-        topologyVersionId: toOptionalText(filters.topologyVersionId),
-        scenarioBundleId: toOptionalText(filters.scenarioBundleId),
-        traitHash: toOptionalText(filters.traitHash),
-        completeOnly: filters.completeOnly,
+        resultKind: 'ROUTE',
+        datasetId: selectedDataset.datasetId,
+        targetColumn: composer.targetColumn.trim(),
+        featureColumns: composer.featureColumns,
+        notifyOnCompletion: composer.notifyOnCompletion,
+        completeOnly: true,
       })
       trackJob(job.jobId)
       startTransition(() => {
@@ -208,7 +240,7 @@ export function AdminDashboard() {
           [job.jobId]: blankCompletionDraft(),
         }))
       })
-      setNotice(`Created retraining job ${job.jobId}.`)
+      setNotice(`Created training job ${job.jobId} for ${selectedDataset.fileName}.`)
       setNoticeTone('good')
       await refreshDashboardNow()
     } catch (error) {
@@ -253,6 +285,7 @@ export function AdminDashboard() {
       })
       setNotice(`Job ${jobId} is now running.`)
       setNoticeTone('good')
+      await refreshDashboardNow()
     } catch (error) {
       setNotice(describeError(error))
       setNoticeTone('danger')
@@ -285,6 +318,7 @@ export function AdminDashboard() {
           : `Job ${jobId} completed with failure.`,
       )
       setNoticeTone(draft.succeeded ? 'good' : 'warn')
+      await refreshDashboardNow()
     } catch (error) {
       setNotice(describeError(error))
       setNoticeTone('danger')
@@ -313,9 +347,6 @@ export function AdminDashboard() {
   }
 
   const healthStatus = operations.health?.status ?? 'Unknown'
-  const routeEvaluations =
-    operations.metrics?.routeEvaluations.requestCount ?? 0
-  const routeFeedback = operations.metrics?.routeFeedback.requestCount ?? 0
 
   return (
     <div className="page-stack">
@@ -326,23 +357,33 @@ export function AdminDashboard() {
       <section className="hero-grid">
         <MetricPanel
           title="Active model"
-          value={activeModel?.activeModelId ?? 'None published'}
+          value={activeModel?.activeModelId ?? 'Awaiting publish'}
           detail={
             activeModel
-              ? `Artifact ${activeModel.releaseArtifactId}`
-              : 'Publish a successful job to promote the next serving artifact.'
+              ? `${activeModel.datasetFileName ?? 'Dataset-backed'} · ${activeModel.releaseArtifactId}`
+              : 'Upload a CSV, pick the training columns, and publish the successful model.'
           }
           status={activeModel ? 'PUBLISHED' : 'WAITING'}
         />
         <MetricPanel
-          title="Telemetry preview"
-          value={telemetry ? formatCount(telemetry.rowCount) : 'Preview pending'}
+          title="Uploaded datasets"
+          value={formatCount(datasets.length)}
           detail={
-            telemetry
-              ? `${telemetry.completeRowCount} rows have complete outcomes`
-              : 'Use the preview action to inspect retraining input before creating a job.'
+            selectedDataset
+              ? `${selectedDataset.fileName} selected for the next training run`
+              : 'No caller-scoped dataset selected yet'
           }
-          status={telemetry ? 'READY' : 'IDLE'}
+          status={datasets.length > 0 ? 'READY' : 'IDLE'}
+        />
+        <MetricPanel
+          title="Admin notifications"
+          value={formatCount(notifications.length)}
+          detail={
+            notifications[0]
+              ? `${notifications[0].title} at ${formatInstant(notifications[0].createdAt)}`
+              : 'Completion and publish notices will appear here'
+          }
+          status={notifications.length > 0 ? 'LIVE' : 'QUIET'}
         />
         <MetricPanel
           title="Serving health"
@@ -354,172 +395,242 @@ export function AdminDashboard() {
           }
           status={operations.health?.alertStatus ?? healthStatus}
         />
-        <MetricPanel
-          title="Tracked jobs"
-          value={formatCount(trackedJobIds.length)}
-          detail={`${formatCount(routeEvaluations)} route evals and ${formatCount(routeFeedback)} feedback joins`}
-          status={trackedJobIds.length > 0 ? 'RUNNING' : 'IDLE'}
-        />
       </section>
 
       <section className="dashboard-grid">
         <div className="surface-card">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Retraining input</p>
-              <h2>Preview caller-scoped telemetry</h2>
+              <p className="eyebrow">Dataset intake</p>
+              <h2>Upload caller-scoped training data</h2>
             </div>
             <StatusPill
-              label={
-                telemetry
-                  ? `${telemetry.completeRowCount}/${telemetry.rowCount} complete`
-                  : 'Not loaded'
-              }
+              label={selectedDataset ? selectedDataset.fileName : 'No dataset selected'}
+              tone="neutral"
             />
           </div>
-          <div className="form-grid">
-            <label className="field">
-              <span>Result kind</span>
-              <select
-                value={filters.resultKind}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    resultKind: event.target.value as ResultKind,
-                  }))
-                }
-              >
-                <option value="ROUTE">ROUTE</option>
-                <option value="MATRIX">MATRIX</option>
-              </select>
-            </label>
-            <label className="field">
-              <span>Topology version</span>
+
+          <div className="inline-actions inline-actions--stretch">
+            <label className="field field--wide">
+              <span>CSV file</span>
               <input
-                value={filters.topologyVersionId}
+                accept=".csv,text/csv"
                 onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    topologyVersionId: event.target.value,
-                  }))
+                  setPendingFile(event.target.files?.[0] ?? null)
                 }
-                placeholder="topo-api"
+                type="file"
               />
             </label>
-            <label className="field">
-              <span>Scenario bundle</span>
-              <input
-                value={filters.scenarioBundleId}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    scenarioBundleId: event.target.value,
-                  }))
-                }
-                placeholder="bundle-api"
-              />
-            </label>
-            <label className="field">
-              <span>Trait hash</span>
-              <input
-                value={filters.traitHash}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    traitHash: event.target.value,
-                  }))
-                }
-                placeholder="optional lineage pin"
-              />
-            </label>
-          </div>
-          <label className="checkbox">
-            <input
-              checked={filters.completeOnly}
-              onChange={(event) =>
-                setFilters((current) => ({
-                  ...current,
-                  completeOnly: event.target.checked,
-                }))
-              }
-              type="checkbox"
-            />
-            <span>Only include complete outcome rows</span>
-          </label>
-          <div className="action-row">
-            <button
-              className="button button--primary"
-              onClick={previewTelemetry}
-              type="button"
-            >
-              {busyKey === 'telemetry' ? 'Loading…' : 'Preview telemetry'}
+            <button className="button button--primary" onClick={uploadDataset} type="button">
+              {busyKey === 'upload-dataset' ? 'Uploading…' : 'Upload dataset'}
             </button>
           </div>
 
-          <div className="table-shell">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Result set</th>
-                  <th>Topology</th>
-                  <th>Bundle</th>
-                  <th>Complete</th>
-                  <th>Observed cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {telemetry?.rows.slice(0, 8).map((row) => (
-                  <tr key={row.resultSetId}>
-                    <td>{row.resultSetId}</td>
-                    <td>{row.topologyVersionId}</td>
-                    <td>{row.scenarioBundleId ?? 'N/A'}</td>
-                    <td>
-                      <StatusPill label={row.complete ? 'COMPLETE' : 'PARTIAL'} />
-                    </td>
-                    <td>{formatSeconds(row.observedCostSeconds)}</td>
-                  </tr>
-                ))}
-                {!telemetry ? (
-                  <tr>
-                    <td colSpan={5}>
-                      No preview loaded yet. Query and feedback data will appear
-                      here after you create route results for this caller.
-                    </td>
-                  </tr>
-                ) : telemetry.rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>No rows matched the current filter.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+          <div className="history-strip">
+            {datasets.length > 0 ? (
+              datasets.map((dataset) => (
+                <button
+                  key={dataset.datasetId}
+                  className={
+                    dataset.datasetId === composer.datasetId
+                      ? 'history-pill history-pill--selected'
+                      : 'history-pill'
+                  }
+                  onClick={() =>
+                    setComposer((current) => composerForDataset(dataset, current))
+                  }
+                  type="button"
+                >
+                  {dataset.fileName}
+                </button>
+              ))
+            ) : (
+              <p className="muted-text">
+                Uploaded datasets will appear here so you can switch the active
+                training configuration per caller.
+              </p>
+            )}
           </div>
+
+          {selectedDataset ? (
+            <>
+              <div className="detail-list">
+                <JobDatum label="Dataset ID" value={selectedDataset.datasetId} />
+                <JobDatum
+                  label="Uploaded"
+                  value={formatInstant(selectedDataset.uploadedAt)}
+                />
+                <JobDatum
+                  label="Rows"
+                  value={formatCount(selectedDataset.rowCount)}
+                />
+                <JobDatum
+                  label="Columns"
+                  value={formatCount(selectedDataset.columnCount)}
+                />
+                <JobDatum label="SHA-256" value={selectedDataset.sha256} />
+                <JobDatum
+                  label="Headers"
+                  value={selectedDataset.headers.join(', ')}
+                />
+              </div>
+
+              <div className="table-shell">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      {selectedDataset.headers.map((header) => (
+                        <th key={header}>{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedDataset.sampleRows.map((row, index) => (
+                      <tr key={`${selectedDataset.datasetId}-sample-${index}`}>
+                        {selectedDataset.headers.map((header, columnIndex) => (
+                          <td key={`${header}-${columnIndex}`}>
+                            {row[columnIndex] ?? ''}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="empty-state">
+              Upload a CSV to inspect its headers and sample rows before you
+              create the training job.
+            </div>
+          )}
         </div>
 
         <div className="surface-card">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Training control</p>
-              <h2>Create a retraining job</h2>
+              <p className="eyebrow">Training plan</p>
+              <h2>Define model parameters before training</h2>
             </div>
             <StatusPill
-              label={`${composer.selectedTraits.length} traits selected`}
-              tone="neutral"
+              label={
+                selectedDataset
+                  ? `${composer.featureColumns.length} features`
+                  : 'Dataset required'
+              }
             />
           </div>
-          <label className="field">
-            <span>Training window label</span>
-            <input
-              value={composer.trainingWindowLabel}
-              onChange={(event) =>
-                setComposer((current) => ({
-                  ...current,
-                  trainingWindowLabel: event.target.value,
-                }))
-              }
-              placeholder="rolling_30d"
-            />
-          </label>
+
+          <div className="form-grid">
+            <label className="field">
+              <span>Dataset</span>
+              <select
+                onChange={(event) => {
+                  const dataset =
+                    datasets.find(
+                      (candidate) => candidate.datasetId === event.target.value,
+                    ) ?? null
+                  if (dataset) {
+                    setComposer((current) => composerForDataset(dataset, current))
+                  }
+                }}
+                value={composer.datasetId}
+              >
+                <option value="">Select a caller dataset</option>
+                {datasets.map((dataset) => (
+                  <option key={dataset.datasetId} value={dataset.datasetId}>
+                    {dataset.fileName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Training window label</span>
+              <input
+                onChange={(event) =>
+                  setComposer((current) => ({
+                    ...current,
+                    trainingWindowLabel: event.target.value,
+                  }))
+                }
+                placeholder="bootstrap_90d"
+                value={composer.trainingWindowLabel}
+              />
+            </label>
+            <label className="field">
+              <span>Target column</span>
+              <select
+                onChange={(event) =>
+                  setComposer((current) => ({
+                    ...current,
+                    targetColumn: event.target.value,
+                    featureColumns: current.featureColumns.filter(
+                      (column) => column !== event.target.value,
+                    ),
+                  }))
+                }
+                value={composer.targetColumn}
+              >
+                <option value="">Select target column</option>
+                {selectedDataset?.headers.map((header) => (
+                  <option key={header} value={header}>
+                    {header}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="checkbox">
+              <input
+                checked={composer.notifyOnCompletion}
+                onChange={(event) =>
+                  setComposer((current) => ({
+                    ...current,
+                    notifyOnCompletion: event.target.checked,
+                  }))
+                }
+                type="checkbox"
+              />
+              <span>Notify this admin when training completes</span>
+            </label>
+          </div>
+
+          <div className="section-heading section-heading--stack">
+            <div>
+              <p className="eyebrow">Feature columns</p>
+              <h2>Choose what the model trains on</h2>
+            </div>
+          </div>
+          <div className="chip-grid">
+            {selectedDataset?.headers
+              .filter((header) => header !== composer.targetColumn)
+              .map((header) => {
+                const selected = composer.featureColumns.includes(header)
+                return (
+                  <button
+                    key={header}
+                    className={selected ? 'trait-chip is-selected' : 'trait-chip'}
+                    onClick={() =>
+                      setComposer((current) => ({
+                        ...current,
+                        featureColumns: selected
+                          ? current.featureColumns.filter((value) => value !== header)
+                          : [...current.featureColumns, header],
+                      }))
+                    }
+                    type="button"
+                  >
+                    {header}
+                  </button>
+                )
+              })}
+          </div>
+
+          <div className="section-heading section-heading--stack">
+            <div>
+              <p className="eyebrow">Temporal traits</p>
+              <h2>Select the training posture</h2>
+            </div>
+          </div>
           <div className="chip-grid">
             {traitCatalog.map((trait) => {
               const selected = composer.selectedTraits.includes(trait)
@@ -542,20 +653,117 @@ export function AdminDashboard() {
               )
             })}
           </div>
+
           <div className="action-row">
             <button
               className="button button--primary"
-              onClick={createRetrainingJob}
+              onClick={createTrainingJob}
               type="button"
             >
-              {busyKey === 'create-job' ? 'Creating…' : 'Create retraining job'}
+              {busyKey === 'create-job' ? 'Creating…' : 'Create training job'}
             </button>
           </div>
           <p className="callout">
-            This frontend only uses backend capabilities that already exist:
-            telemetry export, caller-scoped retraining lifecycle, publish, and
-            active-model lookup.
+            The uploaded CSV defines the training corpus. The selected target
+            and feature columns are stored with the training job and the
+            published active model.
           </p>
+        </div>
+      </section>
+
+      <section className="dashboard-grid">
+        <div className="surface-card">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Published serving state</p>
+              <h2>Caller-scoped active model</h2>
+            </div>
+            <StatusPill label={activeModel ? 'PUBLISHED' : 'NONE'} />
+          </div>
+          {activeModel ? (
+            <div className="detail-list">
+              <JobDatum label="Active model ID" value={activeModel.activeModelId} />
+              <JobDatum
+                label="Source training job"
+                value={activeModel.sourceTrainingJobId}
+              />
+              <JobDatum
+                label="Published at"
+                value={formatInstant(activeModel.publishedAt)}
+              />
+              <JobDatum
+                label="Release artifact"
+                value={activeModel.releaseArtifactId}
+              />
+              <JobDatum
+                label="Dataset"
+                value={activeModel.datasetFileName ?? 'Telemetry-backed'}
+              />
+              <JobDatum
+                label="Target column"
+                value={activeModel.targetColumn ?? 'N/A'}
+              />
+              <JobDatum
+                label="Feature columns"
+                value={activeModel.featureColumns.join(', ') || 'N/A'}
+              />
+              <JobDatum
+                label="Traits"
+                value={activeModel.selectedTraits.join(', ')}
+              />
+            </div>
+          ) : (
+            <div className="empty-state">
+              No caller-scoped model is published yet. The user workspace will
+              stay blocked until a model is promoted here.
+            </div>
+          )}
+        </div>
+
+        <div className="surface-card">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Notifications</p>
+              <h2>Training and publish events</h2>
+            </div>
+            <StatusPill
+              label={notifications.length > 0 ? 'LIVE FEED' : 'QUIET'}
+              tone={notifications.length > 0 ? 'good' : 'neutral'}
+            />
+          </div>
+          <div className="job-list">
+            {notifications.map((notification) => (
+              <article className="job-card" key={notification.notificationId}>
+                <div className="job-card__header">
+                  <div>
+                    <h3>{notification.title}</h3>
+                    <p className="muted-text">{notification.detail}</p>
+                  </div>
+                  <StatusPill label={notification.type} tone="neutral" />
+                </div>
+                <div className="job-card__grid">
+                  <JobDatum
+                    label="Created"
+                    value={formatInstant(notification.createdAt)}
+                  />
+                  <JobDatum
+                    label="Dataset"
+                    value={notification.relatedDatasetId ?? 'N/A'}
+                  />
+                  <JobDatum
+                    label="Job"
+                    value={notification.relatedJobId ?? 'N/A'}
+                  />
+                </div>
+              </article>
+            ))}
+            {notifications.length === 0 ? (
+              <div className="empty-state">
+                Dataset uploads, completion notices, and publish events will
+                appear here for this caller.
+              </div>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -563,23 +771,23 @@ export function AdminDashboard() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Tracked lifecycle</p>
-            <h2>Monitor and act on retraining jobs</h2>
+            <h2>Monitor and act on training jobs</h2>
           </div>
           <div className="inline-actions">
             <label className="field field--compact">
               <span>Find tracked job</span>
               <input
-                value={jobSearch}
                 onChange={(event) => setJobSearch(event.target.value)}
-                placeholder="Search by job, trait, or status"
+                placeholder="Search by job, dataset, target, or status"
+                value={jobSearch}
               />
             </label>
             <label className="field field--compact">
               <span>Attach existing job</span>
               <input
-                value={attachJobId}
                 onChange={(event) => setAttachJobId(event.target.value)}
                 placeholder="retrain-…"
+                value={attachJobId}
               />
             </label>
             <button className="button button--ghost" onClick={attachTrackedJob} type="button">
@@ -624,17 +832,27 @@ export function AdminDashboard() {
                   <div>
                     <h3>{job.jobId}</h3>
                     <p className="muted-text">
-                      {job.trainingWindowLabel} · {job.selectedTraits.join(', ')}
+                      {job.datasetFileName
+                        ? `${job.datasetFileName} → ${job.targetColumn ?? 'target'}`
+                        : 'Telemetry-backed training'}
                     </p>
                   </div>
                   <StatusPill label={job.status} />
                 </div>
 
                 <div className="job-card__grid">
-                  <JobDatum label="Export rows" value={formatCount(job.exportRowCount)} />
+                  <JobDatum label="Window" value={job.trainingWindowLabel} />
                   <JobDatum
-                    label="Complete rows"
-                    value={formatCount(job.completeExportRowCount)}
+                    label="Traits"
+                    value={job.selectedTraits.join(', ')}
+                  />
+                  <JobDatum
+                    label="Features"
+                    value={job.featureColumns.join(', ') || 'N/A'}
+                  />
+                  <JobDatum
+                    label="Dataset rows"
+                    value={formatCount(job.datasetRowCount)}
                   />
                   <JobDatum label="Created" value={formatInstant(job.createdAt)} />
                   <JobDatum label="Updated" value={formatInstant(job.updatedAt)} />
@@ -671,7 +889,6 @@ export function AdminDashboard() {
                       <label className="field field--compact">
                         <span>Outcome</span>
                         <select
-                          value={completionDraft.succeeded ? 'success' : 'failure'}
                           onChange={(event) =>
                             setCompletionDrafts((current) => ({
                               ...current,
@@ -681,6 +898,7 @@ export function AdminDashboard() {
                               },
                             }))
                           }
+                          value={completionDraft.succeeded ? 'success' : 'failure'}
                         >
                           <option value="success">Success</option>
                           <option value="failure">Failure</option>
@@ -690,7 +908,6 @@ export function AdminDashboard() {
                         <label className="field field--compact">
                           <span>Release artifact</span>
                           <input
-                            value={completionDraft.releaseArtifactId}
                             onChange={(event) =>
                               setCompletionDrafts((current) => ({
                                 ...current,
@@ -700,14 +917,14 @@ export function AdminDashboard() {
                                 },
                               }))
                             }
-                            placeholder="release-caller-a-v2"
+                            placeholder="release-caller-a-v1"
+                            value={completionDraft.releaseArtifactId}
                           />
                         </label>
                       ) : (
                         <label className="field field--compact">
                           <span>Failure reason</span>
                           <input
-                            value={completionDraft.failureReason}
                             onChange={(event) =>
                               setCompletionDrafts((current) => ({
                                 ...current,
@@ -717,14 +934,14 @@ export function AdminDashboard() {
                                 },
                               }))
                             }
-                            placeholder="calibration gate failed"
+                            placeholder="validation gate failed"
+                            value={completionDraft.failureReason}
                           />
                         </label>
                       )}
                       <label className="field field--compact field--wide">
                         <span>Validation summary</span>
                         <input
-                          value={completionDraft.validationSummary}
                           onChange={(event) =>
                             setCompletionDrafts((current) => ({
                               ...current,
@@ -734,7 +951,8 @@ export function AdminDashboard() {
                               },
                             }))
                           }
-                          placeholder="temporal probes and calibration gates passed"
+                          placeholder="training completed and validation probes passed"
+                          value={completionDraft.validationSummary}
                         />
                       </label>
                       <button
@@ -771,54 +989,14 @@ export function AdminDashboard() {
 
           {filteredJobIds.length === 0 ? (
             <div className="empty-state">
-              No tracked jobs for this caller yet. Create one from telemetry or
-              attach an existing job ID.
+              No tracked jobs for this caller yet. Upload a dataset and create a
+              training job to begin the lifecycle.
             </div>
           ) : null}
         </div>
       </section>
 
       <section className="dashboard-grid">
-        <div className="surface-card">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Published serving state</p>
-              <h2>Active model</h2>
-            </div>
-            <StatusPill label={activeModel ? 'PUBLISHED' : 'NONE'} />
-          </div>
-          {activeModel ? (
-            <div className="detail-list">
-              <JobDatum label="Active model ID" value={activeModel.activeModelId} />
-              <JobDatum
-                label="Source training job"
-                value={activeModel.sourceTrainingJobId}
-              />
-              <JobDatum
-                label="Release artifact"
-                value={activeModel.releaseArtifactId}
-              />
-              <JobDatum
-                label="Published at"
-                value={formatInstant(activeModel.publishedAt)}
-              />
-              <JobDatum
-                label="Training window"
-                value={activeModel.trainingWindowLabel}
-              />
-              <JobDatum
-                label="Traits"
-                value={activeModel.selectedTraits.join(', ')}
-              />
-            </div>
-          ) : (
-            <div className="empty-state">
-              No caller-scoped model is published yet. Complete and publish a
-              retraining job to populate this panel.
-            </div>
-          )}
-        </div>
-
         <div className="surface-card">
           <div className="section-heading">
             <div>
@@ -852,6 +1030,10 @@ export function AdminDashboard() {
               value={formatMillis(operations.metrics?.routeEvaluations.averageLatencyMillis)}
             />
             <JobDatum
+              label="Route feedback count"
+              value={formatCount(operations.metrics?.routeFeedback.requestCount)}
+            />
+            <JobDatum
               label="Reload success count"
               value={formatCount(operations.metrics?.reload.appliedReloadCount)}
             />
@@ -869,6 +1051,39 @@ export function AdminDashboard() {
           {operations.error ? (
             <p className="callout callout--warn">{operations.error}</p>
           ) : null}
+        </div>
+
+        <div className="surface-card">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Admin posture</p>
+              <h2>What happens next</h2>
+            </div>
+            <StatusPill label="Embedded flow" tone="neutral" />
+          </div>
+          <p className="callout">
+            After a publish, the same caller can move to the user workspace and
+            query routes with only a start and end point. The query workspace
+            blocks requests until an active model exists.
+          </p>
+          <div className="detail-list">
+            <JobDatum
+              label="Step 1"
+              value="Upload CSV dataset and inspect headers"
+            />
+            <JobDatum
+              label="Step 2"
+              value="Choose target column, feature columns, and traits"
+            />
+            <JobDatum
+              label="Step 3"
+              value="Run, complete, and publish the training job"
+            />
+            <JobDatum
+              label="Step 4"
+              value="Use the published model in the user route workspace"
+            />
+          </div>
         </div>
       </section>
     </div>
@@ -905,6 +1120,90 @@ function JobDatum({ label, value }: { label: string; value: string }) {
   )
 }
 
+function pickTargetColumn(headers: string[]): string {
+  if (headers.length === 0) {
+    return ''
+  }
+  const targetMatcher =
+    /(^travel[_-]?time$|^duration$|^cost$|^eta$|^label$|^target$)/i
+  const matchingHeader =
+    headers.find((header) => targetMatcher.test(header)) ?? headers.at(-1)
+  return matchingHeader ?? ''
+}
+
+function composerForDataset(
+  dataset: TrainingDatasetResponse,
+  current: ComposerState,
+): ComposerState {
+  const targetColumn = pickTargetColumn(dataset.headers)
+  const featureColumns = dataset.headers.filter((header) => header !== targetColumn)
+  return {
+    ...current,
+    datasetId: dataset.datasetId,
+    targetColumn,
+    featureColumns,
+  }
+}
+
+function reconcileComposer(
+  current: ComposerState,
+  datasets: TrainingDatasetResponse[],
+): ComposerState {
+  if (datasets.length === 0) {
+    if (
+      !current.datasetId &&
+      !current.targetColumn &&
+      current.featureColumns.length === 0
+    ) {
+      return current
+    }
+    return {
+      ...current,
+      datasetId: '',
+      targetColumn: '',
+      featureColumns: [],
+    }
+  }
+
+  const selectedDataset =
+    datasets.find((dataset) => dataset.datasetId === current.datasetId) ??
+    datasets[0]
+  const sameDataset = selectedDataset.datasetId === current.datasetId
+  const targetColumn = selectedDataset.headers.includes(current.targetColumn)
+    ? current.targetColumn
+    : pickTargetColumn(selectedDataset.headers)
+  const featureColumns = current.featureColumns.filter(
+    (column) =>
+      column !== targetColumn && selectedDataset.headers.includes(column),
+  )
+  const nextFeatureColumns =
+    featureColumns.length > 0
+      ? featureColumns
+      : selectedDataset.headers.filter((header) => header !== targetColumn)
+
+  if (
+    sameDataset &&
+    targetColumn === current.targetColumn &&
+    sameStringList(nextFeatureColumns, current.featureColumns)
+  ) {
+    return current
+  }
+
+  return {
+    ...current,
+    datasetId: selectedDataset.datasetId,
+    targetColumn,
+    featureColumns: nextFeatureColumns,
+  }
+}
+
+function sameStringList(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+  return left.every((value, index) => value === right[index])
+}
+
 function toOptionalText(value: string): string | undefined {
   const trimmed = value.trim()
   return trimmed ? trimmed : undefined
@@ -917,12 +1216,19 @@ async function fetchDashboardSnapshot(
 ): Promise<DashboardSnapshot> {
   const client = new TaroApiClient(apiBase, callerId)
 
-  const [healthResult, metricsResult, governanceResult] =
-    await Promise.allSettled([
-      client.health(),
-      client.metrics(),
-      client.governance(),
-    ])
+  const [
+    datasetsResult,
+    notificationsResult,
+    healthResult,
+    metricsResult,
+    governanceResult,
+  ] = await Promise.allSettled([
+    client.datasets(12),
+    client.notifications(12),
+    client.health(),
+    client.metrics(),
+    client.governance(),
+  ])
 
   let nextActiveModel: PublishedServingModelResponse | null = null
   try {
@@ -947,6 +1253,9 @@ async function fetchDashboardSnapshot(
 
   return {
     activeModel: nextActiveModel,
+    datasets: datasetsResult.status === 'fulfilled' ? datasetsResult.value : [],
+    notifications:
+      notificationsResult.status === 'fulfilled' ? notificationsResult.value : [],
     jobs: nextJobs,
     jobIssues: nextJobIssues,
     operations: {
@@ -955,10 +1264,12 @@ async function fetchDashboardSnapshot(
       governance:
         governanceResult.status === 'fulfilled' ? governanceResult.value : null,
       error:
+        datasetsResult.status === 'rejected' ||
+        notificationsResult.status === 'rejected' ||
         healthResult.status === 'rejected' ||
         metricsResult.status === 'rejected' ||
         governanceResult.status === 'rejected'
-          ? 'One or more operations endpoints are unavailable.'
+          ? 'One or more admin or operations endpoints are unavailable.'
           : null,
       refreshedAt: new Date().toISOString(),
     },

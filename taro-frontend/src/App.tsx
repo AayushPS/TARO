@@ -40,11 +40,11 @@ function AppShell({
       <header className="shell-hero">
         <div className="shell-hero__copy">
           <p className="eyebrow">TARO Control Surface</p>
-          <h1>Train, publish, and query one caller-scoped routing system.</h1>
+          <h1>Upload training data, publish a model, then hand users a thin route UI.</h1>
           <p className="hero-text">
-            The admin workspace controls telemetry export, retraining, and model
-            publication. The route workspace stays thin and only asks for start
-            and end points.
+            The admin workspace owns caller-scoped dataset upload, training
+            parameters, notifications, and publication. The user workspace only
+            asks for start and end points once a model is active.
           </p>
         </div>
         <div className="shell-hero__controls">
@@ -65,9 +65,9 @@ function AppShell({
             />
           </label>
           <p className="field-hint">
-            Default development flow: keep this field at `/api`, run Spring
-            Boot on `8080`, then run this app on `5173`. Use a full origin only
-            when you want the frontend to bypass the proxy.
+            Default flow: keep this field at `/api`. When the frontend is
+            served by Spring Boot, that already points at the same backend. In
+            Vite development, the proxy forwards `/api` to `8080`.
           </p>
         </div>
       </header>

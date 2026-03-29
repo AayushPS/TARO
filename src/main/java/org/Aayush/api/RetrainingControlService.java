@@ -18,15 +18,21 @@ import java.util.UUID;
 @Component
 public final class RetrainingControlService {
     private final PredictionTelemetryStore predictionTelemetryStore;
+    private final TrainingDatasetService trainingDatasetService;
+    private final AdminNotificationService adminNotificationService;
     private final Clock clock;
     private final LinkedHashMap<String, StoredRetrainingJob> jobsById = new LinkedHashMap<>();
     private final LinkedHashMap<String, PublishedModelRecord> activeModelsByCallerId = new LinkedHashMap<>();
 
     public RetrainingControlService(
             PredictionTelemetryStore predictionTelemetryStore,
+            TrainingDatasetService trainingDatasetService,
+            AdminNotificationService adminNotificationService,
             ObjectProvider<Clock> clockProvider
     ) {
         this.predictionTelemetryStore = Objects.requireNonNull(predictionTelemetryStore, "predictionTelemetryStore");
+        this.trainingDatasetService = Objects.requireNonNull(trainingDatasetService, "trainingDatasetService");
+        this.adminNotificationService = Objects.requireNonNull(adminNotificationService, "adminNotificationService");
         Clock providedClock = clockProvider.getIfAvailable();
         this.clock = providedClock == null ? Clock.systemUTC() : providedClock;
     }
@@ -59,6 +65,9 @@ public final class RetrainingControlService {
         String normalizedCallerId = requireText(callerId, "callerId");
         String trainingWindowLabel = requireText(request.trainingWindowLabel(), "trainingWindowLabel");
         List<String> selectedTraits = normalizeSelectedTraits(request.selectedTraits());
+        String datasetId = normalizeOptionalText(request.datasetId());
+        String targetColumn = normalizeOptionalText(request.targetColumn());
+        List<String> featureColumns = normalizeFeatureColumns(request.featureColumns());
         List<PredictionTelemetryStore.ExportRow> rows = exportRows(
                 normalizedCallerId,
                 request.resultKind(),
@@ -67,7 +76,16 @@ public final class RetrainingControlService {
                 request.traitHash(),
                 request.completeOnly()
         );
-        if (rows.isEmpty()) {
+
+        TrainingDatasetService.StoredDataset dataset = null;
+        if (datasetId != null) {
+            dataset = trainingDatasetService.requireDataset(normalizedCallerId, datasetId);
+            validateTrainingColumns(dataset, targetColumn, featureColumns);
+        } else if (targetColumn != null || !featureColumns.isEmpty()) {
+            throw TaroApiException.badRequest("datasetId is required when target or feature columns are provided");
+        }
+
+        if (dataset == null && rows.isEmpty()) {
             throw TaroApiException.badRequest("no telemetry rows matched the retraining export filter");
         }
 
@@ -85,6 +103,12 @@ public final class RetrainingControlService {
                 trainingWindowLabel,
                 selectedTraits,
                 request.resultKind(),
+                dataset == null ? null : dataset.datasetId(),
+                dataset == null ? null : dataset.fileName(),
+                dataset == null ? null : dataset.rowCount(),
+                targetColumn,
+                featureColumns,
+                request.notifyOnCompletion(),
                 normalizeOptionalText(request.topologyVersionId()),
                 normalizeOptionalText(request.scenarioBundleId()),
                 normalizeOptionalText(request.traitHash()),
@@ -99,7 +123,9 @@ public final class RetrainingControlService {
                 null
         );
         jobsById.put(jobId, job);
-        return job.toResponse();
+        RetrainingJobResponse response = job.toResponse();
+        adminNotificationService.recordTrainingJobCreated(normalizedCallerId, response);
+        return response;
     }
 
     public synchronized RetrainingJobResponse jobStatus(String callerId, String jobId) {
@@ -123,14 +149,16 @@ public final class RetrainingControlService {
             RetrainingJobCompletionRequest request
     ) {
         Objects.requireNonNull(request, "request");
-        StoredRetrainingJob job = requireJob(callerId, jobId);
+        String normalizedCallerId = requireText(callerId, "callerId");
+        StoredRetrainingJob job = requireJob(normalizedCallerId, jobId);
         if (job.status() != RetrainingJobStatus.QUEUED && job.status() != RetrainingJobStatus.RUNNING) {
             throw TaroApiException.trainingJobConflict(jobId, "cannot complete from state " + job.status());
         }
         Instant now = clock.instant();
+        StoredRetrainingJob updated;
         if (request.succeeded()) {
             String releaseArtifactId = requireText(request.releaseArtifactId(), "releaseArtifactId");
-            StoredRetrainingJob updated = job.withState(
+            updated = job.withState(
                     RetrainingJobStatus.SUCCEEDED,
                     job.startedAt() == null ? now : job.startedAt(),
                     now,
@@ -139,32 +167,36 @@ public final class RetrainingControlService {
                     normalizeOptionalText(request.validationSummary()),
                     null
             );
-            jobsById.put(jobId, updated);
-            return updated.toResponse();
+        } else {
+            String failureReason = requireText(request.failureReason(), "failureReason");
+            updated = job.withState(
+                    RetrainingJobStatus.FAILED,
+                    job.startedAt() == null ? now : job.startedAt(),
+                    now,
+                    null,
+                    null,
+                    normalizeOptionalText(request.validationSummary()),
+                    failureReason
+            );
         }
-        String failureReason = requireText(request.failureReason(), "failureReason");
-        StoredRetrainingJob updated = job.withState(
-                RetrainingJobStatus.FAILED,
-                job.startedAt() == null ? now : job.startedAt(),
-                now,
-                null,
-                null,
-                normalizeOptionalText(request.validationSummary()),
-                failureReason
-        );
         jobsById.put(jobId, updated);
-        return updated.toResponse();
+        RetrainingJobResponse response = updated.toResponse();
+        if (updated.notifyOnCompletion()) {
+            adminNotificationService.recordTrainingJobCompleted(normalizedCallerId, response);
+        }
+        return response;
     }
 
     public synchronized PublishedServingModelResponse publishRetrainingJob(String callerId, String jobId) {
-        StoredRetrainingJob job = requireJob(callerId, jobId);
+        String normalizedCallerId = requireText(callerId, "callerId");
+        StoredRetrainingJob job = requireJob(normalizedCallerId, jobId);
         if (job.status() != RetrainingJobStatus.SUCCEEDED) {
             throw TaroApiException.trainingJobConflict(jobId, "cannot publish from state " + job.status());
         }
         Instant now = clock.instant();
         String activeModelId = "published-" + UUID.randomUUID();
         PublishedModelRecord model = new PublishedModelRecord(
-                requireText(callerId, "callerId"),
+                normalizedCallerId,
                 activeModelId,
                 job.jobId(),
                 job.releaseArtifactId(),
@@ -172,6 +204,10 @@ public final class RetrainingControlService {
                 job.trainingWindowLabel(),
                 job.selectedTraits(),
                 job.resultKind(),
+                job.datasetId(),
+                job.datasetFileName(),
+                job.targetColumn(),
+                job.featureColumns(),
                 job.exportRowCount(),
                 job.completeExportRowCount()
         );
@@ -186,7 +222,9 @@ public final class RetrainingControlService {
                 job.failureReason()
         ).withPublishedModelId(activeModelId);
         jobsById.put(jobId, updated);
-        return model.toResponse();
+        PublishedServingModelResponse response = model.toResponse();
+        adminNotificationService.recordModelPublished(normalizedCallerId, response);
+        return response;
     }
 
     public synchronized PublishedServingModelResponse activeModel(String callerId) {
@@ -273,6 +311,44 @@ public final class RetrainingControlService {
         return List.copyOf(normalized);
     }
 
+    private static List<String> normalizeFeatureColumns(List<String> featureColumns) {
+        if (featureColumns == null || featureColumns.isEmpty()) {
+            return List.of();
+        }
+        ArrayList<String> normalized = new ArrayList<>();
+        for (String featureColumn : featureColumns) {
+            String value = requireText(featureColumn, "featureColumns");
+            if (!normalized.contains(value)) {
+                normalized.add(value);
+            }
+        }
+        return List.copyOf(normalized);
+    }
+
+    private static void validateTrainingColumns(
+            TrainingDatasetService.StoredDataset dataset,
+            String targetColumn,
+            List<String> featureColumns
+    ) {
+        if (targetColumn == null) {
+            throw TaroApiException.badRequest("targetColumn is required when datasetId is provided");
+        }
+        if (!dataset.headers().contains(targetColumn)) {
+            throw TaroApiException.badRequest("targetColumn is not present in dataset headers: " + targetColumn);
+        }
+        if (featureColumns.isEmpty()) {
+            throw TaroApiException.badRequest("featureColumns must contain at least one column when datasetId is provided");
+        }
+        for (String featureColumn : featureColumns) {
+            if (!dataset.headers().contains(featureColumn)) {
+                throw TaroApiException.badRequest("featureColumn is not present in dataset headers: " + featureColumn);
+            }
+            if (featureColumn.equals(targetColumn)) {
+                throw TaroApiException.badRequest("featureColumns must not include the targetColumn");
+            }
+        }
+    }
+
     private record StoredRetrainingJob(
             String jobId,
             String callerId,
@@ -284,6 +360,12 @@ public final class RetrainingControlService {
             String trainingWindowLabel,
             List<String> selectedTraits,
             ResultKind resultKind,
+            String datasetId,
+            String datasetFileName,
+            Integer datasetRowCount,
+            String targetColumn,
+            List<String> featureColumns,
+            boolean notifyOnCompletion,
             String topologyVersionId,
             String scenarioBundleId,
             String traitHash,
@@ -309,6 +391,12 @@ public final class RetrainingControlService {
                     trainingWindowLabel,
                     selectedTraits,
                     resultKind,
+                    datasetId,
+                    datasetFileName,
+                    datasetRowCount,
+                    targetColumn,
+                    featureColumns,
+                    notifyOnCompletion,
                     topologyVersionId,
                     scenarioBundleId,
                     traitHash,
@@ -343,6 +431,12 @@ public final class RetrainingControlService {
                     trainingWindowLabel,
                     selectedTraits,
                     resultKind,
+                    datasetId,
+                    datasetFileName,
+                    datasetRowCount,
+                    targetColumn,
+                    featureColumns,
+                    notifyOnCompletion,
                     topologyVersionId,
                     scenarioBundleId,
                     traitHash,
@@ -370,6 +464,12 @@ public final class RetrainingControlService {
                     trainingWindowLabel,
                     selectedTraits,
                     resultKind,
+                    datasetId,
+                    datasetFileName,
+                    datasetRowCount,
+                    targetColumn,
+                    featureColumns,
+                    notifyOnCompletion,
                     topologyVersionId,
                     scenarioBundleId,
                     traitHash,
@@ -395,6 +495,10 @@ public final class RetrainingControlService {
             String trainingWindowLabel,
             List<String> selectedTraits,
             ResultKind resultKind,
+            String datasetId,
+            String datasetFileName,
+            String targetColumn,
+            List<String> featureColumns,
             int exportRowCount,
             int completeExportRowCount
     ) {
@@ -407,6 +511,10 @@ public final class RetrainingControlService {
                     trainingWindowLabel,
                     selectedTraits,
                     resultKind,
+                    datasetId,
+                    datasetFileName,
+                    targetColumn,
+                    featureColumns,
                     exportRowCount,
                     completeExportRowCount
             );

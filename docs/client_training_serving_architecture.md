@@ -179,22 +179,23 @@ After publication:
 
 Implemented in this repo now:
 
+- caller-scoped CSV dataset upload and metadata preview
 - caller-scoped telemetry export from served predictions plus feedback
 - retraining job lifecycle metadata: create, start, complete, publish
+- caller-scoped admin notifications for dataset upload, completion, and publish
 - caller-scoped active-model metadata lookup
 
 ## Current Frontend Slice
 
 Implemented in `taro-frontend/` now:
 
-- client-admin dashboard for telemetry preview, retraining actions, active model status, and serving operations
-- thin route workspace that only asks for start and end while still exposing Expected ETA, Robust / P90, alternatives, retained lookup, and feedback capture
+- client-admin dashboard for CSV upload, target/feature selection, training actions, notifications, active model status, and serving operations
+- thin route workspace that only asks for start and end, blocks until a caller-scoped model is published, and exposes Expected ETA, Robust / P90, alternatives, retained lookup, and feedback capture
+- embedded Spring Boot hosting via `src/main/resources/static/`
 
 Still not implemented in the frontend slice:
 
-- dataset upload because the backend intake API does not exist yet
 - tenant onboarding and auth because the backend caller/project model is still incomplete
-- embedded hosting through Spring Boot or another deployment packaging path
 
 Not implemented yet in this slice:
 

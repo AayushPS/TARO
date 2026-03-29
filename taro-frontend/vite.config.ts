@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/',
   plugins: [react()],
   server: {
     host: '127.0.0.1',
@@ -13,6 +14,10 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  build: {
+    outDir: '../src/main/resources/static',
+    emptyOutDir: true,
   },
   test: {
     environment: 'jsdom',

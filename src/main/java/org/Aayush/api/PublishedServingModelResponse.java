@@ -16,6 +16,10 @@ public record PublishedServingModelResponse(
         String trainingWindowLabel,
         List<String> selectedTraits,
         ResultKind resultKind,
+        String datasetId,
+        String datasetFileName,
+        String targetColumn,
+        List<String> featureColumns,
         int exportRowCount,
         int completeExportRowCount
 ) {

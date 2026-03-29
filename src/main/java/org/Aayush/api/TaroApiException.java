@@ -95,6 +95,17 @@ public final class TaroApiException extends RuntimeException {
     }
 
     /**
+     * Returns an explicit training-dataset-not-found failure.
+     */
+    public static TaroApiException trainingDatasetNotFound(String datasetId) {
+        return new TaroApiException(
+                HttpStatus.NOT_FOUND,
+                ApiErrorCode.TRAINING_DATASET_NOT_FOUND,
+                "unknown training dataset: " + datasetId
+        );
+    }
+
+    /**
      * Returns an explicit training-job-not-found failure.
      */
     public static TaroApiException trainingJobNotFound(String jobId) {

@@ -177,6 +177,10 @@ export interface RetrainingJobCreateRequestPayload {
   trainingWindowLabel: string
   selectedTraits: string[]
   resultKind?: ResultKind
+  datasetId?: string
+  targetColumn?: string
+  featureColumns?: string[]
+  notifyOnCompletion?: boolean
   topologyVersionId?: string
   scenarioBundleId?: string
   traitHash?: string
@@ -201,6 +205,12 @@ export interface RetrainingJobResponse {
   trainingWindowLabel: string
   selectedTraits: string[]
   resultKind?: ResultKind | null
+  datasetId?: string | null
+  datasetFileName?: string | null
+  datasetRowCount?: number | null
+  targetColumn?: string | null
+  featureColumns: string[]
+  notifyOnCompletion: boolean
   topologyVersionId?: string | null
   scenarioBundleId?: string | null
   traitHash?: string | null
@@ -222,8 +232,33 @@ export interface PublishedServingModelResponse {
   trainingWindowLabel: string
   selectedTraits: string[]
   resultKind: ResultKind
+  datasetId?: string | null
+  datasetFileName?: string | null
+  targetColumn?: string | null
+  featureColumns: string[]
   exportRowCount: number
   completeExportRowCount: number
+}
+
+export interface TrainingDatasetResponse {
+  datasetId: string
+  fileName: string
+  uploadedAt: string
+  rowCount: number
+  columnCount: number
+  headers: string[]
+  sampleRows: string[][]
+  sha256: string
+}
+
+export interface AdminNotificationResponse {
+  notificationId: string
+  type: string
+  title: string
+  detail: string
+  createdAt: string
+  relatedDatasetId?: string | null
+  relatedJobId?: string | null
 }
 
 export interface HealthApiResponse {

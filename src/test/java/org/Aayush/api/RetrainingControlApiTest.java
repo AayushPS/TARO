@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -20,10 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(classes = {Main.class, FutureApiTestConfiguration.class}, webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(
+        classes = {Main.class, FutureApiTestConfiguration.class},
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = "taro.demo-topology.enabled=false")
 @AutoConfigureMockMvc
 @Tag("integration")
 @DisplayName("Retraining Control API Tests")
@@ -46,12 +51,20 @@ class RetrainingControlApiTest {
     @Autowired
     private RetrainingControlService retrainingControlService;
 
+    @Autowired
+    private TrainingDatasetService trainingDatasetService;
+
+    @Autowired
+    private AdminNotificationService adminNotificationService;
+
     @BeforeEach
     void resetApiState() {
         apiMutableClock.set(FutureApiTestConfiguration.BASE_INSTANT);
         topologyReloadCoordinator.applyReload(FutureApiTestConfiguration.initialSnapshot());
         predictionTelemetryStore.clear();
         retrainingControlService.clear();
+        trainingDatasetService.clear();
+        adminNotificationService.clear();
     }
 
     @Test
@@ -238,6 +251,103 @@ class RetrainingControlApiTest {
         assertEquals(ApiErrorCode.TRAINING_JOB_CONFLICT.name(), publishJson.path("code").asText());
     }
 
+    @Test
+    @DisplayName("Caller-scoped CSV upload, notifications, and dataset-backed training publish the active model")
+    void testDatasetUploadNotificationsAndPublishLifecycle() throws Exception {
+        String datasetId = uploadDataset("caller-a", """
+                source,target,travel_time,traffic_index,incident_rate
+                N0,N3,118,0.72,0.14
+                N1,N4,134,0.64,0.10
+                N2,N5,142,0.59,0.08
+                """);
+
+        MvcResult datasetsResult = mockMvc.perform(get("/api/v1/training/datasets")
+                        .header(FutureRoutingApiFacade.CALLER_HEADER, "caller-a"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode datasetsJson = objectMapper.readTree(datasetsResult.getResponse().getContentAsString());
+        assertEquals(1, datasetsJson.size());
+        assertEquals(datasetId, datasetsJson.get(0).path("datasetId").asText());
+        assertEquals("travel_time", datasetsJson.get(0).path("headers").get(2).asText());
+
+        MvcResult createJobResult = mockMvc.perform(post("/api/v1/training/retraining/jobs")
+                        .header(FutureRoutingApiFacade.CALLER_HEADER, "caller-a")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "trainingWindowLabel": "bootstrap_90d",
+                                  "selectedTraits": ["recency", "periodicity", "persistence"],
+                                  "resultKind": "ROUTE",
+                                  "datasetId": "%s",
+                                  "targetColumn": "travel_time",
+                                  "featureColumns": ["traffic_index", "incident_rate"],
+                                  "notifyOnCompletion": true,
+                                  "completeOnly": true
+                                }
+                                """.formatted(datasetId)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode createdJobJson = objectMapper.readTree(createJobResult.getResponse().getContentAsString());
+        String jobId = createdJobJson.path("jobId").asText();
+        assertEquals(datasetId, createdJobJson.path("datasetId").asText());
+        assertEquals("routing.csv", createdJobJson.path("datasetFileName").asText());
+        assertEquals(3, createdJobJson.path("datasetRowCount").asInt());
+        assertEquals("travel_time", createdJobJson.path("targetColumn").asText());
+        assertEquals("traffic_index", createdJobJson.path("featureColumns").get(0).asText());
+        assertEquals(0, createdJobJson.path("exportRowCount").asInt());
+        assertTrue(createdJobJson.path("notifyOnCompletion").asBoolean());
+
+        mockMvc.perform(post("/api/v1/training/retraining/jobs/{jobId}/start", jobId)
+                        .header(FutureRoutingApiFacade.CALLER_HEADER, "caller-a"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/training/retraining/jobs/{jobId}/complete", jobId)
+                        .header(FutureRoutingApiFacade.CALLER_HEADER, "caller-a")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "succeeded": true,
+                                  "releaseArtifactId": "release-caller-a-csv-v1",
+                                  "validationSummary": "dataset bootstrap training completed"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        MvcResult publishResult = mockMvc.perform(post("/api/v1/training/retraining/jobs/{jobId}/publish", jobId)
+                        .header(FutureRoutingApiFacade.CALLER_HEADER, "caller-a"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode publishedJson = objectMapper.readTree(publishResult.getResponse().getContentAsString());
+        assertEquals(datasetId, publishedJson.path("datasetId").asText());
+        assertEquals("routing.csv", publishedJson.path("datasetFileName").asText());
+        assertEquals("travel_time", publishedJson.path("targetColumn").asText());
+        assertEquals("incident_rate", publishedJson.path("featureColumns").get(1).asText());
+
+        MvcResult activeModelResult = mockMvc.perform(get("/api/v1/training/retraining/models/active")
+                        .header(FutureRoutingApiFacade.CALLER_HEADER, "caller-a"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode activeModelJson = objectMapper.readTree(activeModelResult.getResponse().getContentAsString());
+        assertEquals(datasetId, activeModelJson.path("datasetId").asText());
+        assertEquals("travel_time", activeModelJson.path("targetColumn").asText());
+
+        MvcResult notificationsResult = mockMvc.perform(get("/api/v1/training/notifications")
+                        .header(FutureRoutingApiFacade.CALLER_HEADER, "caller-a"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode notificationsJson = objectMapper.readTree(notificationsResult.getResponse().getContentAsString());
+        assertEquals(4, notificationsJson.size());
+        assertEquals("MODEL_PUBLISHED", notificationsJson.get(0).path("type").asText());
+        assertEquals("TRAINING_JOB_COMPLETED", notificationsJson.get(1).path("type").asText());
+        assertEquals("TRAINING_JOB_CREATED", notificationsJson.get(2).path("type").asText());
+        assertEquals("DATASET_UPLOADED", notificationsJson.get(3).path("type").asText());
+        assertEquals(datasetId, notificationsJson.get(0).path("relatedDatasetId").asText());
+        assertEquals(jobId, notificationsJson.get(0).path("relatedJobId").asText());
+    }
+
     private String createRouteResultSetId(String callerId) throws Exception {
         MvcResult mvcResult = mockMvc.perform(post("/api/v1/route")
                         .header(FutureRoutingApiFacade.CALLER_HEADER, callerId)
@@ -256,6 +366,21 @@ class RetrainingControlApiTest {
                 .andExpect(status().isOk())
                 .andReturn();
         return objectMapper.readTree(mvcResult.getResponse().getContentAsString()).path("resultSetId").asText();
+    }
+
+    private String uploadDataset(String callerId, String csvText) throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "routing.csv",
+                "text/csv",
+                csvText.getBytes()
+        );
+        MvcResult mvcResult = mockMvc.perform(multipart("/api/v1/training/datasets")
+                        .file(file)
+                        .header(FutureRoutingApiFacade.CALLER_HEADER, callerId))
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(mvcResult.getResponse().getContentAsString()).path("datasetId").asText();
     }
 
     private void recordCompleteRouteFeedback(String callerId, String resultSetId) throws Exception {

@@ -54,6 +54,12 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+  transform: none;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -262,6 +268,10 @@ button {
   align-items: start;
 }
 
+.section-heading--stack {
+  margin-top: 24px;
+}
+
 .field,
 .checkbox {
   display: grid;
@@ -384,6 +394,11 @@ button {
 }
 
 .trait-chip.is-selected {
+  border-color: rgba(21, 111, 109, 0.28);
+  background: rgba(21, 111, 109, 0.12);
+}
+
+.history-pill--selected {
   border-color: rgba(21, 111, 109, 0.28);
   background: rgba(21, 111, 109, 0.12);
 }
@@ -560,6 +575,10 @@ button {
   display: grid;
   gap: 16px;
   align-content: start;
+}
+
+.availability-banner h2 {
+  max-width: 22ch;
 }
 
 @keyframes fade-up {

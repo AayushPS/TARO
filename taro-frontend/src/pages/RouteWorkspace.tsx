@@ -1,13 +1,14 @@
-import { startTransition, useState } from 'react'
+import { startTransition, useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import type { ShellContextValue } from '../App'
 import { StatusPill } from '../components/StatusPill'
-import { TaroApiClient, describeError } from '../lib/api'
+import { ApiFailure, TaroApiClient, describeError } from '../lib/api'
 import { formatInstant, formatSeconds, formatTicks } from '../lib/format'
 import { buildRouteRequest, routeCardsFromSummary } from '../lib/route-view'
 import type {
   OutcomeStatus,
   PredictionFeedbackRequestPayload,
+  PublishedServingModelResponse,
   RouteApiResponse,
   RouteDetail,
   RouteSelection,
@@ -20,6 +21,8 @@ interface FeedbackDraft {
   observedCostSeconds: string
   observationCount: string
 }
+
+type ModelAvailability = 'loading' | 'available' | 'blocked' | 'error'
 
 const initialFeedback: FeedbackDraft = {
   outcomeStatus: 'COMPLETE',
@@ -38,6 +41,11 @@ export function RouteWorkspace() {
   const [routeEnvelope, setRouteEnvelope] = useState<RouteApiResponse | null>(null)
   const [routeDetail, setRouteDetail] = useState<RouteDetail | null>(null)
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>(initialFeedback)
+  const [activeModel, setActiveModel] =
+    useState<PublishedServingModelResponse | null>(null)
+  const [modelAvailability, setModelAvailability] =
+    useState<ModelAvailability>('loading')
+  const [modelIssue, setModelIssue] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [noticeTone, setNoticeTone] = useState<'good' | 'danger' | 'warn'>(
     'good',
@@ -48,7 +56,51 @@ export function RouteWorkspace() {
   const currentResultSetId = currentSummary?.resultSetId ?? null
   const routeCards = currentSummary ? routeCardsFromSummary(currentSummary) : []
 
+  useEffect(() => {
+    async function refreshActiveModel() {
+      try {
+        const client = new TaroApiClient(apiBase, callerId)
+        const model = await client.activeModel()
+        startTransition(() => {
+          setActiveModel(model)
+          setModelAvailability('available')
+          setModelIssue(null)
+        })
+      } catch (error) {
+        if (error instanceof ApiFailure && error.code === 'ACTIVE_MODEL_NOT_FOUND') {
+          startTransition(() => {
+            setActiveModel(null)
+            setModelAvailability('blocked')
+            setModelIssue(
+              'No published model exists for this caller yet. The admin workspace must upload, train, and publish one first.',
+            )
+          })
+          return
+        }
+        startTransition(() => {
+          setActiveModel(null)
+          setModelAvailability('error')
+          setModelIssue(describeError(error))
+        })
+      }
+    }
+
+    void refreshActiveModel()
+    const intervalId = window.setInterval(() => {
+      void refreshActiveModel()
+    }, 10000)
+    return () => window.clearInterval(intervalId)
+  }, [apiBase, callerId])
+
   async function submitRouteQuery() {
+    if (!activeModel) {
+      setNotice(
+        'This caller has no published model yet. Use the admin workspace to publish one before routing.',
+      )
+      setNoticeTone('warn')
+      return
+    }
+
     setBusyKey('route')
     try {
       const client = new TaroApiClient(apiBase, callerId)
@@ -133,35 +185,103 @@ export function RouteWorkspace() {
         <div className={`notice notice--${noticeTone}`}>{notice}</div>
       ) : null}
 
+      <section className="surface-card availability-banner">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Published model availability</p>
+            <h2>
+              {activeModel
+                ? 'This caller is ready for routing queries.'
+                : 'A published model is required before the thin query UI can serve.'}
+            </h2>
+          </div>
+          <StatusPill
+            label={
+              modelAvailability === 'available'
+                ? activeModel?.activeModelId ?? 'Available'
+                : modelAvailability === 'loading'
+                  ? 'Loading'
+                  : modelAvailability === 'blocked'
+                    ? 'Training required'
+                    : 'Model lookup failed'
+            }
+            tone={
+              modelAvailability === 'available'
+                ? 'good'
+                : modelAvailability === 'loading'
+                  ? 'neutral'
+                  : 'warn'
+            }
+          />
+        </div>
+
+        {activeModel ? (
+          <div className="detail-list">
+            <MetaDatum label="Dataset" value={activeModel.datasetFileName ?? 'N/A'} />
+            <MetaDatum label="Target column" value={activeModel.targetColumn ?? 'N/A'} />
+            <MetaDatum
+              label="Feature columns"
+              value={activeModel.featureColumns.join(', ') || 'N/A'}
+            />
+            <MetaDatum
+              label="Training window"
+              value={activeModel.trainingWindowLabel}
+            />
+            <MetaDatum
+              label="Traits"
+              value={activeModel.selectedTraits.join(', ')}
+            />
+            <MetaDatum
+              label="Published at"
+              value={formatInstant(activeModel.publishedAt)}
+            />
+          </div>
+        ) : (
+          <p className="callout callout--warn">
+            {modelIssue ??
+              'Move to the admin workspace, upload a dataset, complete training, and publish the model for this caller.'}
+          </p>
+        )}
+      </section>
+
       <section className="route-hero">
         <div className="route-hero__copy">
           <p className="eyebrow">Thin end-user query</p>
-          <h2>Ask for start and end. Keep the rest opinionated by default.</h2>
+          <h2>Ask for start and end. Use the published model behind the scenes.</h2>
           <p className="hero-text">
-            Enter either external IDs like `N0` or a coordinate pair like
-            `12.34, 56.78`. TARO fills in the fixed query posture behind the
-            scenes and reports Expected ETA, Robust / P90, and alternatives.
+            The user surface stays intentionally small: start point, end point,
+            and three route products. TARO returns Expected ETA, Robust / P90,
+            and alternatives from the caller’s active published model.
           </p>
         </div>
         <div className="route-form surface-card">
           <label className="field">
             <span>Start</span>
             <input
-              value={startPoint}
               onChange={(event) => setStartPoint(event.target.value)}
               placeholder="N0 or 12.34, 56.78"
+              value={startPoint}
             />
           </label>
           <label className="field">
             <span>End</span>
             <input
-              value={endPoint}
               onChange={(event) => setEndPoint(event.target.value)}
               placeholder="N3 or 13.02, 57.11"
+              value={endPoint}
             />
           </label>
-          <button className="button button--primary" onClick={submitRouteQuery} type="button">
-            {busyKey === 'route' ? 'Routing…' : 'Route now'}
+          <button
+            className="button button--primary"
+            disabled={!activeModel || busyKey === 'route'}
+            onClick={submitRouteQuery}
+            type="button"
+          >
+            {busyKey === 'route'
+              ? 'Routing…'
+              : activeModel
+                ? 'Route now'
+                : 'Awaiting published model'}
           </button>
         </div>
       </section>
@@ -179,9 +299,9 @@ export function RouteWorkspace() {
             <label className="field field--wide">
               <span>Result set ID</span>
               <input
-                value={lookupResultId}
                 onChange={(event) => setLookupResultId(event.target.value)}
                 placeholder="Paste a retained result ID"
+                value={lookupResultId}
               />
             </label>
             <button className="button button--ghost" onClick={loadRetainedResult} type="button">
@@ -236,7 +356,7 @@ export function RouteWorkspace() {
 
       <section className="selection-grid">
         {routeCards.map((card) => (
-          <SelectionCard key={card.key} label={card.label} selection={card.selection} accent={card.accent} />
+          <SelectionCard key={card.key} accent={card.accent} label={card.label} selection={card.selection} />
         ))}
         {routeCards.length === 0 ? (
           <div className="empty-state empty-state--wide">
@@ -304,13 +424,13 @@ export function RouteWorkspace() {
             <label className="field">
               <span>Outcome status</span>
               <select
-                value={feedbackDraft.outcomeStatus}
                 onChange={(event) =>
                   setFeedbackDraft((current) => ({
                     ...current,
                     outcomeStatus: event.target.value as OutcomeStatus,
                   }))
                 }
+                value={feedbackDraft.outcomeStatus}
               >
                 <option value="COMPLETE">COMPLETE</option>
                 <option value="PARTIAL">PARTIAL</option>
@@ -319,7 +439,6 @@ export function RouteWorkspace() {
             <label className="field">
               <span>Observed at ticks</span>
               <input
-                value={feedbackDraft.observedAtTicks}
                 onChange={(event) =>
                   setFeedbackDraft((current) => ({
                     ...current,
@@ -327,12 +446,12 @@ export function RouteWorkspace() {
                   }))
                 }
                 placeholder="480"
+                value={feedbackDraft.observedAtTicks}
               />
             </label>
             <label className="field">
               <span>Observed arrival ticks</span>
               <input
-                value={feedbackDraft.observedArrivalTicks}
                 onChange={(event) =>
                   setFeedbackDraft((current) => ({
                     ...current,
@@ -340,12 +459,12 @@ export function RouteWorkspace() {
                   }))
                 }
                 placeholder="540"
+                value={feedbackDraft.observedArrivalTicks}
               />
             </label>
             <label className="field">
               <span>Observed cost seconds</span>
               <input
-                value={feedbackDraft.observedCostSeconds}
                 onChange={(event) =>
                   setFeedbackDraft((current) => ({
                     ...current,
@@ -353,12 +472,12 @@ export function RouteWorkspace() {
                   }))
                 }
                 placeholder="120.5"
+                value={feedbackDraft.observedCostSeconds}
               />
             </label>
             <label className="field">
               <span>Observation count</span>
               <input
-                value={feedbackDraft.observationCount}
                 onChange={(event) =>
                   setFeedbackDraft((current) => ({
                     ...current,
@@ -366,6 +485,7 @@ export function RouteWorkspace() {
                   }))
                 }
                 placeholder="1"
+                value={feedbackDraft.observationCount}
               />
             </label>
           </div>

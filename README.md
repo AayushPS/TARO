@@ -64,9 +64,10 @@ Implemented today:
 - future-aware route and matrix evaluation with retained result sets
 - Spring Boot API endpoints for route/matrix evaluation and retained summary/detail lookup
 - caller-scoped feedback ingestion for route and matrix outcomes
+- caller-scoped CSV dataset upload and metadata preview for training intake
 - caller-scoped telemetry export for retraining
-- retraining job lifecycle endpoints for create, start, complete, publish, and active-model lookup
-- `taro-frontend/` React workspace with a client-admin dashboard and a thin end-user route workspace
+- retraining job lifecycle endpoints for create, start, complete, publish, notifications, and active-model lookup
+- `taro-frontend/` React workspace with an embedded client-admin dashboard and a thin end-user route workspace
 - health, metrics, governance, and retained-result purge endpoints
 - `DIJKSTRA` and `A_STAR` execution modes
 - `NONE`, `EUCLIDEAN`, `SPHERICAL`, and `LANDMARK` heuristics
@@ -83,10 +84,8 @@ Implemented today:
 
 Not implemented yet:
 
-- client onboarding / dataset upload control plane
 - durable training job orchestration that actually runs the Python pipeline
 - tenant-scoped auth and per-client serving activation in the Java route path
-- embedded frontend hosting through Spring Boot or another deployment target
 - quarantine mutation / registry API surface
 - topology validate / publish control API surface
 - traffic/infra operational APIs for request stream, instances, rate limits, and ingestion status
@@ -94,12 +93,15 @@ Not implemented yet:
 
 ## Frontend Workspace
 
-The new frontend lives under `taro-frontend/` and has two real surfaces:
+The frontend sources live under `taro-frontend/` and build into Spring Boot's
+`src/main/resources/static/`.
 
-- `/admin` for telemetry preview, retraining lifecycle, active model metadata, and serving health
-- `/query` for the thin end-user route experience that only asks for start and end
+It has two real surfaces:
 
-Run it like this:
+- `/admin` for CSV upload, training parameter selection, job lifecycle, notifications, active model metadata, and serving health
+- `/query` for the thin end-user route experience that only asks for start and end and stays blocked until a model is published
+
+For local Vite development:
 
 ```bash
 cd taro-frontend
@@ -110,6 +112,20 @@ npm run dev
 Then open `http://127.0.0.1:5173/`.
 
 Keep Spring Boot running on `http://127.0.0.1:8080`. The Vite dev server proxies `/api` to the backend by default, so the frontend `API Base` field can stay at `/api`.
+
+For the embedded Spring Boot flow:
+
+```bash
+cd taro-frontend
+npm run build
+cd /home/aayushps/projects/TARO
+mvn spring-boot:run
+```
+
+Then open:
+
+- `http://127.0.0.1:8080/admin`
+- `http://127.0.0.1:8080/query`
 
 ## Architectural Through-Line
 

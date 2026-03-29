@@ -1,4 +1,5 @@
 import type {
+  AdminNotificationResponse,
   ApiErrorResponse,
   HealthApiResponse,
   OperationalGovernanceResponse,
@@ -14,6 +15,7 @@ import type {
   RouteApiRequestPayload,
   RouteApiResponse,
   RouteDetail,
+  TrainingDatasetResponse,
 } from './types'
 
 type QueryValue = string | number | boolean | null | undefined
@@ -81,6 +83,29 @@ export class TaroApiClient {
       {
         headers: this.callerHeaders(),
       },
+    )
+  }
+
+  uploadDataset(file: File): Promise<TrainingDatasetResponse> {
+    const formData = new FormData()
+    formData.set('file', file)
+    return this.request('/api/v1/training/datasets', {
+      method: 'POST',
+      headers: this.callerHeaders(),
+      body: formData,
+    })
+  }
+
+  datasets(limit = 20): Promise<TrainingDatasetResponse[]> {
+    return this.request(`/api/v1/training/datasets${toQueryString({ limit })}`, {
+      headers: this.callerHeaders(),
+    })
+  }
+
+  notifications(limit = 20): Promise<AdminNotificationResponse[]> {
+    return this.request(
+      `/api/v1/training/notifications${toQueryString({ limit })}`,
+      { headers: this.callerHeaders() },
     )
   }
 
