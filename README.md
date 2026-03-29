@@ -36,6 +36,23 @@ The design answer is:
 3. layer live operational state on top in bounded, explicit ways,
 4. and only publish structural truth through validated rebuild + reload.
 
+## Next Product Direction
+
+The next TARO build is a client training-to-serving platform:
+
+1. a client submits routing data,
+2. the client selects trait/runtime options,
+3. TARO runs the offline training pipeline,
+4. TARO publishes a serving artifact when validation passes,
+5. the client is notified that the model is ready,
+6. downstream users query routing through a thin interface that asks only for start and end.
+
+The missing product surface is therefore:
+
+- a control plane for data intake, trait selection, training status, and publication
+- a tenant-scoped routing API backed by the published model
+- a thin query UI that reports expected ETA, robust / P90, and alternatives
+
 ## Current Runtime Status
 
 Implemented today:
@@ -47,7 +64,6 @@ Implemented today:
 - Spring Boot API endpoints for route/matrix evaluation and retained summary/detail lookup
 - caller-scoped feedback ingestion for route and matrix outcomes
 - health, metrics, governance, and retained-result purge endpoints
-- bundled `taro-frontend/` workspace with a live-backed Maps app and capability-gated Traffic app shell
 - `DIJKSTRA` and `A_STAR` execution modes
 - `NONE`, `EUCLIDEAN`, `SPHERICAL`, and `LANDMARK` heuristics
 - Stage 15 typed addressing
@@ -63,6 +79,10 @@ Implemented today:
 
 Not implemented yet:
 
+- client onboarding / dataset upload control plane
+- training job orchestration and publish lifecycle
+- tenant-scoped auth and per-client serving activation
+- minimal client admin UI and minimal end-user query UI
 - quarantine mutation / registry API surface
 - topology validate / publish control API surface
 - traffic/infra operational APIs for request stream, instances, rate limits, and ingestion status
@@ -94,7 +114,7 @@ v12 adds multiple plausible future traffic scenarios and produces three user-fac
 - **Robust / P90 route**
 - **Top-K scenario routes with confidence**
 
-It also adds ephemeral result retention so the backend can finish the calculation first and let the frontend fetch summaries/details afterward by `resultSetId`.
+It also adds ephemeral result retention so the backend can finish the calculation first and let a client fetch summaries/details afterward by `resultSetId`.
 
 ### Layer 3: Topology Evolution and Failure Handling (v13)
 
@@ -312,8 +332,7 @@ It also introduces:
 
 - `resultSetId`
 - temporary result retention
-- frontend follow-up reads for summary and detail
-- frontend-ready route geometry through `pathPoints` on future route products
+- follow-up reads for summary and detail
 
 ## What v13 Adds
 
@@ -362,13 +381,15 @@ Examples:
 - `LiveOverlay` runtime override layer
 - `SpatialRuntime` nearest-node lookup
 - startup-bound execution/trait runtime selection
-- `taro-frontend/maps-app` using live route, retained-result, feedback, health, metrics, and governance APIs
-- `taro-frontend/traffic-app` as a capability-gated operator shell for planned traffic/infra APIs
 
 ### Planned Next
 
 Operational/planned contracts already reflected in the docs:
 
+- client / tenant registration endpoints
+- dataset upload and validation endpoints
+- training job start / status / publish endpoints
+- tenant-scoped serving activation and notification contracts
 - quarantine registry and mutation endpoints
 - topology status / validate / publish endpoints
 - traffic stream / recent traffic endpoints
@@ -434,8 +455,6 @@ MatrixResponse matrix = router.matrix(
 - Java 21
 - Maven 3.9+
 - Python 3.11+
-- Node.js 22+
-- npm 10+
 
 ### Bootstrap
 
@@ -444,24 +463,10 @@ MatrixResponse matrix = router.matrix(
 ./scripts/bootstrap_env.sh
 ```
 
-Frontend workspace bootstrap:
-
-```bash
-cd taro-frontend
-npm install
-```
-
 ### Build
 
 ```bash
 mvn clean package
-```
-
-Frontend production bundle:
-
-```bash
-cd taro-frontend
-npm run build
 ```
 
 ### Run Tests
@@ -476,35 +481,7 @@ Current direct verification commands:
 ```bash
 mvn test -q
 .venv/bin/python -m pytest -q
-cd taro-frontend && npm test
 ```
-
-### Frontend Dev
-
-```bash
-cd taro-frontend
-npm run dev:maps
-```
-
-```bash
-cd taro-frontend
-npm run dev:traffic
-```
-
-Current posture:
-
-- `maps-app` is live-backed against the current Java API surface
-- `traffic-app` is an explicit capability-gated shell until the traffic/infra endpoints exist
-
-### IntelliJ IDEA
-
-Tracked plugin requirements are declared in `.idea/externalDependencies.xml`:
-
-- JavaScript
-- Spring
-- Spring Boot
-- Maven
-- YAML
 
 ### Regenerate FlatBuffers Bindings
 
@@ -548,9 +525,9 @@ Tracked plugin requirements are declared in `.idea/externalDependencies.xml`:
 - `docs/stage7_live_overlay_impl.md`
 - `docs/trait_runtime_lock_audit_report.md`
 
-### Frontend architecture
+### Next architecture direction
 
-- `docs/frontend/FRONTEND_BUILD_RECORD.md`
+- `docs/client_training_serving_architecture.md`
 
 ## Repo Layout
 
@@ -570,8 +547,6 @@ Tracked plugin requirements are declared in `.idea/externalDependencies.xml`:
   - addressing, temporal, transition, and bundle/runtime binding
 - `src/main/python/`
   - builder and Python-side utilities
-- `taro-frontend/`
-  - Vite workspace with `shared/`, `maps-app/`, and `traffic-app/`
 - `src/test/java/`
   - correctness, parity, determinism, stress, and perf suites
 - `docs/`

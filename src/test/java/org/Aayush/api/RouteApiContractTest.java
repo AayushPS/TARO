@@ -68,7 +68,6 @@ class RouteApiContractTest {
         assertEquals(resultSetId, json.path("summary").path("resultSetId").asText());
         assertEquals("bundle-api", json.path("summary").path("scenarioBundleId").asText());
         assertEquals("topo-api", json.path("topologyVersion").path("topologyVersion").asText());
-        assertEquals(3, json.path("summary").path("expectedRoute").path("route").path("pathPoints").size());
     }
 
     @Test

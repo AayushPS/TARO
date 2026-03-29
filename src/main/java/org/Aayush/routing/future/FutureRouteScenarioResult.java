@@ -8,7 +8,7 @@ import org.Aayush.routing.core.RouteResponse;
 import java.util.List;
 
 /**
- * Per-scenario optimal route result retained for frontend diagnostics.
+ * Per-scenario optimal route result retained for later diagnostics.
  */
 @Value
 @Builder
@@ -17,7 +17,6 @@ public class FutureRouteScenarioResult {
     String label;
     double probability;
     RouteResponse route;
-    List<RouteShape.PathPoint> pathPoints;
     @Singular("explanationTag")
     List<String> explanationTags;
 }

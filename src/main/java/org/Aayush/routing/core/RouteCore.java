@@ -525,22 +525,6 @@ public final class RouteCore implements ExecutionProfileAwareRouter {
     }
 
     /**
-     * Resolves path coordinates for one externally-addressed route path when the active graph carries coordinates.
-     */
-    public List<EdgeGraph.Coordinate> pathCoordinates(List<String> externalNodePath) {
-        Objects.requireNonNull(externalNodePath, "externalNodePath");
-        if (!edgeGraph.hasCoordinates() || externalNodePath.isEmpty()) {
-            return List.of();
-        }
-        ArrayList<EdgeGraph.Coordinate> coordinates = new ArrayList<>(externalNodePath.size());
-        for (String externalNodeId : externalNodePath) {
-            int internalNodeId = nodeIdMapper.toInternal(Objects.requireNonNull(externalNodeId, "externalNodeId"));
-            coordinates.add(edgeGraph.getNodeCoordinate(internalNodeId));
-        }
-        return List.copyOf(coordinates);
-    }
-
-    /**
      * Computes one normalized internal request using the startup-bound execution profile.
      *
      * <p>All planner-specific guardrail exceptions are normalized to route-core reason codes
