@@ -95,6 +95,39 @@ public final class TaroApiException extends RuntimeException {
     }
 
     /**
+     * Returns an explicit training-job-not-found failure.
+     */
+    public static TaroApiException trainingJobNotFound(String jobId) {
+        return new TaroApiException(
+                HttpStatus.NOT_FOUND,
+                ApiErrorCode.TRAINING_JOB_NOT_FOUND,
+                "unknown training job: " + jobId
+        );
+    }
+
+    /**
+     * Returns an explicit training-job lifecycle conflict failure.
+     */
+    public static TaroApiException trainingJobConflict(String jobId, String message) {
+        return new TaroApiException(
+                HttpStatus.CONFLICT,
+                ApiErrorCode.TRAINING_JOB_CONFLICT,
+                "training job " + jobId + ": " + message
+        );
+    }
+
+    /**
+     * Returns an explicit active-model-not-found failure.
+     */
+    public static TaroApiException activeModelNotFound(String callerId) {
+        return new TaroApiException(
+                HttpStatus.NOT_FOUND,
+                ApiErrorCode.ACTIVE_MODEL_NOT_FOUND,
+                "no active published model for caller: " + callerId
+        );
+    }
+
+    /**
      * Returns the HTTP status for this API failure.
      */
     public HttpStatus getHttpStatus() {

@@ -62,6 +62,7 @@ class RetrainingDatasetExportTest {
 
         List<PredictionTelemetryStore.ExportRow> filteredRows = store.exportRows(
                 new PredictionTelemetryStore.ExportFilter(
+                        "caller-a",
                         CallerScopedRetainedResultRegistry.ResultKind.ROUTE,
                         "topo-api",
                         "bundle-a",
@@ -81,6 +82,7 @@ class RetrainingDatasetExportTest {
 
         List<PredictionTelemetryStore.ExportRow> allRows = store.exportRows(
                 new PredictionTelemetryStore.ExportFilter(
+                        "caller-a",
                         CallerScopedRetainedResultRegistry.ResultKind.ROUTE,
                         null,
                         null,

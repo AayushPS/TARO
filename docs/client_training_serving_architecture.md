@@ -14,6 +14,12 @@ The next TARO build must support the full client lifecycle:
 5. client is notified when training completes
 6. client's downstream users query routing through a thin API/UI
 
+The lifecycle also repeats through retraining:
+
+7. served predictions and outcome feedback are exported as caller-scoped telemetry
+8. a retraining job is created from that telemetry
+9. a validated model is published as the caller's next active serving model
+
 This replaces the previous frontend-first direction.
 
 ## Core Planes
@@ -34,6 +40,7 @@ Primary entities:
 - `DatasetSubmission`
 - `TraitSelection`
 - `TrainingJob`
+- `RetrainingJob`
 - `PublishedModel`
 
 ### Training Plane
@@ -128,7 +135,18 @@ When job state changes, the client must be able to learn that through:
 
 Either is acceptable initially; polling is the simpler first implementation.
 
-### 6. Downstream Routing
+### 6. Retraining Loop
+
+After serving starts:
+
+- route or matrix predictions remain joinable to feedback outcomes
+- caller-scoped telemetry is exported without ad hoc log joins
+- retraining jobs can use that telemetry as their bounded input set
+- publishing a successful retraining job advances the caller's active model metadata
+
+Retraining is part of the control plane plus training plane. It is not a frontend concern.
+
+### 7. Downstream Routing
 
 After publication:
 
@@ -143,8 +161,11 @@ After publication:
 - create tenant/project
 - upload dataset
 - submit trait selection
+- export caller-scoped retraining telemetry
 - create training job
 - fetch training job status
+- start retraining job
+- complete retraining job
 - publish successful model
 - fetch active model metadata
 
@@ -153,6 +174,21 @@ After publication:
 - tenant-scoped route query
 - retained result summary/detail
 - feedback ingestion
+
+## Current Backend Slice
+
+Implemented in this repo now:
+
+- caller-scoped telemetry export from served predictions plus feedback
+- retraining job lifecycle metadata: create, start, complete, publish
+- caller-scoped active-model metadata lookup
+
+Not implemented yet in this slice:
+
+- actual Python pipeline execution from the Java control plane
+- tenant-specific runtime model loading for the route API
+- webhook delivery or durable notification queue
+- persistent storage for retraining jobs and published models
 
 ## What Not To Build First
 

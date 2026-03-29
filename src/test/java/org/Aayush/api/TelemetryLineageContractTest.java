@@ -49,6 +49,7 @@ class TelemetryLineageContractTest {
     void resetApiState() {
         apiMutableClock.set(FutureApiTestConfiguration.BASE_INSTANT);
         topologyReloadCoordinator.applyReload(FutureApiTestConfiguration.initialSnapshot());
+        predictionTelemetryStore.clear();
     }
 
     @Test

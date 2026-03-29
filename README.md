@@ -50,6 +50,7 @@ The next TARO build is a client training-to-serving platform:
 The missing product surface is therefore:
 
 - a control plane for data intake, trait selection, training status, and publication
+- a retraining loop driven by served telemetry and caller-scoped publish state
 - a tenant-scoped routing API backed by the published model
 - a thin query UI that reports expected ETA, robust / P90, and alternatives
 
@@ -63,6 +64,8 @@ Implemented today:
 - future-aware route and matrix evaluation with retained result sets
 - Spring Boot API endpoints for route/matrix evaluation and retained summary/detail lookup
 - caller-scoped feedback ingestion for route and matrix outcomes
+- caller-scoped telemetry export for retraining
+- retraining job lifecycle endpoints for create, start, complete, publish, and active-model lookup
 - health, metrics, governance, and retained-result purge endpoints
 - `DIJKSTRA` and `A_STAR` execution modes
 - `NONE`, `EUCLIDEAN`, `SPHERICAL`, and `LANDMARK` heuristics
@@ -80,8 +83,8 @@ Implemented today:
 Not implemented yet:
 
 - client onboarding / dataset upload control plane
-- training job orchestration and publish lifecycle
-- tenant-scoped auth and per-client serving activation
+- durable training job orchestration that actually runs the Python pipeline
+- tenant-scoped auth and per-client serving activation in the Java route path
 - minimal client admin UI and minimal end-user query UI
 - quarantine mutation / registry API surface
 - topology validate / publish control API surface
@@ -373,6 +376,13 @@ Examples:
 - `GET /api/v1/matrix/results/{resultSetId}/detail`
 - `POST /api/v1/feedback/route/results/{resultSetId}/outcome`
 - `POST /api/v1/feedback/matrix/results/{resultSetId}/outcome`
+- `GET /api/v1/training/retraining/export`
+- `POST /api/v1/training/retraining/jobs`
+- `GET /api/v1/training/retraining/jobs/{jobId}`
+- `POST /api/v1/training/retraining/jobs/{jobId}/start`
+- `POST /api/v1/training/retraining/jobs/{jobId}/complete`
+- `POST /api/v1/training/retraining/jobs/{jobId}/publish`
+- `GET /api/v1/training/retraining/models/active`
 - `GET /api/v1/health`
 - `GET /api/v1/metrics`
 - `GET /api/v1/governance`
@@ -388,7 +398,7 @@ Operational/planned contracts already reflected in the docs:
 
 - client / tenant registration endpoints
 - dataset upload and validation endpoints
-- training job start / status / publish endpoints
+- Python training runner orchestration and durable job persistence
 - tenant-scoped serving activation and notification contracts
 - quarantine registry and mutation endpoints
 - topology status / validate / publish endpoints

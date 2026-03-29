@@ -106,9 +106,12 @@ public final class PredictionTelemetryStore {
      */
     public synchronized List<ExportRow> exportRows(ExportFilter filter) {
         pruneExpiredLocked(clock.instant());
-        ExportFilter effectiveFilter = filter == null ? new ExportFilter(null, null, null, null, false) : filter;
+        ExportFilter effectiveFilter = filter == null ? new ExportFilter(null, null, null, null, null, false) : filter;
         List<ExportRow> rows = new ArrayList<>();
         for (StoredRecord record : entries.values()) {
+            if (effectiveFilter.callerId() != null && !effectiveFilter.callerId().equals(record.prediction.callerId())) {
+                continue;
+            }
             ExportRow row = record.toExportRow();
             if (matches(row, effectiveFilter)) {
                 rows.add(row);
@@ -129,6 +132,10 @@ public final class PredictionTelemetryStore {
     synchronized int size() {
         pruneExpiredLocked(clock.instant());
         return entries.size();
+    }
+
+    synchronized void clear() {
+        entries.clear();
     }
 
     private void recordPrediction(StoredRecord record) {
@@ -547,6 +554,7 @@ public final class PredictionTelemetryStore {
      * Satisfies closure criterion: retraining export can select already-joined rows by stable lineage dimensions.
      */
     public record ExportFilter(
+            String callerId,
             CallerScopedRetainedResultRegistry.ResultKind resultKind,
             String topologyVersionId,
             String scenarioBundleId,

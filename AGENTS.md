@@ -27,6 +27,12 @@ The required end-to-end flow is:
 7. A tenant-scoped routing API is exposed for that client's downstream users.
 8. The downstream user interface asks only for origin and destination and shows the three route products.
 
+That lifecycle must include retraining, not just first-time training:
+
+9. Served predictions and outcome feedback are exported as caller-scoped telemetry.
+10. A retraining job is created from that telemetry, validated, and published as the next serving artifact.
+11. Publication advances the caller's active model version without request-time training.
+
 Do not optimize the repo around an ops-heavy frontend before this lifecycle exists.
 
 ## 2. System Planes
@@ -39,8 +45,10 @@ Owns:
 - dataset intake
 - trait selection
 - training-job creation
+- retraining-job creation from served telemetry
 - job status tracking
 - publication approval
+- active-model selection
 - client notification metadata
 
 This plane is the new primary product surface.
@@ -67,6 +75,8 @@ Owns:
 - retained result retrieval
 - feedback ingestion
 - telemetry export for retraining
+
+Serving may emit telemetry for retraining, but it may not run training inline.
 
 Serving remains deterministic for a fixed published artifact and live snapshot.
 
@@ -100,7 +110,9 @@ The next architectural additions should focus on:
 - tenant/project domain models
 - dataset upload and validation API
 - training job orchestration
+- retraining orchestration from caller-scoped telemetry exports
 - publication lifecycle
+- active-model metadata and serving activation
 - tenant-scoped auth / API key model
 - minimal client admin UI
 - minimal end-user route query UI
@@ -112,8 +124,9 @@ Implement in this order unless the user explicitly changes direction:
 1. Control-plane backend contracts
 2. Training job orchestration and status persistence
 3. Publication + tenant-scoped serving activation
-4. Client notification path
-5. Thin route query UI
+4. Retraining loop from served telemetry
+5. Client notification path
+6. Thin route query UI
 
 ## 5. Backend Contract Priorities
 
@@ -123,6 +136,7 @@ The next backend families should be centered on training and publication:
 - dataset upload / manifest creation
 - trait selection / training config
 - training job start / status / failure reporting
+- retraining export / start / status / publish reporting
 - artifact publication / active-model selection
 - notification webhook or pollable completion contract
 - tenant-scoped routing API
@@ -159,7 +173,8 @@ It should not expose training controls, topology operations, or calibration inte
 2. Training stays offline.
 3. Published artifacts are versioned and tenant-scoped.
 4. Feedback and telemetry remain exportable for retraining.
-5. The end-user query surface stays simpler than the client admin surface.
+5. Retraining is a first-class backend lifecycle, not a frontend concern.
+6. The end-user query surface stays simpler than the client admin surface.
 
 ## 8. Out of Scope For The Next Slice
 
