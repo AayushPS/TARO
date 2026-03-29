@@ -17,6 +17,7 @@ __pycache__/
 *.pyc
 *.egg-info/
 docs/agent_work/
+sample-data/external/
 
 ### IntelliJ IDEA ###
 .idea/

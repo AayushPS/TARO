@@ -1,11 +1,13 @@
 # Sample Data For TARO Manual Testing
 
-This directory contains public datasets I downloaded for TARO admin-flow testing.
+This directory contains public datasets prepared for TARO admin-flow testing.
 
 There are two groups:
 
-- `sample-data/external/`: original downloaded source files
 - `sample-data/manual/`: smaller CSVs trimmed and renamed for faster TARO upload testing
+
+The repo only tracks the upload-ready files under `sample-data/manual/`.
+Original downloads can be recreated locally from the source links below and are ignored by Git under `sample-data/external/`.
 
 ## Downloaded Sources
 
@@ -13,9 +15,6 @@ There are two groups:
 
 Source page:
 - `https://huggingface.co/datasets/ashwinb1999/Travel`
-
-Downloaded file:
-- `sample-data/external/hf_travel_routes.csv`
 
 Direct file URL used:
 - `https://huggingface.co/datasets/ashwinb1999/Travel/resolve/main/US%20Airline%20Flight%20Routes%20and%20Fares%201993-2024.csv?download=true`
@@ -39,10 +38,6 @@ Alternate target:
 Source page:
 - `https://archive.ics.uci.edu/dataset/492/metro+interstate+traffic+volume`
 
-Downloaded files:
-- `sample-data/external/uci_metro_interstate_traffic_volume.zip`
-- `sample-data/external/uci_metro/Metro_Interstate_Traffic_Volume.csv.gz`
-
 Direct file URL used:
 - `https://archive.ics.uci.edu/static/public/492/metro%2Binterstate%2Btraffic%2Bvolume.zip`
 
@@ -61,10 +56,6 @@ Suggested TARO training settings:
 
 Source page:
 - `https://www.tomtom.com/downloads/traffic-index/`
-
-Downloaded files:
-- `sample-data/external/tomtom_new_york_city.zip`
-- `sample-data/external/tomtom_new_york_city/New York City Counties.csv`
 
 Direct file URL used:
 - `https://download.tomtom.com/open/banners/new-york-city-us.zip`
