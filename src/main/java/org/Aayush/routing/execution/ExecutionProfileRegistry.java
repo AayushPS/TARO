@@ -10,6 +10,7 @@ import java.util.Set;
  * Immutable registry of named execution profiles.
  */
 public final class ExecutionProfileRegistry {
+    /** Registered execution profiles keyed by normalized profile id. */
     private final Map<String, ExecutionProfileSpec> profilesById;
 
     /**
@@ -20,13 +21,19 @@ public final class ExecutionProfileRegistry {
     }
 
     /**
-     * Creates a registry from explicit execution profiles keyed by {@code profileId}.
+     * Creates a registry from explicit execution profiles keyed by
+     * {@code profileId}.
+     *
+     * @param profileSpecs explicit execution profiles to normalize and register
      */
-    public ExecutionProfileRegistry(Collection<? extends ExecutionProfileSpec> profileSpecs) {
-        LinkedHashMap<String, ExecutionProfileSpec> profiles = new LinkedHashMap<>();
+    public ExecutionProfileRegistry(
+            final Collection<? extends ExecutionProfileSpec> profileSpecs) {
+        LinkedHashMap<String, ExecutionProfileSpec> profiles =
+                new LinkedHashMap<>();
         if (profileSpecs != null) {
             for (ExecutionProfileSpec profileSpec : profileSpecs) {
-                ExecutionProfileSpec nonNullSpec = Objects.requireNonNull(profileSpec, "profileSpec");
+                ExecutionProfileSpec nonNullSpec =
+                        Objects.requireNonNull(profileSpec, "profileSpec");
                 String profileId = normalizeRequiredId(nonNullSpec.getProfileId(), "profileSpec.profileId");
                 ExecutionProfileSpec normalizedSpec = ExecutionProfileSpec.builder()
                         .profileId(profileId)
