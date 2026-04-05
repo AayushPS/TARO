@@ -13,6 +13,17 @@ Active findings after dedup:
 Regressions detected:
   none
 
+Cycle       : 78
+Scan ID     : 20260405_174322
+
+Active findings after dedup:
+  ADVISORY | TEST | mvn verify | Validation performance summary reported 1 warning | HASH:86103a35
+  MINOR | STYLE | src/main/java/org/Aayush/routing/execution/ExecutionProfileRegistry.java:[40] | LineLength: Line is longer than 80 characters (found 84). | HASH:565fb093
+  MINOR | STYLE | docs/agent/.scan_cycle78_java_static.log | 10554 additional Checkstyle violations remain in Java static analysis output (see log for line-level details) | HASH:a390f9d0
+
+Regressions detected:
+  none
+
 Cycle       : 77
 Scan ID     : 20260405_173708
 

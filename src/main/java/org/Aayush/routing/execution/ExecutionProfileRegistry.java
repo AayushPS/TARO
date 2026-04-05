@@ -37,7 +37,8 @@ public final class ExecutionProfileRegistry {
                 String profileId = normalizeRequiredId(
                         nonNullSpec.getProfileId(),
                         "profileSpec.profileId");
-                ExecutionProfileSpec normalizedSpec = ExecutionProfileSpec.builder()
+                ExecutionProfileSpec normalizedSpec =
+                        ExecutionProfileSpec.builder()
                         .profileId(profileId)
                         .algorithm(nonNullSpec.getAlgorithm())
                         .heuristicType(nonNullSpec.getHeuristicType())
