@@ -46,7 +46,8 @@ public final class ExecutionProfileRegistry {
                 ExecutionProfileSpec previous =
                         profiles.putIfAbsent(profileId, normalizedSpec);
                 if (previous != null) {
-                    throw new IllegalArgumentException("duplicate execution profile id: " + profileId);
+                    throw new IllegalArgumentException(
+                            "duplicate execution profile id: " + profileId);
                 }
             }
         }
