@@ -43,7 +43,8 @@ public final class ExecutionProfileRegistry {
                         .algorithm(nonNullSpec.getAlgorithm())
                         .heuristicType(nonNullSpec.getHeuristicType())
                         .build();
-                ExecutionProfileSpec previous = profiles.putIfAbsent(profileId, normalizedSpec);
+                ExecutionProfileSpec previous =
+                        profiles.putIfAbsent(profileId, normalizedSpec);
                 if (previous != null) {
                     throw new IllegalArgumentException("duplicate execution profile id: " + profileId);
                 }
