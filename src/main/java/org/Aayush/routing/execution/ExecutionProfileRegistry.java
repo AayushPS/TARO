@@ -61,7 +61,7 @@ public final class ExecutionProfileRegistry {
      * @return registered execution profile, or {@code null} when the id is
      *     missing or blank
      */
-    public ExecutionProfileSpec profile(String profileId) {
+    public ExecutionProfileSpec profile(final String profileId) {
         String normalizedProfileId = normalizeOptionalId(profileId);
         if (normalizedProfileId == null) {
             return null;

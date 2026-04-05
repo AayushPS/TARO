@@ -13,6 +13,17 @@ Active findings after dedup:
 Regressions detected:
   none
 
+Cycle       : 83
+Scan ID     : 20260405_181022
+
+Active findings after dedup:
+  ADVISORY | TEST | mvn verify | Validation performance summary reported 1 warning | HASH:86103a35
+  MINOR | STYLE | src/main/java/org/Aayush/routing/execution/ExecutionProfileRegistry.java:[64,41] | FinalParameters: Parameter profileId should be final. | HASH:3ebea4c1
+  MINOR | STYLE | docs/agent/.scan_cycle83_java_static.log | 10549 additional Checkstyle violations remain in Java static analysis output (see log for line-level details) | HASH:8197bc59
+
+Regressions detected:
+  none
+
 Cycle       : 82
 Scan ID     : 20260405_180526
 
