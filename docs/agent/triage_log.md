@@ -13,6 +13,17 @@ Active findings after dedup:
 Regressions detected:
   none
 
+Cycle       : 82
+Scan ID     : 20260405_180526
+
+Active findings after dedup:
+  ADVISORY | TEST | mvn verify | Validation performance summary reported 1 warning | HASH:86103a35
+  MINOR | STYLE | src/main/java/org/Aayush/routing/execution/ExecutionProfileRegistry.java:[61] | JavadocMethod: @return tag should be present and have description. | HASH:7cf4b605
+  MINOR | STYLE | docs/agent/.scan_cycle82_java_static.log | 10550 additional Checkstyle violations remain in Java static analysis output (see log for line-level details) | HASH:9ec8f5a9
+
+Regressions detected:
+  none
+
 Cycle       : 81
 Scan ID     : 20260405_175912
 
