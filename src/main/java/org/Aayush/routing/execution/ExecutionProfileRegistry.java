@@ -34,7 +34,9 @@ public final class ExecutionProfileRegistry {
             for (ExecutionProfileSpec profileSpec : profileSpecs) {
                 ExecutionProfileSpec nonNullSpec =
                         Objects.requireNonNull(profileSpec, "profileSpec");
-                String profileId = normalizeRequiredId(nonNullSpec.getProfileId(), "profileSpec.profileId");
+                String profileId = normalizeRequiredId(
+                        nonNullSpec.getProfileId(),
+                        "profileSpec.profileId");
                 ExecutionProfileSpec normalizedSpec = ExecutionProfileSpec.builder()
                         .profileId(profileId)
                         .algorithm(nonNullSpec.getAlgorithm())
