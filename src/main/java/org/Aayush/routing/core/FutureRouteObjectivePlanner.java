@@ -117,7 +117,7 @@ final class FutureRouteObjectivePlanner {
             }
 
             settledStates++;
-            if (Double.isFinite(bestGoalObjective) && bestGoalObjective <= state.priority() + PROBABILITY_TOLERANCE) {
+            if (Double.isFinite(bestGoalObjective) && state.priority() > bestGoalObjective + PROBABILITY_TOLERANCE) {
                 break;
             }
 

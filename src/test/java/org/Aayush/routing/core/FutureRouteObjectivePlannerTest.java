@@ -155,6 +155,45 @@ class FutureRouteObjectivePlannerTest {
     }
 
     @Test
+    @DisplayName("Equal-objective compromise routes still prefer the lower-arrival winner")
+    void testEqualObjectiveCompromiseRoutesPreferLowerArrivalWinner() {
+        RoutingFixtureFactory.Fixture fixture = compromiseFixture();
+        RouteCore routeCore = createRouteCore(fixture, ExecutionRuntimeConfig.dijkstra());
+        RequestNormalizer.NormalizedRouteRequest normalized = routeCore.normalizeRouteRequest(
+                RouteRequest.builder()
+                        .sourceExternalId("N0")
+                        .targetExternalId("N4")
+                        .departureTicks(0L)
+                        .build()
+        );
+
+        FutureRouteObjectivePlanner planner = new FutureRouteObjectivePlanner();
+        List<FutureRouteObjectivePlanner.ScenarioCostSurface> scenarios = List.of(
+                new FutureRouteObjectivePlanner.ScenarioCostSurface(0.15d, costEngineWithUpdates(routeCore, List.of(
+                        LiveUpdate.of(1, 0.15f, 10_000L),
+                        LiveUpdate.of(4, 0.15f, 10_000L)
+                ))),
+                new FutureRouteObjectivePlanner.ScenarioCostSurface(0.85d, costEngineWithUpdates(routeCore, List.of(
+                        LiveUpdate.of(0, 0.5f, 10_000L),
+                        LiveUpdate.of(3, 0.5f, 10_000L)
+                )))
+        );
+
+        InternalRoutePlan plan = planner.compute(
+                routeCore,
+                normalized.getInternalRequest(),
+                scenarios,
+                FutureRouteObjectivePlanner.ObjectiveMode.EXPECTED_ETA
+        );
+
+        RouteShape shape = RouteShape.fromRouteResponse(routeCore.buildRouteResponse(normalized, plan));
+        assertEquals(List.of("N0", "N1", "N4"), shape.getPathExternalNodeIds());
+        assertArrayEquals(new int[]{0, 3}, plan.edgePath());
+        assertEquals(20L, plan.arrivalTicks());
+        assertEquals(18.5f, plan.totalCost(), 0.0001f);
+    }
+
+    @Test
     @DisplayName("Budget overflow surfaces the deterministic label reason code")
     void testBudgetOverflowReportsLabelReasonCode() {
         RoutingFixtureFactory.Fixture fixture = compromiseFixture();
