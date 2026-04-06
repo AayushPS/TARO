@@ -23,6 +23,8 @@ class FrontendEmbeddingControllerTest extends AbstractTaroApiSpringTest {
         assertSpaForward("/");
         assertSpaForward("/admin");
         assertSpaForward("/query");
+        assertSpaForward("/plan");
+        assertSpaForward("/plan/caller-a");
 
         mockMvc.perform(get("/index.html").accept(MediaType.TEXT_HTML))
                 .andExpect(status().isOk())

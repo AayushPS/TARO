@@ -12,6 +12,7 @@ export interface RouteCardModel {
   key: string
   label: string
   accent: 'ember' | 'teal' | 'gold'
+  description: string
   selection: RouteSelection
 }
 
@@ -32,14 +33,33 @@ export function buildRouteRequest(
   end: string,
   departureTicks: number,
 ): RouteApiRequestPayload {
+  return buildRouteRequestFromEndpoints(
+    buildEndpointPayload(start),
+    buildEndpointPayload(end),
+    departureTicks,
+  )
+}
+
+export function buildRouteRequestFromEndpoints(
+  source: RouteEndpointPayload,
+  target: RouteEndpointPayload,
+  departureTicks: number,
+): RouteApiRequestPayload {
+  const sourceUsesCoordinates = endpointUsesCoordinates(source)
+  const targetUsesCoordinates = endpointUsesCoordinates(target)
+  const usesCoordinates = sourceUsesCoordinates || targetUsesCoordinates
+
   return {
-    source: buildEndpointPayload(start),
-    target: buildEndpointPayload(end),
+    source,
+    target,
     departureTicks,
     horizonTicks: 3600,
     preferredObjective: 'EXPECTED_ETA',
     topKAlternatives: 3,
     resultTtlSeconds: 600,
+    allowMixedAddressing:
+      sourceUsesCoordinates !== targetUsesCoordinates ? true : undefined,
+    maxSnapDistance: usesCoordinates ? 0.75 : undefined,
   }
 }
 
@@ -47,14 +67,16 @@ export function routeCardsFromSummary(summary: RouteSummary): RouteCardModel[] {
   const cards: RouteCardModel[] = [
     {
       key: 'expected',
-      label: 'Expected ETA',
+      label: 'Best overall',
       accent: 'ember',
+      description: 'Balanced for the lowest expected trip time right now.',
       selection: summary.expectedRoute,
     },
     {
       key: 'robust',
-      label: 'Robust / P90',
+      label: 'Most reliable',
       accent: 'teal',
+      description: 'Keeps extra buffer when disruptions are more likely.',
       selection: summary.robustRoute,
     },
   ]
@@ -62,11 +84,16 @@ export function routeCardsFromSummary(summary: RouteSummary): RouteCardModel[] {
   summary.alternatives.forEach((selection, index) => {
     cards.push({
       key: `alternative-${index + 1}`,
-      label: `Alternative ${index + 1}`,
+      label: `Backup option ${index + 1}`,
       accent: 'gold',
+      description: 'A fallback if the first recommendation does not fit.',
       selection,
     })
   })
 
   return cards
+}
+
+function endpointUsesCoordinates(endpoint: RouteEndpointPayload): boolean {
+  return endpoint.externalId === undefined || endpoint.externalId.trim() === ''
 }

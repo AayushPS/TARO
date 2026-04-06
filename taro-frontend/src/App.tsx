@@ -1,55 +1,102 @@
+import type { ReactNode } from 'react'
 import {
   BrowserRouter,
+  Link,
   Navigate,
-  NavLink,
-  Outlet,
   Route,
   Routes,
+  useParams,
 } from 'react-router-dom'
+import { StatusPill } from './components/StatusPill'
+import { usePersistentState } from './lib/usePersistentState'
 import { AdminDashboard } from './pages/AdminDashboard'
 import { RouteWorkspace } from './pages/RouteWorkspace'
-import { usePersistentState } from './lib/usePersistentState'
 
 type IndexedIds = Record<string, string[]>
 
-export interface ShellContextValue {
-  apiBase: string
-  callerId: string
-  trackedJobIds: string[]
-  recentRouteIds: string[]
-  setApiBase: (value: string) => void
-  setCallerId: (value: string) => void
-  trackJob: (jobId: string) => void
-  untrackJob: (jobId: string) => void
-  rememberRouteResult: (resultSetId: string) => void
+function dedupeAndCap(ids: string[], nextId: string): string[] {
+  const trimmed = nextId.trim()
+  if (!trimmed) {
+    return ids
+  }
+  const deduped = [trimmed, ...ids.filter((existing) => existing !== trimmed)]
+  return deduped.slice(0, 8)
 }
 
-function AppShell({
+function normalizeWorkspaceId(value: string | undefined, fallback: string): string {
+  const trimmed = (value ?? '').trim()
+  return trimmed || fallback
+}
+
+function displayWorkspaceName(value: string): string {
+  return value.replace(/[-_]+/g, ' ')
+}
+
+function PublicShell({
+  workspaceId,
+  children,
+}: {
+  workspaceId: string
+  children: ReactNode
+}) {
+  return (
+    <div className="app-shell app-shell--public">
+      <header className="shell-hero shell-hero--public">
+        <div className="shell-hero__copy">
+          <p className="eyebrow">TARO Route Guide</p>
+          <h1>Route planning for travelers, not operators.</h1>
+          <p className="hero-text">
+            This public planner only asks for places people recognize. Training,
+            publishing, and operational controls live in a separate admin
+            workspace.
+          </p>
+        </div>
+        <div className="shell-hero__controls">
+          <StatusPill label={`Workspace ${workspaceId}`} tone="neutral" />
+          <p className="callout">
+            Public workspace: <strong>{displayWorkspaceName(workspaceId)}</strong>
+          </p>
+          <p className="field-hint">
+            Travelers can enter city names, hubs, or road segments without ever
+            seeing internal node ids.
+          </p>
+        </div>
+      </header>
+
+      <main className="shell-main">{children}</main>
+    </div>
+  )
+}
+
+function AdminShell({
   apiBase,
   callerId,
-  trackedJobIds,
-  recentRouteIds,
+  publicPlannerPath,
   setApiBase,
   setCallerId,
-  trackJob,
-  untrackJob,
-  rememberRouteResult,
-}: ShellContextValue) {
+  children,
+}: {
+  apiBase: string
+  callerId: string
+  publicPlannerPath: string
+  setApiBase: (value: string) => void
+  setCallerId: (value: string) => void
+  children: ReactNode
+}) {
   return (
-    <div className="app-shell">
-      <header className="shell-hero">
+    <div className="app-shell app-shell--admin">
+      <header className="shell-hero shell-hero--admin">
         <div className="shell-hero__copy">
-          <p className="eyebrow">TARO Control Surface</p>
-          <h1>Upload training data, publish a model, then hand users a thin route UI.</h1>
+          <p className="eyebrow">TARO Admin Workspace</p>
+          <h1>Training, publication, and oversight stay completely separate.</h1>
           <p className="hero-text">
-            The admin workspace owns caller-scoped dataset upload, training
-            parameters, notifications, and publication. The user workspace only
-            asks for start and end points once a model is active.
+            Operators manage datasets and model rollout here. End users should
+            only visit the public planner URL for their workspace.
           </p>
         </div>
         <div className="shell-hero__controls">
           <label className="field">
-            <span>Caller ID</span>
+            <span>Workspace ID</span>
             <input
               value={callerId}
               onChange={(event) => setCallerId(event.target.value)}
@@ -64,59 +111,44 @@ function AppShell({
               placeholder="/api or http://127.0.0.1:8080"
             />
           </label>
-          <p className="field-hint">
-            Default flow: keep this field at `/api`. When the frontend is
-            served by Spring Boot, that already points at the same backend. In
-            Vite development, the proxy forwards `/api` to `8080`.
-          </p>
+          <div className="admin-link-card">
+            <span>Public planner URL</span>
+            <strong>{publicPlannerPath}</strong>
+            <Link className="button button--ghost" to={publicPlannerPath}>
+              Preview public planner
+            </Link>
+          </div>
         </div>
       </header>
 
-      <div className="shell-nav">
-        <NavLink
-          className={({ isActive }) =>
-            isActive ? 'shell-nav__link is-active' : 'shell-nav__link'
-          }
-          to="/admin"
-        >
-          Admin command deck
-        </NavLink>
-        <NavLink
-          className={({ isActive }) =>
-            isActive ? 'shell-nav__link is-active' : 'shell-nav__link'
-          }
-          to="/query"
-        >
-          End-user route workspace
-        </NavLink>
-      </div>
-
-      <main className="shell-main">
-        <Outlet
-          context={{
-            apiBase,
-            callerId,
-            trackedJobIds,
-            recentRouteIds,
-            setApiBase,
-            setCallerId,
-            trackJob,
-            untrackJob,
-            rememberRouteResult,
-          } satisfies ShellContextValue}
-        />
-      </main>
+      <main className="shell-main">{children}</main>
     </div>
   )
 }
 
-function dedupeAndCap(ids: string[], nextId: string): string[] {
-  const trimmed = nextId.trim()
-  if (!trimmed) {
-    return ids
-  }
-  const deduped = [trimmed, ...ids.filter((existing) => existing !== trimmed)]
-  return deduped.slice(0, 8)
+function PublicPlannerRoute({
+  apiBase,
+  defaultWorkspaceId,
+  rememberRouteResult,
+}: {
+  apiBase: string
+  defaultWorkspaceId: string
+  rememberRouteResult: (workspaceId: string, resultSetId: string) => void
+}) {
+  const { workspaceId } = useParams()
+  const resolvedWorkspaceId = normalizeWorkspaceId(workspaceId, defaultWorkspaceId)
+
+  return (
+    <PublicShell workspaceId={resolvedWorkspaceId}>
+      <RouteWorkspace
+        apiBase={apiBase}
+        callerId={resolvedWorkspaceId}
+        rememberRouteResult={(resultSetId) =>
+          rememberRouteResult(resolvedWorkspaceId, resultSetId)
+        }
+      />
+    </PublicShell>
+  )
 }
 
 export default function App() {
@@ -124,56 +156,72 @@ export default function App() {
   const [callerId, setCallerId] = usePersistentState('taro.caller-id', 'caller-a')
   const [trackedJobsByCaller, setTrackedJobsByCaller] =
     usePersistentState<IndexedIds>('taro.tracked-jobs', {})
-  const [recentRouteIdsByCaller, setRecentRouteIdsByCaller] =
+  const [, setRecentRouteIdsByCaller] =
     usePersistentState<IndexedIds>('taro.recent-results', {})
 
-  const callerKey = callerId.trim() || '__anonymous__'
-  const trackedJobIds = trackedJobsByCaller[callerKey] ?? []
-  const recentRouteIds = recentRouteIdsByCaller[callerKey] ?? []
+  const normalizedCallerId = callerId.trim() || 'caller-a'
+  const trackedJobIds = trackedJobsByCaller[normalizedCallerId] ?? []
+  const publicPlannerPath = `/plan/${encodeURIComponent(normalizedCallerId)}`
 
-  const trackJob = (jobId: string) => {
+  const trackJob = (workspaceId: string, jobId: string) => {
     setTrackedJobsByCaller((current) => ({
       ...current,
-      [callerKey]: dedupeAndCap(current[callerKey] ?? [], jobId),
+      [workspaceId]: dedupeAndCap(current[workspaceId] ?? [], jobId),
     }))
   }
 
-  const untrackJob = (jobId: string) => {
+  const untrackJob = (workspaceId: string, jobId: string) => {
     setTrackedJobsByCaller((current) => ({
       ...current,
-      [callerKey]: (current[callerKey] ?? []).filter((existing) => existing !== jobId),
+      [workspaceId]: (current[workspaceId] ?? []).filter(
+        (existing) => existing !== jobId,
+      ),
     }))
   }
 
-  const rememberRouteResult = (resultSetId: string) => {
+  const rememberRouteResult = (workspaceId: string, resultSetId: string) => {
     setRecentRouteIdsByCaller((current) => ({
       ...current,
-      [callerKey]: dedupeAndCap(current[callerKey] ?? [], resultSetId),
+      [workspaceId]: dedupeAndCap(current[workspaceId] ?? [], resultSetId),
     }))
   }
 
   return (
     <BrowserRouter>
       <Routes>
+        <Route index element={<Navigate replace to={publicPlannerPath} />} />
+        <Route path="/plan" element={<Navigate replace to={publicPlannerPath} />} />
         <Route
+          path="/plan/:workspaceId"
           element={
-            <AppShell
+            <PublicPlannerRoute
               apiBase={apiBase}
-              callerId={callerId}
-              trackedJobIds={trackedJobIds}
-              recentRouteIds={recentRouteIds}
-              setApiBase={setApiBase}
-              setCallerId={setCallerId}
-              trackJob={trackJob}
-              untrackJob={untrackJob}
+              defaultWorkspaceId={normalizedCallerId}
               rememberRouteResult={rememberRouteResult}
             />
           }
-        >
-          <Route index element={<Navigate replace to="/admin" />} />
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/query" element={<RouteWorkspace />} />
-        </Route>
+        />
+        <Route path="/query" element={<Navigate replace to={publicPlannerPath} />} />
+        <Route
+          path="/admin"
+          element={
+            <AdminShell
+              apiBase={apiBase}
+              callerId={callerId}
+              publicPlannerPath={publicPlannerPath}
+              setApiBase={setApiBase}
+              setCallerId={setCallerId}
+            >
+              <AdminDashboard
+                apiBase={apiBase}
+                callerId={normalizedCallerId}
+                trackedJobIds={trackedJobIds}
+                trackJob={(jobId) => trackJob(normalizedCallerId, jobId)}
+                untrackJob={(jobId) => untrackJob(normalizedCallerId, jobId)}
+              />
+            </AdminShell>
+          }
+        />
       </Routes>
     </BrowserRouter>
   )

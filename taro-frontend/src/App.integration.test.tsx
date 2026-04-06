@@ -144,39 +144,66 @@ describe('TARO app integration flows', () => {
   })
 
   it('blocks the query UI when no published model exists for the caller', async () => {
-    window.history.pushState({}, '', '/query')
+    window.history.pushState({}, '', '/plan/caller-a')
     installMockApi(createEmptyState())
     render(<App />)
 
-    await screen.findByText(/a published model is required before the thin query ui can serve\./i)
+    await screen.findByText(
+      /a published model is required before this planner can answer trips\./i,
+    )
     const button = await screen.findByRole('button', {
-      name: /awaiting published model/i,
+      name: /waiting for a live model/i,
     })
     expect(button).toBeDisabled()
     expect(
       screen.getByText(
-        /no published model exists for this caller yet\. the admin workspace must upload, train, and publish one first\./i,
+        /routing is not live for this workspace yet\. an operator still needs to publish a model\./i,
       ),
     ).toBeInTheDocument()
   })
 
   it('unlocks the query UI and renders route products when an active model exists', async () => {
     const user = userEvent.setup()
-    window.history.pushState({}, '', '/query')
-    installMockApi(createPublishedState())
+    window.history.pushState({}, '', '/plan/caller-a')
+    const fetchMock = installMockApi(createPublishedState())
     render(<App />)
 
-    await screen.findByText(/this caller is ready for routing queries\./i)
-    const button = await screen.findByRole('button', { name: /route now/i })
+    await screen.findByText(
+      /this public planner is live and ready for plain-language trip requests\./i,
+    )
+    const startInput = await screen.findByLabelText(/start place/i)
+    const destinationInput = await screen.findByLabelText(/destination/i)
+    await user.clear(startInput)
+    await user.type(startInput, 'West Connector')
+    await user.clear(destinationInput)
+    await user.type(destinationInput, 'Harbor Point')
+
+    const button = await screen.findByRole('button', { name: /plan trip/i })
     expect(button).toBeEnabled()
 
     await user.click(button)
 
-    await screen.findByText(/computed route result result-1\./i)
-    await screen.findByText(/^Expected ETA$/i)
-    await screen.findByText(/^Robust \/ P90$/i)
-    await screen.findByText(/^Alternative 1$/i)
-    await screen.findByText(/scenario-level route outputs/i)
+    await screen.findByText(/route ready from west connector to harbor exchange\./i)
+    await screen.findByText(/^Best overall$/i)
+    await screen.findByText(/^Most reliable$/i)
+    await screen.findByText(/^Backup option 1$/i)
+    expect((await screen.findAllByText(/old town gate/i)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/harbor exchange/i)).length).toBeGreaterThan(0)
+
+    const routeCall = fetchMock.mock.calls.find(([input]) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      return new URL(url, 'http://localhost').pathname === '/api/v1/route'
+    })
+
+    expect(routeCall).toBeDefined()
+    const payload = parseJsonBody(routeCall?.[1])
+    expect(payload.source).toEqual({
+      coordinateFirst: 0.5,
+      coordinateSecond: 0,
+      coordinateStrategyHintId: 'xy',
+    })
+    expect(payload.target).toEqual({ externalId: 'N3' })
+    expect(payload.allowMixedAddressing).toBe(true)
   })
 })
 

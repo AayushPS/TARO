@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  */
 @Controller
 public class FrontendEmbeddingController {
-    @GetMapping({"/", "/admin", "/query"})
+    @GetMapping({"/", "/admin", "/query", "/plan", "/plan/{workspaceId}"})
     public String index() {
         return "forward:/index.html";
     }

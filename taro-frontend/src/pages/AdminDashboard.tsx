@@ -4,8 +4,6 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { useOutletContext } from 'react-router-dom'
-import type { ShellContextValue } from '../App'
 import { StatusPill } from '../components/StatusPill'
 import { ApiFailure, TaroApiClient, describeError } from '../lib/api'
 import {
@@ -85,9 +83,21 @@ function blankCompletionDraft(): CompletionDraft {
   }
 }
 
-export function AdminDashboard() {
-  const { apiBase, callerId, trackedJobIds, trackJob, untrackJob } =
-    useOutletContext<ShellContextValue>()
+export interface AdminDashboardProps {
+  apiBase: string
+  callerId: string
+  trackedJobIds: string[]
+  trackJob: (jobId: string) => void
+  untrackJob: (jobId: string) => void
+}
+
+export function AdminDashboard({
+  apiBase,
+  callerId,
+  trackedJobIds,
+  trackJob,
+  untrackJob,
+}: AdminDashboardProps) {
 
   const [composer, setComposer] = useState<ComposerState>(initialComposer)
   const [datasets, setDatasets] = useState<TrainingDatasetResponse[]>([])

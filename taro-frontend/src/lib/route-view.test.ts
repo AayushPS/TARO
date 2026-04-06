@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildEndpointPayload, buildRouteRequest, routeCardsFromSummary } from './route-view'
+import {
+  buildEndpointPayload,
+  buildRouteRequest,
+  buildRouteRequestFromEndpoints,
+  routeCardsFromSummary,
+} from './route-view'
 import type { RouteSummary } from './types'
 
 describe('buildEndpointPayload', () => {
@@ -25,6 +30,23 @@ describe('buildRouteRequest', () => {
       resultTtlSeconds: 600,
     })
   })
+
+  it('enables mixed addressing when one side resolves from coordinates', () => {
+    expect(
+      buildRouteRequestFromEndpoints(
+        {
+          coordinateFirst: 0.5,
+          coordinateSecond: 0,
+          coordinateStrategyHintId: 'xy',
+        },
+        { externalId: 'N3' },
+        900,
+      ),
+    ).toMatchObject({
+      allowMixedAddressing: true,
+      maxSnapDistance: 0.75,
+    })
+  })
 })
 
 describe('routeCardsFromSummary', () => {
@@ -33,9 +55,9 @@ describe('routeCardsFromSummary', () => {
     const cards = routeCardsFromSummary(summary)
 
     expect(cards.map((card) => card.label)).toEqual([
-      'Expected ETA',
-      'Robust / P90',
-      'Alternative 1',
+      'Best overall',
+      'Most reliable',
+      'Backup option 1',
     ])
   })
 })

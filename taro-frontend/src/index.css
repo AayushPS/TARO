@@ -70,6 +70,10 @@ button:disabled {
   padding: 28px 0 48px;
 }
 
+.app-shell--public {
+  width: min(1320px, calc(100vw - 32px));
+}
+
 .shell-hero,
 .surface-card,
 .metric-panel,
@@ -95,6 +99,18 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
+.shell-hero--public {
+  background:
+    linear-gradient(140deg, rgba(21, 111, 109, 0.16), rgba(255, 250, 241, 0.98) 40%),
+    linear-gradient(180deg, rgba(255, 251, 240, 0.98), rgba(244, 236, 220, 0.92));
+}
+
+.shell-hero--admin {
+  background:
+    linear-gradient(140deg, rgba(183, 138, 22, 0.12), rgba(255, 250, 241, 0.98) 35%),
+    linear-gradient(180deg, rgba(255, 251, 240, 0.98), rgba(247, 241, 231, 0.9));
+}
+
 .shell-hero::after {
   content: '';
   position: absolute;
@@ -118,7 +134,7 @@ button:disabled {
 }
 
 .shell-hero__copy h1,
-.route-hero__copy h2,
+.planner-hero__copy h2,
 .section-heading h2,
 .selection-card__header h3,
 .job-card__header h3,
@@ -140,6 +156,10 @@ button:disabled {
 .callout,
 .empty-state {
   color: var(--ink-700);
+}
+
+.field-hint--warn {
+  color: var(--warn);
 }
 
 .hero-text {
@@ -194,6 +214,25 @@ button:disabled {
   background: rgba(21, 111, 109, 0.12);
 }
 
+.admin-link-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(24, 33, 39, 0.1);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.admin-link-card span {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.84rem;
+  color: var(--ink-700);
+}
+
+.admin-link-card strong {
+  overflow-wrap: anywhere;
+}
+
 .shell-main {
   margin-top: 10px;
 }
@@ -210,6 +249,13 @@ button:disabled {
   gap: 20px;
 }
 
+.public-status-grid,
+.planner-highlights,
+.location-list {
+  display: grid;
+  gap: 16px;
+}
+
 .hero-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -222,10 +268,15 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.route-hero {
+.planner-hero {
   display: grid;
   gap: 20px;
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+}
+
+.public-status-grid,
+.planner-highlights {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .surface-card,
@@ -253,9 +304,16 @@ button:disabled {
 }
 
 .metric-panel h2,
+.metric-panel h3,
 .selection-card__header h3 {
   font-size: 1.8rem;
   letter-spacing: -0.04em;
+}
+
+.metric-panel h3,
+.location-card h3 {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
 }
 
 .section-heading,
@@ -411,6 +469,21 @@ button:disabled {
   background: rgba(255, 255, 255, 0.55);
 }
 
+.location-preview {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(21, 111, 109, 0.16);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.location-preview strong {
+  display: block;
+  margin-bottom: 4px;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
 .callout--warn {
   background: rgba(183, 138, 22, 0.12);
 }
@@ -506,6 +579,21 @@ button:disabled {
   gap: 16px;
 }
 
+.location-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(24, 33, 39, 0.1);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.location-card__city {
+  margin: 8px 0;
+  font-family: 'Space Grotesk', sans-serif;
+  color: var(--teal);
+}
+
 .job-card,
 .scenario-card {
   padding: 20px;
@@ -540,6 +628,11 @@ button:disabled {
   display: grid;
   gap: 16px;
   padding: 22px;
+}
+
+.selection-card__description {
+  margin: 10px 0 0;
+  color: var(--ink-700);
 }
 
 .selection-card--ember {
@@ -577,6 +670,10 @@ button:disabled {
   align-content: start;
 }
 
+.route-form--public {
+  padding-block: 28px;
+}
+
 .availability-banner h2 {
   max-width: 22ch;
 }
@@ -597,6 +694,7 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .planner-highlights,
   .selection-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -609,11 +707,13 @@ button:disabled {
   }
 
   .shell-hero,
-  .route-hero,
+  .planner-hero,
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
 
+  .public-status-grid,
+  .planner-highlights,
   .completion-editor,
   .form-grid,
   .job-card__grid,

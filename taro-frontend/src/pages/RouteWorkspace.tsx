@@ -1,46 +1,42 @@
-import { startTransition, useEffect, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
-import type { ShellContextValue } from '../App'
+import { startTransition, useEffect, useId, useState } from 'react'
 import { StatusPill } from '../components/StatusPill'
 import { ApiFailure, TaroApiClient, describeError } from '../lib/api'
-import { formatInstant, formatSeconds, formatTicks } from '../lib/format'
-import { buildRouteRequest, routeCardsFromSummary } from '../lib/route-view'
+import { formatInstant, formatSeconds } from '../lib/format'
+import {
+  publicExplanationLabel,
+  publicLocationSuggestions,
+  publicLocationsByKind,
+  publicPathLabels,
+  resolvePublicLocation,
+  type PublicLocationOption,
+} from '../lib/public-network'
+import {
+  buildRouteRequestFromEndpoints,
+  routeCardsFromSummary,
+  type RouteCardModel,
+} from '../lib/route-view'
 import type {
-  OutcomeStatus,
-  PredictionFeedbackRequestPayload,
   PublishedServingModelResponse,
   RouteApiResponse,
-  RouteDetail,
-  RouteSelection,
 } from '../lib/types'
-
-interface FeedbackDraft {
-  outcomeStatus: OutcomeStatus
-  observedAtTicks: string
-  observedArrivalTicks: string
-  observedCostSeconds: string
-  observationCount: string
-}
 
 type ModelAvailability = 'loading' | 'available' | 'blocked' | 'error'
 
-const initialFeedback: FeedbackDraft = {
-  outcomeStatus: 'COMPLETE',
-  observedAtTicks: '',
-  observedArrivalTicks: '',
-  observedCostSeconds: '',
-  observationCount: '1',
+export interface RouteWorkspaceProps {
+  apiBase: string
+  callerId: string
+  rememberRouteResult: (resultSetId: string) => void
 }
 
-export function RouteWorkspace() {
-  const { apiBase, callerId, recentRouteIds, rememberRouteResult } =
-    useOutletContext<ShellContextValue>()
-  const [startPoint, setStartPoint] = useState('N0')
-  const [endPoint, setEndPoint] = useState('N3')
-  const [lookupResultId, setLookupResultId] = useState('')
+export function RouteWorkspace({
+  apiBase,
+  callerId,
+  rememberRouteResult,
+}: RouteWorkspaceProps) {
+  const suggestionListId = useId()
+  const [originInput, setOriginInput] = useState('Old Town')
+  const [destinationInput, setDestinationInput] = useState('Harbor Point')
   const [routeEnvelope, setRouteEnvelope] = useState<RouteApiResponse | null>(null)
-  const [routeDetail, setRouteDetail] = useState<RouteDetail | null>(null)
-  const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>(initialFeedback)
   const [activeModel, setActiveModel] =
     useState<PublishedServingModelResponse | null>(null)
   const [modelAvailability, setModelAvailability] =
@@ -52,9 +48,12 @@ export function RouteWorkspace() {
   )
   const [busyKey, setBusyKey] = useState<string | null>(null)
 
-  const currentSummary = routeDetail?.summary ?? routeEnvelope?.summary ?? null
-  const currentResultSetId = currentSummary?.resultSetId ?? null
+  const originMatch = resolvePublicLocation(originInput)
+  const destinationMatch = resolvePublicLocation(destinationInput)
+  const currentSummary = routeEnvelope?.summary ?? null
   const routeCards = currentSummary ? routeCardsFromSummary(currentSummary) : []
+  const hubLocations = publicLocationsByKind('hub')
+  const corridorLocations = publicLocationsByKind('corridor')
 
   useEffect(() => {
     async function refreshActiveModel() {
@@ -72,7 +71,7 @@ export function RouteWorkspace() {
             setActiveModel(null)
             setModelAvailability('blocked')
             setModelIssue(
-              'No published model exists for this caller yet. The admin workspace must upload, train, and publish one first.',
+              'Routing is not live for this workspace yet. An operator still needs to publish a model.',
             )
           })
           return
@@ -95,7 +94,15 @@ export function RouteWorkspace() {
   async function submitRouteQuery() {
     if (!activeModel) {
       setNotice(
-        'This caller has no published model yet. Use the admin workspace to publish one before routing.',
+        'This public planner is waiting on a published model. Ask an operator to publish the workspace first.',
+      )
+      setNoticeTone('warn')
+      return
+    }
+
+    if (!originMatch || !destinationMatch) {
+      setNotice(
+        'Choose a known city, hub, or road segment from the suggested places before planning a trip.',
       )
       setNoticeTone('warn')
       return
@@ -106,70 +113,18 @@ export function RouteWorkspace() {
       const client = new TaroApiClient(apiBase, callerId)
       const departureTicks = Math.floor(Date.now() / 1000)
       const envelope = await client.route(
-        buildRouteRequest(startPoint, endPoint, departureTicks),
+        buildRouteRequestFromEndpoints(
+          originMatch.endpoint,
+          destinationMatch.endpoint,
+          departureTicks,
+        ),
       )
-      const detail = envelope.retained
-        ? await client.routeDetail(envelope.resultSetId)
-        : null
 
       rememberRouteResult(envelope.resultSetId)
       startTransition(() => {
         setRouteEnvelope(envelope)
-        setRouteDetail(detail)
-        setLookupResultId(envelope.resultSetId)
       })
-      setNotice(`Computed route result ${envelope.resultSetId}.`)
-      setNoticeTone('good')
-    } catch (error) {
-      setNotice(describeError(error))
-      setNoticeTone('danger')
-    } finally {
-      setBusyKey(null)
-    }
-  }
-
-  async function loadRetainedResult() {
-    setBusyKey('lookup')
-    try {
-      const resultId = lookupResultId.trim()
-      const client = new TaroApiClient(apiBase, callerId)
-      const detail = await client.routeDetail(resultId)
-      rememberRouteResult(detail.summary.resultSetId)
-      startTransition(() => {
-        setRouteEnvelope(null)
-        setRouteDetail(detail)
-      })
-      setNotice(`Loaded retained detail for ${detail.summary.resultSetId}.`)
-      setNoticeTone('good')
-    } catch (error) {
-      setNotice(describeError(error))
-      setNoticeTone('danger')
-    } finally {
-      setBusyKey(null)
-    }
-  }
-
-  async function submitFeedback() {
-    if (!currentResultSetId) {
-      setNotice('Run or load a route result before recording feedback.')
-      setNoticeTone('warn')
-      return
-    }
-
-    setBusyKey('feedback')
-    try {
-      const client = new TaroApiClient(apiBase, callerId)
-      const payload: PredictionFeedbackRequestPayload = {
-        outcomeStatus: feedbackDraft.outcomeStatus,
-        observedAtTicks: toOptionalNumber(feedbackDraft.observedAtTicks),
-        observedArrivalTicks: toOptionalNumber(feedbackDraft.observedArrivalTicks),
-        observedCostSeconds: toOptionalNumber(feedbackDraft.observedCostSeconds),
-        observationCount: toOptionalNumber(feedbackDraft.observationCount),
-      }
-      const response = await client.submitRouteFeedback(currentResultSetId, payload)
-      setNotice(
-        `Recorded ${response.outcomeStatus.toLowerCase()} feedback for ${response.resultSetId}.`,
-      )
+      setNotice(`Route ready from ${originMatch.label} to ${destinationMatch.label}.`)
       setNoticeTone('good')
     } catch (error) {
       setNotice(describeError(error))
@@ -180,7 +135,7 @@ export function RouteWorkspace() {
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack page-stack--public">
       {notice ? (
         <div className={`notice notice--${noticeTone}`}>{notice}</div>
       ) : null}
@@ -188,22 +143,22 @@ export function RouteWorkspace() {
       <section className="surface-card availability-banner">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Published model availability</p>
+            <p className="eyebrow">Planner status</p>
             <h2>
               {activeModel
-                ? 'This caller is ready for routing queries.'
-                : 'A published model is required before the thin query UI can serve.'}
+                ? 'This public planner is live and ready for plain-language trip requests.'
+                : 'A published model is required before this planner can answer trips.'}
             </h2>
           </div>
           <StatusPill
             label={
               modelAvailability === 'available'
-                ? activeModel?.activeModelId ?? 'Available'
+                ? 'Live'
                 : modelAvailability === 'loading'
-                  ? 'Loading'
+                  ? 'Checking'
                   : modelAvailability === 'blocked'
-                    ? 'Training required'
-                    : 'Model lookup failed'
+                    ? 'Awaiting publish'
+                    : 'Planner issue'
             }
             tone={
               modelAvailability === 'available'
@@ -216,61 +171,90 @@ export function RouteWorkspace() {
         </div>
 
         {activeModel ? (
-          <div className="detail-list">
-            <MetaDatum label="Dataset" value={activeModel.datasetFileName ?? 'N/A'} />
-            <MetaDatum label="Target column" value={activeModel.targetColumn ?? 'N/A'} />
+          <div className="public-status-grid">
+            <MetaDatum label="Workspace" value={callerId} />
             <MetaDatum
-              label="Feature columns"
-              value={activeModel.featureColumns.join(', ') || 'N/A'}
-            />
-            <MetaDatum
-              label="Training window"
-              value={activeModel.trainingWindowLabel}
-            />
-            <MetaDatum
-              label="Traits"
-              value={activeModel.selectedTraits.join(', ')}
-            />
-            <MetaDatum
-              label="Published at"
+              label="Published"
               value={formatInstant(activeModel.publishedAt)}
             />
+            <MetaDatum
+              label="Service mode"
+              value="Cities, hubs, and road segments"
+            />
+            <MetaDatum label="Internal codes" value="Hidden from travelers" />
           </div>
         ) : (
           <p className="callout callout--warn">
             {modelIssue ??
-              'Move to the admin workspace, upload a dataset, complete training, and publish the model for this caller.'}
+              'This workspace has no live model yet. The admin workspace must upload data, train, and publish before travelers can plan routes.'}
           </p>
         )}
       </section>
 
-      <section className="route-hero">
-        <div className="route-hero__copy">
-          <p className="eyebrow">Thin end-user query</p>
-          <h2>Ask for start and end. Use the published model behind the scenes.</h2>
+      <section className="planner-hero">
+        <div className="planner-hero__copy">
+          <p className="eyebrow">Public route planner</p>
+          <h2>Tell TARO where you are and where you want to go.</h2>
           <p className="hero-text">
-            The user surface stays intentionally small: start point, end point,
-            and three route products. TARO returns Expected ETA, Robust / P90,
-            and alternatives from the caller’s active published model.
+            Type a city, hub, or road segment such as Old Town, River Market,
+            Harbor Exchange, or West Connector. Internal node ids like N1 and
+            N2 stay behind the scenes.
           </p>
+          <div className="planner-highlights">
+            <div className="metric-panel">
+              <p className="eyebrow">What to enter</p>
+              <h3>Cities, hubs, or road segments</h3>
+              <p className="muted-text">
+                Use names people actually know instead of graph internals.
+              </p>
+            </div>
+            <div className="metric-panel">
+              <p className="eyebrow">What you get</p>
+              <h3>Best, reliable, and backup routes</h3>
+              <p className="muted-text">
+                Each route card explains the tradeoff in plain language.
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="route-form surface-card">
+
+        <div className="route-form route-form--public">
           <label className="field">
-            <span>Start</span>
+            <span>Start place</span>
             <input
-              onChange={(event) => setStartPoint(event.target.value)}
-              placeholder="N0 or 12.34, 56.78"
-              value={startPoint}
+              list={suggestionListId}
+              onChange={(event) => setOriginInput(event.target.value)}
+              placeholder="Old Town, River Market, or West Connector"
+              value={originInput}
             />
           </label>
+          <LocationPreview
+            fallbackValue={originInput}
+            location={originMatch}
+            unresolvedCopy="Pick a known city, hub, or road segment for the start."
+          />
+
           <label className="field">
-            <span>End</span>
+            <span>Destination</span>
             <input
-              onChange={(event) => setEndPoint(event.target.value)}
-              placeholder="N3 or 13.02, 57.11"
-              value={endPoint}
+              list={suggestionListId}
+              onChange={(event) => setDestinationInput(event.target.value)}
+              placeholder="Harbor Point or Harbor Exchange"
+              value={destinationInput}
             />
           </label>
+          <LocationPreview
+            fallbackValue={destinationInput}
+            location={destinationMatch}
+            unresolvedCopy="Pick a known city or destination hub."
+          />
+
+          <datalist id={suggestionListId}>
+            {publicLocationSuggestions().map((suggestion) => (
+              <option key={suggestion} value={suggestion} />
+            ))}
+          </datalist>
+
           <button
             className="button button--primary"
             disabled={!activeModel || busyKey === 'route'}
@@ -278,267 +262,218 @@ export function RouteWorkspace() {
             type="button"
           >
             {busyKey === 'route'
-              ? 'Routing…'
+              ? 'Planning trip...'
               : activeModel
-                ? 'Route now'
-                : 'Awaiting published model'}
+                ? 'Plan trip'
+                : 'Waiting for a live model'}
           </button>
+          <p className="field-hint">
+            You never need to know internal graph codes to use this planner.
+          </p>
         </div>
       </section>
 
       <section className="dashboard-grid">
-        <div className="surface-card">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Retained lookup</p>
-              <h2>Load a result by ID</h2>
-            </div>
-            <StatusPill label={currentResultSetId ?? 'No active result'} tone="neutral" />
-          </div>
-          <div className="inline-actions inline-actions--stretch">
-            <label className="field field--wide">
-              <span>Result set ID</span>
-              <input
-                onChange={(event) => setLookupResultId(event.target.value)}
-                placeholder="Paste a retained result ID"
-                value={lookupResultId}
-              />
-            </label>
-            <button className="button button--ghost" onClick={loadRetainedResult} type="button">
-              {busyKey === 'lookup' ? 'Loading…' : 'Load retained result'}
-            </button>
-          </div>
-          <div className="history-strip">
-            {recentRouteIds.length > 0 ? (
-              recentRouteIds.map((resultId) => (
-                <button
-                  key={resultId}
-                  className="history-pill"
-                  onClick={() => setLookupResultId(resultId)}
-                  type="button"
-                >
-                  {resultId}
-                </button>
-              ))
-            ) : (
-              <p className="muted-text">Recent route IDs will appear here after successful queries.</p>
-            )}
-          </div>
-        </div>
+        <LocationGuideCard
+          title="City hubs"
+          subtitle="Best for neighborhood and district-based starts or destinations."
+          locations={hubLocations}
+          setDestinationInput={setDestinationInput}
+          setOriginInput={setOriginInput}
+        />
+        <LocationGuideCard
+          title="Road segments"
+          subtitle="Use these when the traveler is already on a specific corridor."
+          locations={corridorLocations}
+          setDestinationInput={setDestinationInput}
+          setOriginInput={setOriginInput}
+        />
+      </section>
 
-        <div className="surface-card">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Result metadata</p>
-              <h2>Current retained state</h2>
-            </div>
-            <StatusPill label={currentSummary ? 'Loaded' : 'Idle'} />
+      <section className="surface-card journey-summary">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Current trip</p>
+            <h2>
+              {originMatch?.label ?? 'Choose a start'} to{' '}
+              {destinationMatch?.label ?? 'choose a destination'}
+            </h2>
           </div>
-          {currentSummary ? (
-            <div className="detail-list">
-              <MetaDatum label="Result set" value={currentSummary.resultSetId} />
-              <MetaDatum label="Created" value={formatInstant(currentSummary.createdAt)} />
-              <MetaDatum label="Expires" value={formatInstant(currentSummary.expiresAt)} />
-              <MetaDatum label="Topology" value={currentSummary.topologyVersion.topologyVersion} />
-              <MetaDatum label="Scenario bundle" value={currentSummary.scenarioBundleId} />
-              <MetaDatum
-                label="Quarantine snapshot"
-                value={currentSummary.quarantineSnapshotId}
-              />
-            </div>
-          ) : (
-            <div className="empty-state">
-              No route result loaded yet. Run a query or pull a retained result ID.
-            </div>
-          )}
+          <StatusPill
+            label={currentSummary ? 'Route ready' : 'Awaiting request'}
+            tone={currentSummary ? 'good' : 'neutral'}
+          />
         </div>
+        {currentSummary ? (
+          <div className="public-status-grid">
+            <MetaDatum
+              label="Start"
+              value={`${originMatch?.label ?? originInput} (${originMatch?.city ?? 'Custom place'})`}
+            />
+            <MetaDatum
+              label="Destination"
+              value={`${destinationMatch?.label ?? destinationInput} (${destinationMatch?.city ?? 'Custom place'})`}
+            />
+            <MetaDatum
+              label="Result expires"
+              value={formatInstant(currentSummary.expiresAt)}
+            />
+            <MetaDatum
+              label="Route choices"
+              value={String(routeCards.length)}
+            />
+          </div>
+        ) : (
+          <div className="empty-state">
+            Pick places from the guide above, then TARO will render the route
+            recommendations here.
+          </div>
+        )}
       </section>
 
       <section className="selection-grid">
         {routeCards.map((card) => (
-          <SelectionCard key={card.key} accent={card.accent} label={card.label} selection={card.selection} />
+          <SelectionCard card={card} key={card.key} />
         ))}
         {routeCards.length === 0 ? (
           <div className="empty-state empty-state--wide">
-            Query results will render here as soon as the backend returns a
-            route summary.
+            Route recommendations will appear here after you plan a trip.
           </div>
         ) : null}
-      </section>
-
-      <section className="dashboard-grid">
-        <div className="surface-card">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Scenario inspection</p>
-              <h2>Scenario-level route outputs</h2>
-            </div>
-            <StatusPill
-              label={routeDetail ? `${routeDetail.scenarioResults.length} scenarios` : 'Summary only'}
-              tone="neutral"
-            />
-          </div>
-          {routeDetail ? (
-            <div className="scenario-list">
-              {routeDetail.scenarioResults.map((scenario) => (
-                <article className="scenario-card" key={scenario.scenarioId}>
-                  <div className="scenario-card__header">
-                    <div>
-                      <h3>{scenario.label}</h3>
-                      <p className="muted-text">{scenario.scenarioId}</p>
-                    </div>
-                    <StatusPill
-                      label={`${(scenario.probability * 100).toFixed(0)}%`}
-                      tone="neutral"
-                    />
-                  </div>
-                  <PathTrail nodes={scenario.route.pathExternalNodeIds} />
-                  {scenario.explanationTags.length > 0 ? (
-                    <div className="tag-row">
-                      {scenario.explanationTags.map((tag) => (
-                        <span className="tag" key={tag}>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              Detail retrieval is required for scenario-level inspection.
-            </div>
-          )}
-        </div>
-
-        <div className="surface-card">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Outcome capture</p>
-              <h2>Record route feedback</h2>
-            </div>
-            <StatusPill label={currentResultSetId ? 'Ready' : 'Blocked'} />
-          </div>
-          <div className="form-grid">
-            <label className="field">
-              <span>Outcome status</span>
-              <select
-                onChange={(event) =>
-                  setFeedbackDraft((current) => ({
-                    ...current,
-                    outcomeStatus: event.target.value as OutcomeStatus,
-                  }))
-                }
-                value={feedbackDraft.outcomeStatus}
-              >
-                <option value="COMPLETE">COMPLETE</option>
-                <option value="PARTIAL">PARTIAL</option>
-              </select>
-            </label>
-            <label className="field">
-              <span>Observed at ticks</span>
-              <input
-                onChange={(event) =>
-                  setFeedbackDraft((current) => ({
-                    ...current,
-                    observedAtTicks: event.target.value,
-                  }))
-                }
-                placeholder="480"
-                value={feedbackDraft.observedAtTicks}
-              />
-            </label>
-            <label className="field">
-              <span>Observed arrival ticks</span>
-              <input
-                onChange={(event) =>
-                  setFeedbackDraft((current) => ({
-                    ...current,
-                    observedArrivalTicks: event.target.value,
-                  }))
-                }
-                placeholder="540"
-                value={feedbackDraft.observedArrivalTicks}
-              />
-            </label>
-            <label className="field">
-              <span>Observed cost seconds</span>
-              <input
-                onChange={(event) =>
-                  setFeedbackDraft((current) => ({
-                    ...current,
-                    observedCostSeconds: event.target.value,
-                  }))
-                }
-                placeholder="120.5"
-                value={feedbackDraft.observedCostSeconds}
-              />
-            </label>
-            <label className="field">
-              <span>Observation count</span>
-              <input
-                onChange={(event) =>
-                  setFeedbackDraft((current) => ({
-                    ...current,
-                    observationCount: event.target.value,
-                  }))
-                }
-                placeholder="1"
-                value={feedbackDraft.observationCount}
-              />
-            </label>
-          </div>
-          <button className="button button--primary" onClick={submitFeedback} type="button">
-            {busyKey === 'feedback' ? 'Submitting…' : 'Submit feedback'}
-          </button>
-        </div>
       </section>
     </div>
   )
 }
 
-function SelectionCard({
-  label,
-  selection,
-  accent,
+function LocationGuideCard({
+  title,
+  subtitle,
+  locations,
+  setOriginInput,
+  setDestinationInput,
 }: {
-  label: string
-  selection: RouteSelection
-  accent: 'ember' | 'teal' | 'gold'
+  title: string
+  subtitle: string
+  locations: PublicLocationOption[]
+  setOriginInput: (value: string) => void
+  setDestinationInput: (value: string) => void
 }) {
+  return (
+    <section className="surface-card">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Known places</p>
+          <h2>{title}</h2>
+        </div>
+        <StatusPill label={`${locations.length} places`} tone="neutral" />
+      </div>
+      <p className="muted-text">{subtitle}</p>
+      <div className="location-list">
+        {locations.map((location) => (
+          <article className="location-card" key={location.id}>
+            <div>
+              <h3>{location.label}</h3>
+              <p className="location-card__city">{location.city}</p>
+              <p className="muted-text">{location.description}</p>
+            </div>
+            <div className="inline-actions">
+              <button
+                className="button button--ghost"
+                onClick={() => setOriginInput(location.label)}
+                type="button"
+              >
+                Use as start
+              </button>
+              <button
+                className="button button--ghost"
+                onClick={() => setDestinationInput(location.label)}
+                type="button"
+              >
+                Use as destination
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function LocationPreview({
+  location,
+  fallbackValue,
+  unresolvedCopy,
+}: {
+  location: PublicLocationOption | null
+  fallbackValue: string
+  unresolvedCopy: string
+}) {
+  if (!fallbackValue.trim()) {
+    return <p className="field-hint">Choose from the known place list or start typing.</p>
+  }
+
+  if (!location) {
+    return <p className="field-hint field-hint--warn">{unresolvedCopy}</p>
+  }
+
+  return (
+    <div className="location-preview">
+      <StatusPill
+        label={location.kind === 'corridor' ? 'Road segment' : 'Hub'}
+        tone="neutral"
+      />
+      <div>
+        <strong>{location.label}</strong>
+        <p className="muted-text">
+          {location.city}. {location.description}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function SelectionCard({ card }: { card: RouteCardModel }) {
+  const { description, label, selection, accent } = card
+
   return (
     <article className={`selection-card selection-card--${accent}`}>
       <div className="selection-card__header">
         <div>
           <p className="eyebrow">{label}</p>
           <h3>
-            {selection.route.reachable ? formatSeconds(selection.expectedCost) : 'Unreachable'}
+            {selection.route.reachable ? formatSeconds(selection.expectedCost) : 'Unavailable'}
           </h3>
+          <p className="selection-card__description">{description}</p>
         </div>
-        <StatusPill label={selection.dominantScenarioLabel || 'No label'} tone="neutral" />
-      </div>
-      <div className="selection-card__stats">
-        <MetaDatum label="P90" value={formatSeconds(selection.p90Cost)} />
-        <MetaDatum
-          label="Arrival band"
-          value={`${formatTicks(selection.etaBandLowerArrivalTicks)} → ${formatTicks(selection.etaBandUpperArrivalTicks)}`}
+        <StatusPill
+          label={`${(selection.optimalityProbability * 100).toFixed(0)}% confidence`}
+          tone="neutral"
         />
+      </div>
+
+      <div className="selection-card__stats">
+        <MetaDatum label="High-traffic ETA" value={formatSeconds(selection.p90Cost)} />
         <MetaDatum
-          label="Optimality"
-          value={`${(selection.optimalityProbability * 100).toFixed(0)}%`}
+          label="Typical range"
+          value={`${formatSeconds(selection.minCost)} to ${formatSeconds(selection.maxCost)}`}
         />
         <MetaDatum
           label="Expected regret"
           value={formatSeconds(selection.expectedRegret)}
         />
+        <MetaDatum
+          label="Scenario weight"
+          value={`${(selection.dominantScenarioProbability * 100).toFixed(0)}%`}
+        />
       </div>
+
       <PathTrail nodes={selection.route.pathExternalNodeIds} />
+
       {selection.explanationTags.length > 0 ? (
         <div className="tag-row">
           {selection.explanationTags.map((tag) => (
             <span className="tag" key={tag}>
-              {tag}
+              {publicExplanationLabel(tag)}
             </span>
           ))}
         </div>
@@ -557,26 +492,19 @@ function MetaDatum({ label, value }: { label: string; value: string }) {
 }
 
 function PathTrail({ nodes }: { nodes: string[] }) {
+  const labels = publicPathLabels(nodes)
+
   return (
     <div className="path-trail">
-      {nodes.length > 0 ? (
-        nodes.map((node, index) => (
+      {labels.length > 0 ? (
+        labels.map((node, index) => (
           <span className="path-node" key={`${node}-${index}`}>
             {node}
           </span>
         ))
       ) : (
-        <span className="muted-text">No path nodes available.</span>
+        <span className="muted-text">No path details available.</span>
       )}
     </div>
   )
-}
-
-function toOptionalNumber(value: string): number | undefined {
-  const trimmed = value.trim()
-  if (!trimmed) {
-    return undefined
-  }
-  const parsed = Number(trimmed)
-  return Number.isNaN(parsed) ? undefined : parsed
 }

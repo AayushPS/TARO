@@ -40,6 +40,8 @@ export interface RouteApiRequestPayload {
   preferredObjective: string
   topKAlternatives: number
   resultTtlSeconds: number
+  allowMixedAddressing?: boolean
+  maxSnapDistance?: number
 }
 
 export interface RouteShape {
