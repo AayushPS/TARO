@@ -4,10 +4,11 @@ This directory contains public datasets prepared for TARO admin-flow testing.
 
 There are two groups:
 
-- `sample-data/manual/`: smaller CSVs trimmed and renamed for faster TARO upload testing
+- `sample-data/manual/`: upload-ready CSVs for TARO admin-flow testing, including a large showcase dataset for audience demos
 
 The repo only tracks the upload-ready files under `sample-data/manual/`.
 Original downloads can be recreated locally from the source links below and are ignored by Git under `sample-data/external/`.
+The synthetic showcase dataset is generated locally from a deterministic Python script that is tracked in the repo.
 
 ## Downloaded Sources
 
@@ -71,6 +72,38 @@ Suggested TARO training settings:
 - target column: `travel_time_per_10km_min`
 - feature columns: `speed_kmh`, `free_flow_speed_kmh`, `congestion_level_pct`
 
+### 4. TARO Synthetic Megacity Showcase Data
+
+Source:
+- generated locally with `scripts/generate_showcase_sample_data.py`
+
+Notes:
+- This is a deterministic synthetic traffic dataset built specifically for TARO demos.
+- It models 12 corridors across 10 regions with hourly observations over 210 days.
+- The file includes demand, weather, incidents, roadwork, event pressure, transit disruption, speed, congestion, and travel-time targets.
+- It is designed to look richer on stage than the smaller smoke-test CSVs while still being upload-ready as a plain CSV.
+
+Upload-ready file:
+- `sample-data/manual/taro_megacity_multicorridor_showcase.csv`
+
+Scale:
+- 60,480 data rows
+- 12 corridor pairs
+- 10 region labels
+
+Suggested TARO training settings:
+- target column: `travel_time_per_10km_min`
+- feature columns: `speed_kmh`, `free_flow_speed_kmh`, `congestion_level_pct`, `demand_index`, `incident_severity`, `event_intensity`, `rain_mm`, `snow_mm`, `transit_disruption_pct`, `hour_of_day`, `is_weekend`
+
+Good storytelling columns for the admin preview table:
+- `corridor_label`
+- `region_label`
+- `source_hub`
+- `target_hub`
+
+Regenerate locally:
+- `python3 scripts/generate_showcase_sample_data.py`
+
 ## Recommended First Manual Test
 
 Use:
@@ -80,6 +113,17 @@ Why:
 - it is small enough for quick upload
 - it has a clear numeric travel-time target
 - it has obvious explanatory traffic features
+
+## Recommended Audience Demo
+
+Use:
+- `sample-data/manual/taro_megacity_multicorridor_showcase.csv`
+
+Why:
+- it is large enough to look like a serious operational dataset
+- it has richer features than the quick smoke datasets
+- the corridor and hub labels tell a better story during a live walkthrough
+- it still keeps a clear numeric target for TARO's current admin training flow
 
 ## Manual TARO Flow
 
@@ -101,7 +145,7 @@ Why:
    - `release-manual-demo-v1`
 9. Publish it.
 10. Open:
-   - `http://127.0.0.1:8080/query`
+   - `http://127.0.0.1:8080/plan/manual-demo`
 11. Keep the same caller ID.
 12. The route form should unlock once the active model is published.
 
