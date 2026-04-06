@@ -65,6 +65,16 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.mockito</groupId>
+                    <artifactId>mockito-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.mockito</groupId>
+                    <artifactId>mockito-junit-jupiter</artifactId>
+                </exclusion>
+            </exclusions>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -91,7 +101,7 @@
                 <version>3.2.5</version>
                 <configuration>
                     <!--suppress UnresolvedMavenProperty, UnresolvedMavenProperty -->
-                    <argLine>${argLine} -ea</argLine>
+                    <argLine>${argLine} -ea -XX:+EnableDynamicAgentLoading</argLine>
                     <groups>${testGroups}</groups>
                     <excludedGroups>${excludedTestGroups}</excludedGroups>
                 </configuration>
@@ -122,8 +132,14 @@
                 </executions>
             </plugin>
             <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>4.9.8.3</version>
+            </plugin>
+            <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring.boot.version}</version>
             </plugin>
         </plugins>
     </build>

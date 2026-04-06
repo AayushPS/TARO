@@ -1,19 +1,14 @@
 package org.Aayush.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.Aayush.app.Main;
-import org.Aayush.routing.topology.TopologyReloadCoordinator;
-import org.junit.jupiter.api.BeforeEach;
+import org.Aayush.testsupport.AbstractTaroApiSpringTest;
+import org.Aayush.testsupport.TaroApiSpringTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.nio.file.Files;
@@ -30,14 +25,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(
-        classes = {Main.class, FutureApiTestConfiguration.class},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = "taro.demo-topology.enabled=false")
-@AutoConfigureMockMvc
+@TaroApiSpringTest
 @Tag("integration")
 @DisplayName("Dataset-Driven Training And Serving Load Tests")
-class DatasetDrivenTrainingServingLoadTest {
+class DatasetDrivenTrainingServingLoadTest extends AbstractTaroApiSpringTest {
     private static final List<RouteProbe> ROUTE_PROBES = List.of(
             new RouteProbe("N0", "N1", 2),
             new RouteProbe("N0", "N2", 2),
@@ -45,18 +36,6 @@ class DatasetDrivenTrainingServingLoadTest {
             new RouteProbe("N2", "N3", 2),
             new RouteProbe("N0", "N3", 3)
     );
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private FutureApiTestConfiguration.ApiMutableClock apiMutableClock;
-
-    @Autowired
-    private TopologyReloadCoordinator topologyReloadCoordinator;
 
     @Autowired
     private PredictionTelemetryStore predictionTelemetryStore;
@@ -70,10 +49,8 @@ class DatasetDrivenTrainingServingLoadTest {
     @Autowired
     private AdminNotificationService adminNotificationService;
 
-    @BeforeEach
-    void resetApiState() {
-        apiMutableClock.set(FutureApiTestConfiguration.BASE_INSTANT);
-        topologyReloadCoordinator.applyReload(FutureApiTestConfiguration.initialSnapshot());
+    @Override
+    protected void resetAdditionalState() {
         predictionTelemetryStore.clear();
         retrainingControlService.clear();
         trainingDatasetService.clear();

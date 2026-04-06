@@ -184,9 +184,9 @@ class SourceSchema:
             columns.add(rule.field_name)
             if rule.unit_field is not None:
                 columns.add(rule.unit_field)
-        for rule in self.unit_rules:
-            columns.add(rule.value_field)
-            columns.add(rule.unit_field)
+        for unit_rule in self.unit_rules:
+            columns.add(unit_rule.value_field)
+            columns.add(unit_rule.unit_field)
         return tuple(sorted(columns))
 
 

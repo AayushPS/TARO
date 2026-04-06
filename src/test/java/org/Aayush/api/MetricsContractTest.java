@@ -1,18 +1,12 @@
 package org.Aayush.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.Aayush.app.Main;
-import org.Aayush.routing.topology.TopologyReloadCoordinator;
-import org.junit.jupiter.api.BeforeEach;
+import org.Aayush.testsupport.AbstractTaroApiSpringTest;
+import org.Aayush.testsupport.TaroApiSpringTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -21,31 +15,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(
-        classes = {Main.class, FutureApiTestConfiguration.class},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = "taro.demo-topology.enabled=false")
-@AutoConfigureMockMvc
+@TaroApiSpringTest
 @Tag("integration")
 @DisplayName("Metrics Contract Tests")
-class MetricsContractTest {
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private FutureApiTestConfiguration.ApiMutableClock apiMutableClock;
-
-    @Autowired
-    private TopologyReloadCoordinator topologyReloadCoordinator;
-
-    @BeforeEach
-    void resetApiState() {
-        apiMutableClock.set(FutureApiTestConfiguration.BASE_INSTANT);
-        topologyReloadCoordinator.applyReload(FutureApiTestConfiguration.initialSnapshot());
-    }
+class MetricsContractTest extends AbstractTaroApiSpringTest {
 
     @Test
     @DisplayName("Metrics endpoint reports serving reload and pressure signals")

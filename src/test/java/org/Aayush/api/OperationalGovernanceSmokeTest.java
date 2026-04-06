@@ -1,17 +1,11 @@
 package org.Aayush.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.Aayush.app.Main;
-import org.Aayush.routing.topology.TopologyReloadCoordinator;
-import org.junit.jupiter.api.BeforeEach;
+import org.Aayush.testsupport.AbstractTaroApiSpringTest;
+import org.Aayush.testsupport.TaroApiSpringTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,32 +13,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(
-        classes = {Main.class, FutureApiTestConfiguration.class},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = "taro.demo-topology.enabled=false")
-@AutoConfigureMockMvc
+@TaroApiSpringTest
 @Tag("smoke")
 @Tag("integration")
 @DisplayName("Operational Governance Smoke Tests")
-class OperationalGovernanceSmokeTest {
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private FutureApiTestConfiguration.ApiMutableClock apiMutableClock;
-
-    @Autowired
-    private TopologyReloadCoordinator topologyReloadCoordinator;
-
-    @BeforeEach
-    void resetApiState() {
-        apiMutableClock.set(FutureApiTestConfiguration.BASE_INSTANT);
-        topologyReloadCoordinator.applyReload(FutureApiTestConfiguration.initialSnapshot());
-    }
+class OperationalGovernanceSmokeTest extends AbstractTaroApiSpringTest {
 
     @Test
     @DisplayName("Governance endpoint makes builder and serving rollback rules explicit")

@@ -1092,7 +1092,7 @@ Closure criteria:
 
 Repo anchors:
 - `src/main/java/org/Aayush/routing/future/InMemoryEphemeralRouteResultStore.java`
-- `src/main/java/org/Aayush/routing/future/InMemoryEphemeralMatrixResultStore.java`
+
 - `src/main/java/org/Aayush/routing/topology/ReloadCompatibilityPolicy.java`
 
 ### Phase D: Topology Evolution and Snapshot Continuity

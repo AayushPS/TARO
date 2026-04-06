@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -375,6 +376,88 @@ class FutureRouteServiceTest {
         assertEquals(2.0f, baseRoute.getTotalCost(), 0.0001f);
     }
 
+    @Test
+    @DisplayName("Future-aware selection rejects the branch that looks fastest at departure when a later buildup flips the winner")
+    void testTwoHourBranchReversalMatchesIntendedFutureAwareBehavior() {
+        RouteCore routeCore = createRouteCore(createTwoHourBranchReversalFixture());
+        TopologyRuntimeSnapshot snapshot = snapshot(routeCore, "topo-two-hour-branch-reversal");
+        long departureTicks = Instant.parse("2026-03-23T00:00:00Z").getEpochSecond();
+        long shiftTicks = departureTicks + Duration.ofHours(2).toSeconds();
+        long scenarioHorizonTicks = departureTicks + Duration.ofHours(6).toSeconds();
+
+        ScenarioBundleResolver resolver = (request, baseCostEngine, temporalContext, resolvedTopologyVersion, quarantineSnapshot, clock) ->
+                ScenarioBundle.builder()
+                        .scenarioBundleId("bundle-two-hour-branch-reversal")
+                        .generatedAt(FIXED_CLOCK.instant())
+                        .validUntil(FIXED_CLOCK.instant().plus(Duration.ofMinutes(10)))
+                        .horizonTicks(request.getHorizonTicks())
+                        .topologyVersion(resolvedTopologyVersion)
+                        .quarantineSnapshotId(quarantineSnapshot.snapshotId())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("departure_snapshot_freeze")
+                                .label("departure_snapshot_freeze")
+                                .probability(0.25d)
+                                .explanationTag("current_traffic_snapshot")
+                                .liveUpdate(LiveUpdate.of(3, 0.5f, departureTicks, scenarioHorizonTicks))
+                                .build())
+                        .scenario(ScenarioDefinition.builder()
+                                .scenarioId("future_shift")
+                                .label("future_shift")
+                                .probability(0.75d)
+                                .explanationTag("late_buildup")
+                                .explanationTag("downstream_relief")
+                                .liveUpdate(LiveUpdate.of(2, 1.0f / 6.0f, shiftTicks, scenarioHorizonTicks))
+                                .build())
+                        .build();
+
+        FutureRouteResultSet resultSet = new FutureRouteService(
+                new FutureRouteEvaluator(resolver, FIXED_CLOCK),
+                new InMemoryEphemeralRouteResultStore(FIXED_CLOCK)
+        ).evaluate(snapshot, routeRequest("N0", "N3", departureTicks, 2));
+
+        assertEquals(
+                List.of("departure_snapshot_freeze", "future_shift"),
+                resultSet.getScenarioResults().stream().map(FutureRouteScenarioResult::getScenarioId).toList()
+        );
+        assertEquals(
+                List.of("N0", "N1", "N3"),
+                resultSet.getScenarioResults().get(0).getRoute().getPathExternalNodeIds()
+        );
+        assertEquals(9_000.0f, resultSet.getScenarioResults().get(0).getRoute().getTotalCost(), 0.0001f);
+        assertEquals(
+                List.of("N0", "N2", "N3"),
+                resultSet.getScenarioResults().get(1).getRoute().getPathExternalNodeIds()
+        );
+        assertEquals(10_800.0f, resultSet.getScenarioResults().get(1).getRoute().getTotalCost(), 0.0001f);
+
+        assertEquals(
+                List.of("N0", "N2", "N3"),
+                resultSet.getExpectedRoute().getRoute().getPathExternalNodeIds()
+        );
+        assertEquals(11_700.0f, resultSet.getExpectedRoute().getExpectedCost(), 0.0001f);
+        assertEquals(14_400.0f, resultSet.getExpectedRoute().getP90Cost(), 0.0001f);
+        assertEquals(0.75d, resultSet.getExpectedRoute().getOptimalityProbability(), 1.0e-9d);
+        assertEquals("future_shift", resultSet.getExpectedRoute().getDominantScenarioId());
+        assertTrue(resultSet.getExpectedRoute().getExplanationTags().contains("downstream_relief"));
+
+        assertEquals(
+                List.of("N0", "N2", "N3"),
+                resultSet.getRobustRoute().getRoute().getPathExternalNodeIds()
+        );
+        assertEquals(14_400.0f, resultSet.getRobustRoute().getP90Cost(), 0.0001f);
+
+        Optional<ScenarioRouteSelection> departureSnapshotBranch = resultSet.getAlternatives().stream()
+                .filter(selection -> selection.getRoute().getPathExternalNodeIds().equals(List.of("N0", "N1", "N3")))
+                .findFirst();
+        assertTrue(departureSnapshotBranch.isPresent());
+        assertEquals(15_750.0f, departureSnapshotBranch.get().getExpectedCost(), 0.0001f);
+        assertEquals(18_000.0f, departureSnapshotBranch.get().getP90Cost(), 0.0001f);
+        assertEquals(0.25d, departureSnapshotBranch.get().getOptimalityProbability(), 1.0e-9d);
+
+        assertTrue(9_000.0f < 14_400.0f);
+        assertTrue(18_000.0f > 10_800.0f);
+    }
+
     private RouteCore createRouteCore(RoutingFixtureFactory.Fixture fixture) {
         return RouteCore.builder()
                 .edgeGraph(fixture.edgeGraph())
@@ -456,6 +539,29 @@ class FutureRouteServiceTest {
                         0.0d, 0.0d,
                         1.0d, 1.0d,
                         1.0d, 0.0d,
+                        1.0d, -1.0d,
+                        2.0d, 0.0d
+                },
+                new RoutingFixtureFactory.ProfileSpec(
+                        1,
+                        RoutingFixtureFactory.ALL_DAYS_MASK,
+                        new float[]{1.0f},
+                        1.0f
+                )
+        );
+    }
+
+    private RoutingFixtureFactory.Fixture createTwoHourBranchReversalFixture() {
+        return RoutingFixtureFactory.createFixture(
+                4,
+                new int[]{0, 2, 3, 4, 4},
+                new int[]{1, 2, 3, 3},
+                new int[]{0, 0, 1, 2},
+                new float[]{7_200.0f, 7_200.0f, 1_800.0f, 3_600.0f},
+                new int[]{1, 1, 1, 1},
+                new double[]{
+                        0.0d, 0.0d,
+                        1.0d, 1.0d,
                         1.0d, -1.0d,
                         2.0d, 0.0d
                 },

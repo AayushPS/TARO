@@ -4,6 +4,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -184,7 +187,15 @@ class SearchInfrastructureTest {
             queue.extractMin();
 
             queue.insert(2, 0, 2.0f, -1);
-            queue.clear();
+            PrintStream originalErr = System.err;
+            ByteArrayOutputStream capturedErr = new ByteArrayOutputStream();
+            try (PrintStream interceptedErr =
+                    new PrintStream(capturedErr, true, StandardCharsets.UTF_8)) {
+                System.setErr(interceptedErr);
+                queue.clear();
+            } finally {
+                System.setErr(originalErr);
+            }
 
             // Queue should be fully reusable up to capacity after clear().
             assertDoesNotThrow(() -> {
@@ -192,6 +203,10 @@ class SearchInfrastructureTest {
                 queue.insert(4, 0, 4.0f, -1);
             });
             assertEquals(2, queue.size());
+            assertTrue(
+                    capturedErr.toString(StandardCharsets.UTF_8)
+                            .contains("WARNING: 1 states leaked"),
+                    "clear should report the replenished leak count");
         }
 
         @Test

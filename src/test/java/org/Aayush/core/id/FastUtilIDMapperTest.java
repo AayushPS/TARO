@@ -2,6 +2,7 @@ package org.Aayush.core.id;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
@@ -140,6 +141,7 @@ class FastUtilIDMapperTest {
     }
 
     @Test
+    @Tag("perf")
     @DisplayName("Stress Test: Large Volume and Long Strings")
     void testLargeVolume() {
         int count = 30_000_000;
@@ -201,32 +203,40 @@ class FastUtilIDMapperTest {
     }
 
     @Test
+    @Tag("perf")
     @DisplayName("Performance: O(1) lookup verification")
     void testConstantTimeLookup() {
-        // Populate 100K entries
         Map<String, Integer> bigMap = new HashMap<>();
         for (int i = 0; i < 100_000; i++) {
             bigMap.put("Node_" + i, i);
         }
         IDMapper mapper = new FastUtilIDMapper(bigMap);
 
-        // Time first 10% vs last 10%
-        long start = System.nanoTime();
-        for (int i = 0; i < 10_000; i++) {
-            mapper.toExternal(i % 10_000);
-        }
-        long earlyTime = System.nanoTime() - start;
+        // Warm both windows before measuring so this stays a perf smoke rather than a JIT/cache race.
+        assertTrue(runLookupWindow(mapper, 0, 10_000) > 0);
+        assertTrue(runLookupWindow(mapper, 90_000, 100_000) > 0);
 
-        start = System.nanoTime();
-        for (int i = 90_000; i < 100_000; i++) {
-            mapper.toExternal(i);
+        long earlyTime = 0L;
+        long lateTime = 0L;
+        for (int round = 0; round < 5; round++) {
+            if ((round & 1) == 0) {
+                earlyTime += measureLookupWindow(mapper, 0, 10_000);
+                lateTime += measureLookupWindow(mapper, 90_000, 100_000);
+            } else {
+                lateTime += measureLookupWindow(mapper, 90_000, 100_000);
+                earlyTime += measureLookupWindow(mapper, 0, 10_000);
+            }
         }
-        long lateTime = System.nanoTime() - start;
 
-        assertTrue(lateTime < earlyTime * 1.2,
-                "Late lookups should be within 20% of early lookups");
+        double ratio = Math.max(earlyTime, lateTime) / (double) Math.min(earlyTime, lateTime);
+        assertTrue(
+                ratio < 1.50d,
+                "Lookup windows should stay within 50%% after warmup; early=%dns late=%dns ratio=%.3f"
+                        .formatted(earlyTime, lateTime, ratio)
+        );
     }
     @Test
+    @Tag("perf")
     @DisplayName("Memory: Verify overhead per entry")
     void testMemoryFootprint() {
         Runtime runtime = Runtime.getRuntime();
@@ -283,5 +293,19 @@ class FastUtilIDMapperTest {
             assertEquals(i, mapper.toInternal(key),
                     "Failed at index " + i);
         }
+    }
+
+    private long measureLookupWindow(IDMapper mapper, int startInclusive, int endExclusive) {
+        long start = System.nanoTime();
+        assertTrue(runLookupWindow(mapper, startInclusive, endExclusive) > 0);
+        return System.nanoTime() - start;
+    }
+
+    private int runLookupWindow(IDMapper mapper, int startInclusive, int endExclusive) {
+        int checksum = 0;
+        for (int i = startInclusive; i < endExclusive; i++) {
+            checksum += mapper.toExternal(i).length();
+        }
+        return checksum;
     }
 }

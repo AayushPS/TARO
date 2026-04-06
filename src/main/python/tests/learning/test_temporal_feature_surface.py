@@ -8,6 +8,8 @@ from src.main.python.learning.ingestion import (
     TimeUnit,
 )
 
+TelemetryRow = dict[str, str | int | float]
+
 
 class TemporalFeatureSurfaceTest(unittest.TestCase):
 
@@ -214,7 +216,7 @@ class TemporalFeatureSurfaceTest(unittest.TestCase):
         )
         return self._telemetry_bundle(telemetry_rows)
 
-    def _telemetry_bundle(self, telemetry_rows: tuple[dict[str, object], ...]) -> DatasetBundle:
+    def _telemetry_bundle(self, telemetry_rows: tuple[TelemetryRow, ...]) -> DatasetBundle:
         return DatasetBundle(
             manifest=DatasetManifest(
                 manifest_version="E1.v1",
@@ -230,7 +232,7 @@ class TemporalFeatureSurfaceTest(unittest.TestCase):
     def _telemetry_source_manifest(
         self,
         row_count: int,
-        telemetry_rows: tuple[dict[str, object], ...],
+        telemetry_rows: tuple[TelemetryRow, ...],
     ) -> DatasetSourceManifest:
         timestamps = [int(row["timestamp_ticks"]) for row in telemetry_rows]
         return DatasetSourceManifest(
@@ -253,7 +255,7 @@ class TemporalFeatureSurfaceTest(unittest.TestCase):
             filters={"geography": "blr-core"},
         )
 
-    def _telemetry_row(self, corridor_id: str, timestamp_ticks: int) -> dict[str, object]:
+    def _telemetry_row(self, corridor_id: str, timestamp_ticks: int) -> TelemetryRow:
         return {
             "feed_kind": "telemetry",
             "source_name": "telemetry_source",

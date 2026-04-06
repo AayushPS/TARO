@@ -44,7 +44,8 @@ def _context_for_timestamp(
     epoch_seconds = _to_epoch_seconds(timestamp_ticks, engine_time_unit)
     zone = ZoneInfo(config.timezone_id)
     localized = datetime.fromtimestamp(epoch_seconds, zone)
-    offset_seconds = int(localized.utcoffset().total_seconds()) if localized.utcoffset() is not None else 0
+    utc_offset = localized.utcoffset()
+    offset_seconds = 0 if utc_offset is None else int(utc_offset.total_seconds())
     seconds_since_midnight = (
         localized.hour * 3_600
         + localized.minute * 60
@@ -77,6 +78,8 @@ def _optional_float(row: dict[str, Any], field_name: str) -> float | None:
     raw = row.get(field_name)
     if raw in (None, ""):
         return None
+    if not isinstance(raw, (int, float, str)):
+        raise TypeError(f"{field_name} must be numeric or string-like")
     return float(raw)
 
 

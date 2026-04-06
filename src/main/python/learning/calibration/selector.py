@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 from ..datasets import CorridorBucketFrequencyArtifact
-from ..forecasting import ForecastTrainingBundle
+from ..forecasting import ForecastTrainingBundle, TemporalRepresentationRow
 from .contracts import (
     CalibrationSelectionBundle,
     CalibrationSelectionConfig,
@@ -14,6 +16,22 @@ from .contracts import (
 _MANIFEST_VERSION = "E4.v1"
 _LOW_CONFIDENCE_REASON = "low_confidence"
 _INSUFFICIENT_IMPROVEMENT_REASON = "insufficient_improvement"
+
+
+class ProvisionalPriorRow(TypedDict):
+    corridor_id: str
+    signal_kind: str
+    structural_cluster_id: str | None
+    day_of_week: int
+    bucket_index: int
+    historical_bucket_frequency: float
+    calibrated_prior_probability: float
+    confidence: float
+    density_signal: float
+    evidence_response: float
+    preferential_attachment_adjustment: float
+    confidence_qualified: bool
+    rejection_reason: str | None
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -55,7 +73,7 @@ def _corridor_density_lookup(training_bundle: ForecastTrainingBundle) -> dict[st
 
 def _corridor_representation_lookup(
     training_bundle: ForecastTrainingBundle,
-) -> dict[str, object]:
+) -> dict[str, TemporalRepresentationRow]:
     return {
         row.subject_id: row
         for row in training_bundle.representations.rows
@@ -64,7 +82,7 @@ def _corridor_representation_lookup(
 
 
 def _peer_cluster_evidence_lookup(
-    provisional_rows: list[dict[str, object]],
+    provisional_rows: list[ProvisionalPriorRow],
 ) -> dict[tuple[str, str, int, int], float]:
     maxima: dict[tuple[str, str, int, int], float] = {}
     for row in provisional_rows:
@@ -94,7 +112,7 @@ def build_calibration_bundle(
     representation_lookup = _corridor_representation_lookup(training_bundle)
 
     refined_profile_rows: list[RefinedProfileSelectionRow] = []
-    provisional_prior_rows: list[dict[str, object]] = []
+    provisional_prior_rows: list[ProvisionalPriorRow] = []
 
     ordered_rows = sorted(
         training_bundle.forecast_surface.rows,

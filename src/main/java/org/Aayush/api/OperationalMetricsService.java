@@ -222,6 +222,17 @@ public final class OperationalMetricsService implements TopologyReloadObserver {
         parityFailureReason.set(null);
     }
 
+    public void clear() {
+        operations.values().forEach(OperationAccumulator::clear);
+        validationSuccessCount.set(0L);
+        validationFailureCount.set(0L);
+        appliedReloadCount.set(0L);
+        lastSuccessfulReloadAt.set(null);
+        lastSuccessfulTopologyVersion.set(null);
+        lastFailureReason.set(null);
+        parityFailureReason.set(null);
+    }
+
     OperationalMetricsResponse.AlertSummary alertSummary() {
         return alertSummary(routeStoreMetrics(), matrixStoreMetrics());
     }
@@ -379,6 +390,14 @@ public final class OperationalMetricsService implements TopologyReloadObserver {
 
         private static double nanosToMillis(double nanos) {
             return nanos / 1_000_000.0d;
+        }
+
+        void clear() {
+            requestCount.set(0L);
+            errorCount.set(0L);
+            totalLatencyNanos.set(0L);
+            maxLatencyNanos.set(0L);
+            lastObservedAt.set(null);
         }
     }
 

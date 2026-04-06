@@ -1,11 +1,9 @@
 package org.Aayush.routing.future;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.Aayush.api.ApiErrorCode;
 import org.Aayush.api.FutureApiTestConfiguration;
 import org.Aayush.api.FutureRoutingApiFacade;
-import org.Aayush.app.Main;
 import org.Aayush.routing.core.FutureMatrixEvaluator;
 import org.Aayush.routing.core.FutureRouteEvaluator;
 import org.Aayush.routing.core.MatrixRequest;
@@ -26,15 +24,12 @@ import org.Aayush.routing.topology.TopologyVersion;
 import org.Aayush.routing.traits.addressing.AddressingRuntimeConfig;
 import org.Aayush.routing.traits.temporal.TemporalRuntimeConfig;
 import org.Aayush.routing.traits.transition.TransitionRuntimeConfig;
-import org.junit.jupiter.api.BeforeEach;
+import org.Aayush.testsupport.AbstractTaroApiSpringTest;
+import org.Aayush.testsupport.TaroApiSpringTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.Clock;
@@ -52,37 +47,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(
-        classes = {Main.class, FutureApiTestConfiguration.class},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = "taro.demo-topology.enabled=false")
-@AutoConfigureMockMvc
+@TaroApiSpringTest
 @Tag("integration")
 @DisplayName("Retained Result API Tests")
-class RetainedResultApiTest {
-    private static final Instant BASE_INSTANT = Instant.parse("2026-03-21T00:00:00Z");
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
-    private FutureApiTestConfiguration.ApiMutableClock apiMutableClock;
-
-    @Autowired
-    private TopologyReloadCoordinator apiReloadCoordinator;
-
-    @BeforeEach
-    void resetApiClock() {
-        if (apiMutableClock != null) {
-            apiMutableClock.set(BASE_INSTANT);
-        }
-        if (apiReloadCoordinator != null) {
-            apiReloadCoordinator.applyReload(FutureApiTestConfiguration.initialSnapshot());
-        }
-    }
+class RetainedResultApiTest extends AbstractTaroApiSpringTest {
 
     @Test
     @DisplayName("Route retained summaries and details stay stable by resultSetId")
@@ -366,7 +334,7 @@ class RetainedResultApiTest {
     @DisplayName("Reload invalidated result returns conflict")
     void testReloadInvalidatedResultReturnsConflict() throws Exception {
         String resultSetId = createHttpRouteResultSetId("caller-a", 600L);
-        apiReloadCoordinator.applyReload(snapshot(createRouteCore(), "topo-api-reloaded"));
+        topologyReloadCoordinator.applyReload(snapshot(createRouteCore(), "topo-api-reloaded"));
 
         MvcResult conflictResult = mockMvc.perform(get("/api/v1/route/results/{resultSetId}/summary", resultSetId)
                         .header(FutureRoutingApiFacade.CALLER_HEADER, "caller-a"))

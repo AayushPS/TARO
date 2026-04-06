@@ -83,6 +83,10 @@ public final class CallerScopedRetainedResultRegistry {
         return entries.size();
     }
 
+    public void clear() {
+        entries.clear();
+    }
+
     private String key(ResultKind resultKind, String resultSetId) {
         return Objects.requireNonNull(resultKind, "resultKind").name() + ":" + requireText(resultSetId, "resultSetId");
     }

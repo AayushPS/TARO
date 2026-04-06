@@ -1,0 +1,309 @@
+{
+  "datasetId" : "complex-route-scenarios-v1",
+  "description" : "Complex future-routing scenario inputs generated from real engine fixtures.",
+  "generatedAt" : "2026-03-21T00:00:00Z",
+  "generatedBy" : "src/test/java/org/Aayush/routing/future/ComplexScenarioDatasetExportTest.java",
+  "regenerationCommand" : "scripts/export_complex_scenario_datasets.sh",
+  "cases" : [ {
+    "caseId" : "incident_split_corridor",
+    "title" : "Incident Split Corridor",
+    "focus" : "Expected ETA prefers the fast corridor while robust routing pivots to the incident-resilient branch.",
+    "topologyId" : "topo-incident-split",
+    "request" : {
+      "sourceExternalId" : "N0",
+      "targetExternalId" : "N3",
+      "departureTicks" : 0,
+      "horizonTicks" : 3600,
+      "preferredObjective" : "EXPECTED_ETA",
+      "topKAlternatives" : 2,
+      "resultTtlSeconds" : 600
+    },
+    "scenarioBundle" : {
+      "scenarioBundleId" : "bundle-incident-split",
+      "generatedAt" : "2026-03-21T00:00:00Z",
+      "validUntil" : "2026-03-21T00:10:00Z",
+      "horizonTicks" : 3600,
+      "topologyVersion" : "topo-incident-split",
+      "quarantineSnapshotId" : "quarantine-topo-incident-split:0",
+      "scenarios" : [ {
+        "scenarioId" : "baseline",
+        "label" : "baseline",
+        "probability" : 0.6,
+        "explanationTags" : [ ],
+        "liveUpdates" : [ ]
+      }, {
+        "scenarioId" : "incident_persists",
+        "label" : "incident_persists",
+        "probability" : 0.4,
+        "explanationTags" : [ "incident_persists" ],
+        "liveUpdates" : [ {
+          "edgeId" : 2,
+          "speedFactor" : 0.4,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        } ]
+      } ]
+    },
+    "decisionStages" : [ {
+      "stageId" : "corridor_selection",
+      "label" : "Primary corridor selection",
+      "description" : "Choose between the optimistic north branch and the incident-resilient south branch.",
+      "options" : [ {
+        "optionId" : "north_branch",
+        "label" : "North branch",
+        "notes" : "Fastest when the baseline holds.",
+        "matchingPaths" : [ [ "N0", "N1", "N3" ] ]
+      }, {
+        "optionId" : "south_branch",
+        "label" : "South branch",
+        "notes" : "Safer when the downstream incident lingers.",
+        "matchingPaths" : [ [ "N0", "N2", "N3" ] ]
+      } ]
+    } ]
+  }, {
+    "caseId" : "aggregate_compromise_triangle",
+    "title" : "Aggregate Compromise Triangle",
+    "focus" : "Neither single-scenario optimum is globally best, so the aggregate planner rescues a compromise path.",
+    "topologyId" : "topo-aggregate-compromise",
+    "request" : {
+      "sourceExternalId" : "N0",
+      "targetExternalId" : "N4",
+      "departureTicks" : 0,
+      "horizonTicks" : 3600,
+      "preferredObjective" : "EXPECTED_ETA",
+      "topKAlternatives" : 3,
+      "resultTtlSeconds" : 600
+    },
+    "scenarioBundle" : {
+      "scenarioBundleId" : "bundle-aggregate-compromise",
+      "generatedAt" : "2026-03-21T00:00:00Z",
+      "validUntil" : "2026-03-21T00:10:00Z",
+      "horizonTicks" : 3600,
+      "topologyVersion" : "topo-aggregate-compromise",
+      "quarantineSnapshotId" : "quarantine-topo-aggregate-compromise:0",
+      "scenarios" : [ {
+        "scenarioId" : "b_slow",
+        "label" : "b_slow",
+        "probability" : 0.5,
+        "explanationTags" : [ "b_slow" ],
+        "liveUpdates" : [ {
+          "edgeId" : 1,
+          "speedFactor" : 0.1,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        }, {
+          "edgeId" : 4,
+          "speedFactor" : 0.1,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        } ]
+      }, {
+        "scenarioId" : "a_slow",
+        "label" : "a_slow",
+        "probability" : 0.5,
+        "explanationTags" : [ "a_slow" ],
+        "liveUpdates" : [ {
+          "edgeId" : 0,
+          "speedFactor" : 0.1,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        }, {
+          "edgeId" : 3,
+          "speedFactor" : 0.1,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        } ]
+      } ]
+    },
+    "decisionStages" : [ {
+      "stageId" : "arterial_family",
+      "label" : "Arterial family selection",
+      "description" : "The planner can pick either scenario-specific arc or a compromise spine that survives both.",
+      "options" : [ {
+        "optionId" : "north_arc",
+        "label" : "North arc",
+        "notes" : "Scenario-optimal when the central arc degrades.",
+        "matchingPaths" : [ [ "N0", "N1", "N4" ] ]
+      }, {
+        "optionId" : "central_arc",
+        "label" : "Central arc",
+        "notes" : "Scenario-optimal when the north arc degrades.",
+        "matchingPaths" : [ [ "N0", "N2", "N4" ] ]
+      }, {
+        "optionId" : "compromise_spine",
+        "label" : "Compromise spine",
+        "notes" : "Aggregate-only path that limits regret across both futures.",
+        "matchingPaths" : [ [ "N0", "N3", "N4" ] ]
+      } ]
+    } ]
+  }, {
+    "caseId" : "two_hour_branch_reversal",
+    "title" : "Two-Hour Branch Reversal",
+    "focus" : "The departure snapshot can make route 1 look like a 2.5-hour winner versus route 2 at 4.0 hours, but the future shift flips that ranking: route 1 grows to 5.0 hours after the two-hour buildup point while route 2 clears down to 3.0 hours.",
+    "topologyId" : "topo-two-hour-branch-reversal",
+    "request" : {
+      "sourceExternalId" : "N0",
+      "targetExternalId" : "N3",
+      "departureTicks" : 1774224000,
+      "horizonTicks" : 3600,
+      "preferredObjective" : "EXPECTED_ETA",
+      "topKAlternatives" : 2,
+      "resultTtlSeconds" : 600
+    },
+    "scenarioBundle" : {
+      "scenarioBundleId" : "bundle-two-hour-branch-reversal",
+      "generatedAt" : "2026-03-21T00:00:00Z",
+      "validUntil" : "2026-03-21T00:10:00Z",
+      "horizonTicks" : 3600,
+      "topologyVersion" : "topo-two-hour-branch-reversal",
+      "quarantineSnapshotId" : "quarantine-topo-two-hour-branch-reversal:0",
+      "scenarios" : [ {
+        "scenarioId" : "departure_snapshot_freeze",
+        "label" : "departure_snapshot_freeze",
+        "probability" : 0.25,
+        "explanationTags" : [ "current_traffic_snapshot" ],
+        "liveUpdates" : [ {
+          "edgeId" : 3,
+          "speedFactor" : 0.5,
+          "validFromTicks" : 1774224000,
+          "validUntilTicks" : 1774245600
+        } ]
+      }, {
+        "scenarioId" : "future_shift",
+        "label" : "future_shift",
+        "probability" : 0.75,
+        "explanationTags" : [ "late_buildup", "downstream_relief" ],
+        "liveUpdates" : [ {
+          "edgeId" : 2,
+          "speedFactor" : 0.16666667,
+          "validFromTicks" : 1774231200,
+          "validUntilTicks" : 1774245600
+        } ]
+      } ]
+    },
+    "decisionStages" : [ {
+      "stageId" : "branch_selection",
+      "label" : "Branch selection",
+      "description" : "Pick the branch that still looks healthy two hours into the trip, not just the branch that looks healthiest at departure.",
+      "options" : [ {
+        "optionId" : "route_1_buildup_branch",
+        "label" : "Route 1 buildup branch",
+        "notes" : "Departure snapshot: 2.5h. Future shift: 5.0h after the downstream buildup activates.",
+        "matchingPaths" : [ [ "N0", "N1", "N3" ] ]
+      }, {
+        "optionId" : "route_2_relief_branch",
+        "label" : "Route 2 relief branch",
+        "notes" : "Departure snapshot: 4.0h. Future shift: 3.0h once the downstream slowdown clears.",
+        "matchingPaths" : [ [ "N0", "N2", "N3" ] ]
+      } ]
+    } ]
+  }, {
+    "caseId" : "multi_stage_branch_ladder",
+    "title" : "Multi-Stage Branch Ladder",
+    "focus" : "A richer bundle exposes both an origin-branch decision and a downstream exit decision in the same result set.",
+    "topologyId" : "topo-multi-stage",
+    "request" : {
+      "sourceExternalId" : "N0",
+      "targetExternalId" : "N7",
+      "departureTicks" : 0,
+      "horizonTicks" : 3600,
+      "preferredObjective" : "EXPECTED_ETA",
+      "topKAlternatives" : 4,
+      "resultTtlSeconds" : 600
+    },
+    "scenarioBundle" : {
+      "scenarioBundleId" : "bundle-multi-stage",
+      "generatedAt" : "2026-03-21T00:00:00Z",
+      "validUntil" : "2026-03-21T00:10:00Z",
+      "horizonTicks" : 3600,
+      "topologyVersion" : "topo-multi-stage",
+      "quarantineSnapshotId" : "quarantine-topo-multi-stage:0",
+      "scenarios" : [ {
+        "scenarioId" : "baseline",
+        "label" : "baseline",
+        "probability" : 0.35,
+        "explanationTags" : [ ],
+        "liveUpdates" : [ ]
+      }, {
+        "scenarioId" : "express_exit_slow",
+        "label" : "express_exit_slow",
+        "probability" : 0.25,
+        "explanationTags" : [ "express_exit_slow" ],
+        "liveUpdates" : [ {
+          "edgeId" : 6,
+          "speedFactor" : 0.25,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        } ]
+      }, {
+        "scenarioId" : "north_gate_blocked",
+        "label" : "north_gate_blocked",
+        "probability" : 0.2,
+        "explanationTags" : [ "north_gate_blocked" ],
+        "liveUpdates" : [ {
+          "edgeId" : 0,
+          "speedFactor" : 0.2,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        } ]
+      }, {
+        "scenarioId" : "downtown_flood",
+        "label" : "downtown_flood",
+        "probability" : 0.2,
+        "explanationTags" : [ "downtown_flood" ],
+        "liveUpdates" : [ {
+          "edgeId" : 0,
+          "speedFactor" : 0.2,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        }, {
+          "edgeId" : 1,
+          "speedFactor" : 0.2,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        }, {
+          "edgeId" : 6,
+          "speedFactor" : 0.25,
+          "validFromTicks" : -9223372036854775808,
+          "validUntilTicks" : 10000
+        } ]
+      } ]
+    },
+    "decisionStages" : [ {
+      "stageId" : "origin_branch",
+      "label" : "Origin branch",
+      "description" : "The first stage decides which corridor reaches the merge node.",
+      "options" : [ {
+        "optionId" : "north_gate",
+        "label" : "North gate",
+        "notes" : "Best baseline entry when the northern gate is open.",
+        "matchingPaths" : [ [ "N0", "N1", "N4", "N5", "N7" ], [ "N0", "N1", "N4", "N6", "N7" ] ]
+      }, {
+        "optionId" : "central_gate",
+        "label" : "Central gate",
+        "notes" : "Fallback entry when the north gate is degraded.",
+        "matchingPaths" : [ [ "N0", "N2", "N4", "N5", "N7" ] ]
+      }, {
+        "optionId" : "south_gate",
+        "label" : "South gate",
+        "notes" : "Most defensive entry when both the north gate and express exit degrade.",
+        "matchingPaths" : [ [ "N0", "N3", "N4", "N6", "N7" ] ]
+      } ]
+    }, {
+      "stageId" : "final_approach",
+      "label" : "Final approach",
+      "description" : "The second stage chooses between the express exit and the steadier slow exit.",
+      "options" : [ {
+        "optionId" : "express_exit",
+        "label" : "Express exit",
+        "notes" : "Lower ETA when the express edge remains healthy.",
+        "matchingPaths" : [ [ "N0", "N1", "N4", "N5", "N7" ], [ "N0", "N2", "N4", "N5", "N7" ] ]
+      }, {
+        "optionId" : "steady_exit",
+        "label" : "Steady exit",
+        "notes" : "Higher baseline cost but lower tail-risk under exit congestion.",
+        "matchingPaths" : [ [ "N0", "N1", "N4", "N6", "N7" ], [ "N0", "N3", "N4", "N6", "N7" ] ]
+      } ]
+    } ]
+  } ]
+}

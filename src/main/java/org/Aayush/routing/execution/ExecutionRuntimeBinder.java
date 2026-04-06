@@ -27,13 +27,20 @@ public interface ExecutionRuntimeBinder {
     @Value
     @Builder
     class BindInput {
-        ExecutionRuntimeConfig executionRuntimeConfig;
-        ExecutionProfileRegistry executionProfileRegistry;
-        EdgeGraph edgeGraph;
-        ProfileStore profileStore;
-        CostEngine costEngine;
-        LandmarkStore landmarkStore;
-        HeuristicProviderFactory heuristicProviderFactory;
+        /** Runtime configuration to bind. */
+        private ExecutionRuntimeConfig executionRuntimeConfig;
+        /** Registry of available execution profiles. */
+        private ExecutionProfileRegistry executionProfileRegistry;
+        /** Graph used to bind execution-time routing dependencies. */
+        private EdgeGraph edgeGraph;
+        /** Profile storage used to resolve execution-time profile data. */
+        private ProfileStore profileStore;
+        /** Cost engine used to materialize execution-time edge costs. */
+        private CostEngine costEngine;
+        /** Landmark storage used by heuristic providers during binding. */
+        private LandmarkStore landmarkStore;
+        /** Heuristic-provider factory used during runtime binding. */
+        private HeuristicProviderFactory heuristicProviderFactory;
     }
 
     /**
@@ -42,7 +49,9 @@ public interface ExecutionRuntimeBinder {
     @Value
     @Builder
     class Binding {
-        ResolvedExecutionProfileContext resolvedExecutionProfileContext;
-        HeuristicProvider heuristicProvider;
+        /** Resolved execution-profile context bound for runtime use. */
+        private ResolvedExecutionProfileContext resolvedExecutionProfileContext;
+        /** Heuristic provider resolved for the bound execution profile. */
+        private HeuristicProvider heuristicProvider;
     }
 }

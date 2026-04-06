@@ -13,7 +13,7 @@ Creates a local virtual environment and links the TARO Python utilities
 from src/main/python into that environment.
 
 Options:
-  --with-dev   Also install optional Python dev dependencies (for example pytest)
+  --with-dev   Also install optional Python dev dependencies (for example pytest and mypy)
 EOF
 }
 
@@ -50,7 +50,7 @@ PY
 printf '%s\n' "${ROOT_DIR}/src/main/python" > "${SITE_PACKAGES}/taro_src_python.pth"
 
 if [[ "${INSTALL_DEV}" -eq 1 ]]; then
-  python -m pip install pytest
+  python -m pip install pytest mypy
 fi
 
 cat <<EOF

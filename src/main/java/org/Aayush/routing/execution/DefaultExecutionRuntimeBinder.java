@@ -13,17 +13,21 @@ import java.util.Objects;
 /**
  * Default startup binder for execution-profile selection.
  */
-public final class DefaultExecutionRuntimeBinder implements ExecutionRuntimeBinder {
+public final class DefaultExecutionRuntimeBinder
+        implements ExecutionRuntimeBinder {
+    /** Configuration source marker for named execution profiles. */
     public static final String CONFIG_SOURCE_NAMED_PROFILE = "NAMED_PROFILE";
+    /** Configuration source marker for inline execution profiles. */
     public static final String CONFIG_SOURCE_INLINE_PROFILE = "INLINE_PROFILE";
 
     /**
      * Binds one execution profile into immutable runtime state.
      */
     @Override
-    public Binding bind(BindInput input) {
+    public Binding bind(final BindInput input) {
         BindInput nonNullInput = Objects.requireNonNull(input, "input");
-        ExecutionRuntimeConfig runtimeConfig = nonNullInput.getExecutionRuntimeConfig();
+        ExecutionRuntimeConfig runtimeConfig =
+                nonNullInput.getExecutionRuntimeConfig();
         if (runtimeConfig == null) {
             throw new RouteCoreException(
                     RouteCore.REASON_EXECUTION_CONFIG_REQUIRED,
@@ -31,19 +35,23 @@ public final class DefaultExecutionRuntimeBinder implements ExecutionRuntimeBind
             );
         }
 
-        String profileId = normalizeOptionalId(runtimeConfig.getExecutionProfileId());
-        ExecutionProfileSpec inlineSpec = runtimeConfig.getInlineExecutionProfileSpec();
+        String profileId =
+                normalizeOptionalId(runtimeConfig.getExecutionProfileId());
+        ExecutionProfileSpec inlineSpec =
+                runtimeConfig.getInlineExecutionProfileSpec();
         if (profileId != null && inlineSpec != null) {
             throw new RouteCoreException(
                     RouteCore.REASON_EXECUTION_CONFIG_CONFLICT,
-                    "executionProfileId and inlineExecutionProfileSpec cannot both be provided"
+                    "executionProfileId and inlineExecutionProfileSpec "
+                            + "cannot both be provided"
             );
         }
 
         ExecutionProfileSpec resolvedSpec;
         String configSource;
         if (profileId != null) {
-            ExecutionProfileRegistry registry = nonNullInput.getExecutionProfileRegistry() == null
+            ExecutionProfileRegistry registry =
+                    nonNullInput.getExecutionProfileRegistry() == null
                     ? ExecutionProfileRegistry.defaultRegistry()
                     : nonNullInput.getExecutionProfileRegistry();
             resolvedSpec = registry.profile(profileId);
@@ -60,7 +68,8 @@ public final class DefaultExecutionRuntimeBinder implements ExecutionRuntimeBind
         } else {
             throw new RouteCoreException(
                     RouteCore.REASON_EXECUTION_CONFIG_REQUIRED,
-                    "either executionProfileId or inlineExecutionProfileSpec must be provided"
+                    "either executionProfileId or inlineExecutionProfileSpec "
+                            + "must be provided"
             );
         }
 
@@ -72,14 +81,18 @@ public final class DefaultExecutionRuntimeBinder implements ExecutionRuntimeBind
                 resolvedSpec.getHeuristicType(),
                 "executionProfileSpec.heuristicType"
         );
-        if (algorithm == RoutingAlgorithm.DIJKSTRA && heuristicType != HeuristicType.NONE) {
+        if (algorithm == RoutingAlgorithm.DIJKSTRA
+                && heuristicType != HeuristicType.NONE) {
             throw new RouteCoreException(
                     RouteCore.REASON_EXECUTION_PROFILE_INCOMPATIBLE,
-                    "DIJKSTRA execution profile requires heuristicType NONE, got " + heuristicType
+                    "DIJKSTRA execution profile requires "
+                            + "heuristicType NONE, got "
+                            + heuristicType
             );
         }
 
-        HeuristicProviderFactory heuristicProviderFactory = Objects.requireNonNull(
+        HeuristicProviderFactory heuristicProviderFactory =
+                Objects.requireNonNull(
                 nonNullInput.getHeuristicProviderFactory(),
                 "heuristicProviderFactory"
         );
@@ -87,21 +100,28 @@ public final class DefaultExecutionRuntimeBinder implements ExecutionRuntimeBind
         try {
             heuristicProvider = heuristicProviderFactory.create(
                     heuristicType,
-                    Objects.requireNonNull(nonNullInput.getEdgeGraph(), "edgeGraph"),
-                    Objects.requireNonNull(nonNullInput.getProfileStore(), "profileStore"),
-                    Objects.requireNonNull(nonNullInput.getCostEngine(), "costEngine"),
+                    Objects.requireNonNull(
+                            nonNullInput.getEdgeGraph(), "edgeGraph"),
+                    Objects.requireNonNull(
+                            nonNullInput.getProfileStore(), "profileStore"),
+                    Objects.requireNonNull(
+                            nonNullInput.getCostEngine(), "costEngine"),
                     nonNullInput.getLandmarkStore()
             );
         } catch (HeuristicConfigurationException ex) {
             throw new RouteCoreException(
                     RouteCore.REASON_EXECUTION_PROFILE_INCOMPATIBLE,
-                    "failed to initialize startup heuristic " + heuristicType + ": " + ex.getMessage(),
+                    "failed to initialize startup heuristic "
+                            + heuristicType
+                            + ": "
+                            + ex.getMessage(),
                     ex
             );
         }
 
         return Binding.builder()
-                .resolvedExecutionProfileContext(ResolvedExecutionProfileContext.builder()
+                .resolvedExecutionProfileContext(
+                        ResolvedExecutionProfileContext.builder()
                         .profileId(profileId)
                         .configSource(configSource)
                         .algorithm(algorithm)
@@ -111,7 +131,7 @@ public final class DefaultExecutionRuntimeBinder implements ExecutionRuntimeBind
                 .build();
     }
 
-    private static String normalizeOptionalId(String id) {
+    private static String normalizeOptionalId(final String id) {
         if (id == null) {
             return null;
         }
