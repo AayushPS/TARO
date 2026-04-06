@@ -1,0 +1,61 @@
+Spatial KD nearest (30000 queries): 68749445 ns
+Performance Test Time: 37 ms
+Heap Memory before: 15 MB
+Generating graph: 10,000,000 nodes, 25,000,000 edges...
+Graph generation complete. Building EdgeGraph...
+
+=== LARGE GRAPH PROFILE ===
+Nodes:          10,000,000
+Edges:          25,000,000
+Load Time:      2,509 ms (2.51 sec)
+Heap Used:      -1 MB (Shell objects)
+Off-Heap Est:   550 MB (DirectBuffers)
+Total Mem:      548 MB
+Bytes/Edge:     21.96
+Target Budget:  800 MB
+Actual Usage:   68.6% of budget
+✅ Large graph test PASSED
+
+Generating graph: 1,000,000 nodes, 2,500,000 edges...
+Graph generation complete. Building EdgeGraph...
+Warming up JIT...
+
+=== LATENCY BENCHMARK ===
+getEdgeDestination: 45.26 ns/op (1,000,000 ops in 45 ms)
+getBaseWeight:      48.92 ns/op (1,000,000 ops in 48 ms)
+getProfileId:       82.52 ns/op (1,000,000 ops in 82 ms)
+getEdgeOrigin:      42.13 ns/op (1,000,000 ops in 42 ms)
+getNodeX/Y:         24.37 ns/op (2,000,000 ops in 48 ms)
+Iterator.next():    117.21 ns/op (249,533 edges in 29 ms)
+✅ Latency benchmark PASSED
+
+Generating graph: 1,000,000 nodes, 2,500,000 edges...
+Graph generation complete. Building EdgeGraph...
+
+=== SUSTAINED THROUGHPUT TEST ===
+Running 10M mixed operations...
+Total time:     465 ms (0.47 sec)
+Throughput:     21,505,376 ops/sec
+Avg latency:    46.50 ns/op
+✅ Throughput test PASSED
+
+
+=== VALIDATION PERFORMANCE ===
+Generating graph: 1,000,000 nodes, 2,500,000 edges...
+Graph generation complete. Building EdgeGraph...
+Validation time: 78 ms (0.08 sec)
+Valid:           true
+Errors:          0
+Warnings:        1
+✅ Validation performance PASSED
+
+Avg lookup: 22.32 ns
+10M bucket calculations: 2.11 ns/op
+CSR Stress Test Results:
+  Nodes: 10000
+  Edges: 45095
+  Queries: 1000
+  Total neighbors found: 4437
+  Total time: 1 ms
+  Avg per query: 1306 ns
+CSR Traversal (4 nodes, 4 edges): 100667 ns

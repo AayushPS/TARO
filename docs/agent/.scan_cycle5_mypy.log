@@ -1,0 +1,21 @@
+src/main/python/learning/ingestion/contracts.py:187: error: Incompatible types in assignment (expression has type "FieldUnitRule", variable has type "TemporalFieldRule")
+src/main/python/learning/ingestion/contracts.py:188: error: "TemporalFieldRule" has no attribute "value_field"
+src/main/python/learning/ingestion/contracts.py:189: error: Argument 1 to "add" of "set" has incompatible type "Optional[str]"; expected "str"
+src/main/python/learning/calibration/selector.py:77: error: No overload variant of "int" matches argument type "object"
+src/main/python/learning/calibration/selector.py:77: note: Possible overload variants:
+src/main/python/learning/calibration/selector.py:77: note:     def int(cls, Union[str, bytes, array[Any], mmap, _CData, PickleBuffer, SupportsInt, SupportsIndex, SupportsTrunc] = ...) -> int
+src/main/python/learning/calibration/selector.py:77: note:     def int(cls, Union[str, bytes], base: SupportsIndex) -> int
+src/main/python/learning/calibration/selector.py:78: error: No overload variant of "int" matches argument type "object"
+src/main/python/learning/calibration/selector.py:78: note: Possible overload variants:
+src/main/python/learning/calibration/selector.py:78: note:     def int(cls, Union[str, bytes, array[Any], mmap, _CData, PickleBuffer, SupportsInt, SupportsIndex, SupportsTrunc] = ...) -> int
+src/main/python/learning/calibration/selector.py:78: note:     def int(cls, Union[str, bytes], base: SupportsIndex) -> int
+src/main/python/learning/calibration/selector.py:80: error: Argument 1 to "float" has incompatible type "object"; expected "Union[SupportsFloat, SupportsIndex, str, bytes, array[Any], mmap, _CData, PickleBuffer]"
+src/main/python/learning/calibration/selector.py:140: error: "object" has no attribute "periodicity_signal"
+src/main/python/learning/calibration/selector.py:141: error: "object" has no attribute "persistence_signal"
+src/main/python/learning/datasets/builder.py:47: error: Item "None" of "Optional[timedelta]" has no attribute "total_seconds"
+src/main/python/learning/datasets/builder.py:80: error: Argument 1 to "float" has incompatible type "Optional[Any]"; expected "Union[SupportsFloat, SupportsIndex, str, bytes, array[Any], mmap, _CData, PickleBuffer]"
+src/main/python/tests/learning/test_temporal_feature_surface.py:235: error: No overload variant of "int" matches argument type "object"
+src/main/python/tests/learning/test_temporal_feature_surface.py:235: note: Possible overload variants:
+src/main/python/tests/learning/test_temporal_feature_surface.py:235: note:     def int(cls, Union[str, bytes, array[Any], mmap, _CData, PickleBuffer, SupportsInt, SupportsIndex, SupportsTrunc] = ...) -> int
+src/main/python/tests/learning/test_temporal_feature_surface.py:235: note:     def int(cls, Union[str, bytes], base: SupportsIndex) -> int
+Found 11 errors in 4 files (checked 42 source files)
